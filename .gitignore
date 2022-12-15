@@ -130,8 +130,7 @@ dmypy.json
 .pyre/
 
 # JSON files
-map.json
-config.json
+*.json
 
 #PyCharm / VSCode files
 .idea/
