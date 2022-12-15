@@ -21,8 +21,8 @@ def days_hours_minutes(seconds):
         return f"{hours} hours, {minutes} minutes"
 
 
-CONFIG_DATA = json.load(open("config.json", "r"))
-LOCAL_JSON = "map.json"
+CONFIG_DATA = json.load(open("json/config.json", "r"))
+LOCAL_JSON = "json/map.json"
 
 intents = nextcord.Intents.all()
 
@@ -73,7 +73,6 @@ async def mapd(ctx, plex_username: str, discord_user: nextcord.User) -> None:
             try:
                 list_object = json.load(json_file)
             except json.JSONDecodeError:
-                print(f"empty json")
                 list_object = []
             for members in list_object:
                 if discord_user != "empty":
@@ -111,8 +110,8 @@ async def watchlist(ctx, member: nextcord.Member = None) -> None:
     with open(LOCAL_JSON) as json_file:
         try:
             dc_plex_json = json.load(json_file)
-        except json.JSONDecodeError:
-            print(f"empty json")
+        except json.JSONDecodeError as err:
+            await ctx.send(f":warning: seems like you have no users mapped? Error: {err}")
         for members in dc_plex_json:
             if member.id != members["discord_id"]:
                 continue
