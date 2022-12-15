@@ -21,8 +21,8 @@ def days_hours_minutes(seconds):
         return f"{hours} hours, {minutes} minutes"
 
 
-CONFIG_DATA = json.load(open("json/config.json", "r"))
-LOCAL_JSON = "json/map.json"
+CONFIG_DATA = json.load(open("config.json", "r"))
+LOCAL_JSON = "map.json"
 
 intents = nextcord.Intents.all()
 
@@ -66,37 +66,38 @@ async def on_ready() -> None:
 
 
 @bot.command()
-async def mapd(ctx, plex_username: str, discord_user: nextcord.User) -> None:
+async def mapd(ctx, plex_username: str, discord_user: nextcord.User = None) -> None:
     if discord_user is None:
+        print(ctx.author)
         discord_user = ctx.author
-        with open(LOCAL_JSON) as json_file:
-            try:
-                list_object = json.load(json_file)
-            except json.JSONDecodeError:
-                list_object = []
-            for members in list_object:
-                if discord_user != "empty":
-                    if members["discord_id"] == discord_user.id:
-                        await ctx.send(
-                            f"You are already mapped, with the username: {members['plex_username']}"
-                        )
-                        return
-                else:
-                    try:
-                        list_object.append(
-                            {"discord_id": discord_user, "plex_username": plex_username}
-                        )
-                        await ctx.send(
-                            f"Successfully mapped {discord_user} to {plex_username}"
-                        )
-                        break
-                    except Exception as err:
-                        await ctx.send(
-                            f"Something went wrong, please try again or pass on this error {err}"
-                        )
+    with open(LOCAL_JSON) as json_file:
+        try:
+            list_object = json.load(json_file)
+        except json.JSONDecodeError:
+            list_object = []
+        for members in list_object:
+            if members["discord_id"] == discord_user.id:
+                await ctx.send(
+                    f"You are already mapped, with the username: {members['plex_username']}"
+                )
+                # todo: allow users to be removed from the list
+                return
+            else:
+                try:
+                    list_object.append(
+                        {"discord_id": discord_user.id, "plex_username": plex_username}
+                    )
+                    await ctx.send(
+                        f"Successfully mapped {discord_user} to {plex_username}"
+                    )
+                    break
+                except Exception as err:
+                    await ctx.send(
+                        f"Something went wrong, please try again or pass on this error {err}"
+                    )
 
-            with open(LOCAL_JSON, "w") as json_file:
-                json.dump(list_object, json_file, indent=4, separators=(",", ": "))
+        with open(LOCAL_JSON, "w") as json_file:
+            json.dump(list_object, json_file, indent=4, separators=(",", ": "))
 
 
 @bot.command()
@@ -111,7 +112,9 @@ async def watchlist(ctx, member: nextcord.Member = None) -> None:
         try:
             dc_plex_json = json.load(json_file)
         except json.JSONDecodeError as err:
-            await ctx.send(f":warning: seems like you have no users mapped? Error: {err}")
+            await ctx.send(
+                f":warning: seems like you have no users mapped? Error: {err}"
+            )
         for members in dc_plex_json:
             if member.id != members["discord_id"]:
                 continue
