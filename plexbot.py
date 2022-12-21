@@ -207,15 +207,30 @@ async def unignore(ctx, plex_username) -> None:
 @bot.command()
 async def assign_role(ctx, rank, user_id) -> None:
     guild = ctx.guild
+    # currently, if a non discord plex user is in the top 3,
+    # the last user with the role will keep the role despite not being that position
+    # todo :: fix this
     if rank == 1 and user_id is not None:
         nextcord_user = guild.get_member(user_id)
-        await nextcord_user.add_roles(guild.get_role(CONFIG_DATA["plex_top"]))
+        role_one = guild.get_role(CONFIG_DATA["plex_top"])
+        await nextcord_user.add_roles(role_one)
+        for members in role_one.members:
+            if members.id != user_id:
+                await members.remove_roles(role_one)
     elif rank == 2 and user_id is not None:
         nextcord_user = guild.get_member(user_id)
-        await nextcord_user.add_roles(guild.get_role(CONFIG_DATA["plex_two"]))
+        role_two = guild.get_role(CONFIG_DATA["plex_two"])
+        await nextcord_user.add_roles(role_two)
+        for members in role_two.members:
+            if members.id != user_id:
+                await members.remove_roles(role_two)
     elif rank == 3 and user_id is not None:
         nextcord_user = guild.get_member(user_id)
-        await nextcord_user.add_roles(guild.get_role(CONFIG_DATA["plex_three"]))
+        role_three = guild.get_role(CONFIG_DATA["plex_three"])
+        await nextcord_user.add_roles(role_three)
+        for members in role_three.members:
+            if members.id != user_id:
+                await members.remove_roles(role_three)
 
 
 @bot.command()
