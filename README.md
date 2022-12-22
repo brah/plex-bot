@@ -9,8 +9,6 @@ Preferably on the same machine where Plex and Tautulli reside (not strictly, ext
 
 Tweak [config.json](https://github.com/brah/plex-bot/blob/main/config.json) - Should be mostly self explanatory **(make sure to remove all comments, they're just to assist)**:
 
-  
-
 ```json
 {
 "tautulli_ip": "192.168.0.50:8181",
@@ -26,6 +24,7 @@ Tweak [config.json](https://github.com/brah/plex-bot/blob/main/config.json) - Sh
 "qbit_password": "qbit_pass"
 }
 ```
+
 - **tautulli_ip** - Local DNS records should work fine (i.e. media.server:8181)
 - **tautulli_apikey** - TAUTULLI_IP:PORT/settings#tabs_tabs-web_interface <- Fill your address+port and you can find it at the bottom of that URL
 - **token** - [Guide](https://www.writebots.com/discord-bot-token/)

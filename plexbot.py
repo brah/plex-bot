@@ -75,7 +75,6 @@ async def on_ready() -> None:
 @bot.command()
 async def mapd(ctx, plex_username: str, discord_user: nextcord.User = None) -> None:
     if discord_user is None:
-        print(ctx.author)
         discord_user = ctx.author
     with open(LOCAL_JSON) as json_file:
         try:
@@ -109,7 +108,7 @@ async def mapd(ctx, plex_username: str, discord_user: nextcord.User = None) -> N
 
 @bot.command()
 async def watchlist(ctx, member: nextcord.Member = None) -> None:
-    request = requests.get(API_URL + GET_HISTORY, params=GET_HISTORY).json()
+    request = requests.get(API_URL + GET_HISTORY).json()
     embed = nextcord.Embed(description="", color=0x9B59B6)
     embed.set_author(name="Plex Stats")
     last_watched_list = []
@@ -134,7 +133,6 @@ async def watchlist(ctx, member: nextcord.Member = None) -> None:
 
     if embed:
         embed.set_thumbnail(url=f"{discord_member.display_avatar.url}")
-        print("".join(last_watched_list))
         embed.add_field(
             name=f"Last watched by: {discord_member.name}",
             value="\n".join(last_watched_list),
@@ -211,33 +209,42 @@ async def unignore(ctx, plex_username) -> None:
             await ctx.send(f"{plex_username} is not ignored, or not mapped")
 
 
+async def clean_roles(ctx, top_users) -> None:
+    guild = ctx.guild
+    role_one, role_two, role_three = [
+        guild.get_role(CONFIG_DATA["plex_top"]),
+        guild.get_role(CONFIG_DATA["plex_two"]),
+        guild.get_role(CONFIG_DATA["plex_three"]),
+    ]
+    for members in role_one.members:
+        if top_users[1] == members.id:
+            continue
+        await members.remove_roles(role_one)
+    for members in role_two.members:
+        if top_users[2] == members.id:
+            continue
+        await members.remove_roles(role_two)
+    for members in role_three.members:
+        if top_users[3] == members.id:
+            continue
+        await members.remove_roles(role_three)
+
+
 @bot.command()
 async def assign_role(ctx, rank, user_id) -> None:
     guild = ctx.guild
-    # currently, if a non discord plex user is in the top 3,
-    # the last user with the role will keep the role despite not being that position
-    # todo :: fix this
     if rank == 1 and user_id is not None:
         nextcord_user = guild.get_member(user_id)
         role_one = guild.get_role(CONFIG_DATA["plex_top"])
         await nextcord_user.add_roles(role_one)
-        for members in role_one.members:
-            if members.id != user_id:
-                await members.remove_roles(role_one)
     elif rank == 2 and user_id is not None:
         nextcord_user = guild.get_member(user_id)
         role_two = guild.get_role(CONFIG_DATA["plex_two"])
         await nextcord_user.add_roles(role_two)
-        for members in role_two.members:
-            if members.id != user_id:
-                await members.remove_roles(role_two)
     elif rank == 3 and user_id is not None:
         nextcord_user = guild.get_member(user_id)
         role_three = guild.get_role(CONFIG_DATA["plex_three"])
         await nextcord_user.add_roles(role_three)
-        for members in role_three.members:
-            if members.id != user_id:
-                await members.remove_roles(role_three)
 
 
 @bot.command()
@@ -249,6 +256,7 @@ async def top(ctx) -> None:
     embed.set_thumbnail(
         url="https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
     )
+    top_users = {1: None, 2: None, 3: None}
     for entries in request["response"]["data"]["rows"]:
         username = entries["user"]
         for members in json.load(open(LOCAL_JSON)):
@@ -270,7 +278,9 @@ async def top(ctx) -> None:
                         inline=True,
                     )
                     if i <= 3:
-                        await assign_role(ctx, i, members["discord_id"])
+                        if members["discord_id"] is not None:
+                            top_users[i] = members["discord_id"]
+                            await assign_role(ctx, i, members["discord_id"])
                     break
         else:
             # non mapped users (i.e. those without Discord)
@@ -296,7 +306,7 @@ async def top(ctx) -> None:
     embed.set_footer(
         text=f"Total Plex watchtime (all time): {history_data['response']['data']['total_duration']}"
     )
-
+    await clean_roles(ctx, top_users=top_users)
     await ctx.send(embed=embed)
     if i == 0:
         await ctx.send("No users found")
@@ -326,7 +336,7 @@ async def downloading(ctx):
     # e.g. output:
     # Currently downloading:
     # debian-11.6.0-amd64-DVD-1.iso Progress: 46.12%, Size: 3.91 GB, ETA: 60 minutes, speed: 10.00 MB/s
-    for downloads in qbt_client.torrents.info.downloading():    
+    for downloads in qbt_client.torrents.info.downloading():
         str_ = f"`{downloads.name}` **Progress:** `{(downloads.progress * 100):.2f}%`, **Size:** `{downloads.size * 1e-9:.2f}` GB, **ETA:** `{downloads.eta / 60:.0f}` minutes, **speed:** `{downloads.dlspeed * 1.0e-6:.2f}` MB/s"
         dl_info.append(str_)
     dl_info.insert(0, "**Currently downloading:**")
