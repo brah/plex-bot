@@ -1,27 +1,33 @@
 import asyncio
-import datetime
 import json
 import pprint
 
 import nextcord
-import requests
 from nextcord.ext import commands
 
 import utilities as utils
 import tautulli_wrapper as tautulli
 
+# Load/create references to configs
 CONFIG_DATA = json.load(open("config.json", "r"))
+LOCAL_JSON = "map.json"
+
+# Initialize Tautulli wrapper as tautulli
 tautulli = tautulli.Tautulli()
 
+# Initialize qbittorrentapi if qbit_ip is set
 if CONFIG_DATA["qbit_ip"] != "":
     try:
         import qbittorrentapi
     except Exception as err:
         print(f"Error importing qbittorrentapi: {err}")
 
-LOCAL_JSON = "map.json"
 
-intents = nextcord.Intents.all()
+intents = nextcord.Intents.default()
+# Need message_content for prefix commands
+intents.message_content = True
+# Need members for role changes in plex_top
+intents.members = True
 
 # Initialize bot with the prefix `plex ` and intents
 # todo: work out which intents are ACTUALLY needed...
@@ -51,7 +57,14 @@ async def on_ready() -> None:
 
 
 @bot.command()
-async def mapd(ctx, plex_username: str, discord_user: nextcord.User = None) -> None:
+async def mapdiscord(
+    ctx, plex_username: str, discord_user: nextcord.User = None
+) -> None:
+    if plex_username is None or discord_user is None:
+        await ctx.send(
+            f"Please provide a plex username and discord user to map. Example: `plex mapd username @user`. Leave the discord user blank to map yourself."
+        )
+        return
     if discord_user is None:
         discord_user = ctx.author
     with open(LOCAL_JSON) as json_file:
@@ -62,7 +75,7 @@ async def mapd(ctx, plex_username: str, discord_user: nextcord.User = None) -> N
         for members in list_object:
             if members["discord_id"] == discord_user.id:
                 await ctx.send(
-                    f"You are already mapped, with the username: {members['plex_username']}"
+                    f"You are already mapped, with the username: {members['plex_username']}."
                 )
                 # todo: allow users to be removed from the list
                 return
@@ -317,6 +330,7 @@ async def downloading(ctx):
     # e.g. output:
     # Currently downloading:
     # debian-11.6.0-amd64-DVD-1.iso Progress: 46.12%, Size: 3.91 GB, ETA: 60 minutes, speed: 10.00 MB/s
+    # todo: make an embed
     for downloads in qbt_client.torrents.info.downloading():
         str_ = f"`{downloads.name}` **Progress:** `{(downloads.progress * 100):.2f}%`, **Size:** `{downloads.size * 1e-9:.2f}` GB, **ETA:** `{downloads.eta / 60:.0f}` minutes, **speed:** `{downloads.dlspeed * 1.0e-6:.2f}` MB/s"
         dl_info.append(str_)
