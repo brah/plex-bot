@@ -22,6 +22,13 @@ def days_hours_minutes(seconds):
 
 
 CONFIG_DATA = json.load(open("config.json", "r"))
+
+if CONFIG_DATA["qbit_ip"] != "":
+    try:
+        import qbittorrentapi
+    except Exception as err:
+        print(f"Error importing qbittorrentapi: {err}")
+
 LOCAL_JSON = "map.json"
 
 intents = nextcord.Intents.all()
@@ -302,6 +309,28 @@ async def recent(ctx):
         API_URL + RECENTLY_ADDED, params=params_recently_added
     ).json()
     pprint.pprint(request)
+
+
+# need to start using cogs soon hehe
+@bot.command()
+async def downloading(ctx):
+    try:
+        qbt_client = qbittorrentapi.Client(
+            host="media.server", port=8080, username="admin", password="dnmwtf"
+        )
+    except Exception as err:
+        print(
+            f"Couldn't open connection to qbittorrent, check qBit related JSON values {err}"
+        )
+    dl_info = []
+    # e.g. output:
+    # Currently downloading:
+    # debian-11.6.0-amd64-DVD-1.iso Progress: 46.12%, Size: 3.91 GB, ETA: 60 minutes, speed: 10.00 MB/s
+    for downloads in qbt_client.torrents.info.downloading():    
+        str_ = f"`{downloads.name}` **Progress:** `{(downloads.progress * 100):.2f}%`, **Size:** `{downloads.size * 1e-9:.2f}` GB, **ETA:** `{downloads.eta / 60:.0f}` minutes, **speed:** `{downloads.dlspeed * 1.0e-6:.2f}` MB/s"
+        dl_info.append(str_)
+    dl_info.insert(0, "**Currently downloading:**")
+    await ctx.send(f"\n\n".join(dl_info))
 
 
 bot.run(CONFIG_DATA["token"])
