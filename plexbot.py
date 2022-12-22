@@ -23,21 +23,17 @@ LOCAL_JSON = "map.json"
 
 intents = nextcord.Intents.all()
 
+# Initialize bot with the prefix `plex ` and intents
+# todo: work out which intents are ACTUALLY needed...
 bot = commands.Bot(command_prefix=["plex ", "Plex "], intents=intents)
-params_get_history = {"include_activity": "0"}
-params_recently_added = {"count": "5"}
-API_URL = f"http://{CONFIG_DATA['tautulli_ip']}/api/v2?apikey={CONFIG_DATA['tautulli_apikey']}&cmd="
-GET_ACTIVITY = "get_activity"
-RECENTLY_ADDED = "get_recently_added"
-GET_HISTORY = "get_history"
 
 
 async def status_task():
     while True:
-        sessions = requests.get(API_URL + GET_ACTIVITY).json()
-        stream_count = sessions["response"]["data"]["stream_count"]
+        response = tautulli.get_activity()
+        stream_count = response["response"]["data"]["stream_count"]
         wan_bandwidth_mbps = round(
-            (sessions["response"]["data"]["wan_bandwidth"] / 1000), 1
+            (response["response"]["data"]["wan_bandwidth"] / 1000), 1
         )
         await bot.change_presence(
             activity=nextcord.Activity(
@@ -90,7 +86,7 @@ async def mapd(ctx, plex_username: str, discord_user: nextcord.User = None) -> N
 
 @bot.command()
 async def watchlist(ctx, member: nextcord.Member = None) -> None:
-    request = requests.get(API_URL + GET_HISTORY).json()
+    response = tautulli.get_history()
     embed = nextcord.Embed(description="", color=0x9B59B6)
     embed.set_author(name="Plex Stats")
     last_watched_list = []
@@ -106,7 +102,7 @@ async def watchlist(ctx, member: nextcord.Member = None) -> None:
         for members in dc_plex_json:
             if member.id != members["discord_id"]:
                 continue
-            for entries in request["response"]["data"]["data"]:
+            for entries in response["response"]["data"]["data"]:
                 if entries["user"] == members["plex_username"]:
                     last_watched_list.append(entries["full_title"])
             discord_member = await bot.fetch_user(members["discord_id"])
@@ -232,11 +228,11 @@ async def assign_role(ctx, rank, user_id) -> None:
 @bot.command()
 async def top(ctx) -> None:
     params_home_stats = {
-    "stats_type": "duration",
-    "stat_id": "top_users",
-    "stats_count": "10",
-    "time_range": "7",
-}
+        "stats_type": "duration",
+        "stat_id": "top_users",
+        "stats_count": "10",
+        "time_range": "7",
+    }
     response = tautulli.get_home_stats(params=params_home_stats)
     i = 0
     embed = nextcord.Embed(color=0x9B59B6)
@@ -288,7 +284,7 @@ async def top(ctx) -> None:
                     value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
                     inline=True,
                 )
-    history_data = requests.get(API_URL + GET_HISTORY, params=params_get_history).json()
+    history_data = tautulli.get_history()
     embed.set_footer(
         text=f"Total Plex watchtime (all time): {history_data['response']['data']['total_duration']}"
     )
@@ -301,10 +297,9 @@ async def top(ctx) -> None:
 @bot.command()
 # WIP
 async def recent(ctx):
-    request = requests.get(
-        API_URL + RECENTLY_ADDED, params=params_recently_added
-    ).json()
-    pprint.pprint(request)
+    params = {"count": "5"}
+    response = tautulli.get_recently_added(params=params)
+    pprint.pprint(response)
 
 
 # need to start using cogs soon hehe
