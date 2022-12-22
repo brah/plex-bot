@@ -284,15 +284,12 @@ async def top(ctx) -> None:
                     if (movie_or_show == "movie")
                     else entries["grandparent_title"]
                 )
-                print(duration)
                 embed.add_field(
                     name=f"#{i}. {username}",
                     value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
                     inline=True,
                 )
-    history_data = requests.get(
-            API_URL + GET_HISTORY, params=params_get_history
-        ).json()
+    history_data = requests.get(API_URL + GET_HISTORY, params=params_get_history).json()
     embed.set_footer(
         text=f"Total Plex watchtime (all time): {history_data['response']['data']['total_duration']}"
     )

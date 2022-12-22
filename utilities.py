@@ -12,11 +12,10 @@ def days_hours_minutes(seconds) -> str:
     """
     td = datetime.timedelta(seconds=seconds)
     days, hours, minutes = td.days, td.seconds // 3600, td.seconds // 60 % 60
-    if days == 1:
-        return f"{days} day, {hours} hours, {minutes} minutes"
-    if days > 0:
-        return f"{days} days, {hours} hours, {minutes} minutes"
-    elif hours < 1 and days < 1:
+    day_text = "day" if days == 1 else "days"
+    if hours < 1 and days < 1:
         return f"{minutes} minutes"
+    if days > 1:
+        return f"{days} {day_text}, {hours} hours, {minutes} minutes"
     else:
         return f"{hours} hours, {minutes} minutes"
