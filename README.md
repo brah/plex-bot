@@ -33,7 +33,7 @@ Tweak [config.json](https://github.com/brah/plex-bot/blob/main/config.json) - Sh
 - **plex_top**
 - **plex_two**
 - **plex_three** - these should all be role IDs (i.e. plex 1st, plex 2nd, plex 3rd) for top 3 plex users to get special roles. Create the roles (permissions of the roles/name/etc. doesn't matter - as long as the roles don't rank above **THIS** bot's role). Note these ARE optional, however most of the bot's functionality comes down to the `plex top` command.
-- **qbit_ip** qBittorrent config is OPTIONAL! Adds `plex downloading` functionality so users can see current downloads. There is no filtering! All non-100% torrents are posted!!
-- **qbit_port** typically `8080`
-- **qbit_username** default is admin, blank should work if you do not have any auth
-- **qbit_password** default on qBittorrent is adminadmin
+- **qbit_ip** - qBittorrent config is OPTIONAL! Adds `plex downloading` functionality so users can see current downloads. There is no filtering! All non-100% torrents are posted!!
+- **qbit_port** - typically `8080`
+- **qbit_username** - default is admin, blank should work if you do not have any auth
+- **qbit_password** - default on qBittorrent is adminadmin
