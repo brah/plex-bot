@@ -7,18 +7,7 @@ import nextcord
 import requests
 from nextcord.ext import commands
 
-
-def days_hours_minutes(seconds):
-    td = datetime.timedelta(seconds=seconds)
-    days, hours, minutes = td.days, td.seconds // 3600, td.seconds // 60 % 60
-    if days == 1:
-        return f"{days} day, {hours} hours, {minutes} minutes"
-    if days > 0:
-        return f"{days} days, {hours} hours, {minutes} minutes"
-    elif hours < 1 and days < 1:
-        return f"{minutes} minutes"
-    else:
-        return f"{hours} hours, {minutes} minutes"
+import utilities as utils
 
 
 CONFIG_DATA = json.load(open("config.json", "r"))
@@ -274,7 +263,7 @@ async def top(ctx) -> None:
                     )
                     embed.add_field(
                         name=f"#{i}. {username}",
-                        value=f"{days_hours_minutes(duration)}\n **{media}**",
+                        value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
                         inline=True,
                     )
                     if i <= 3:
@@ -295,12 +284,13 @@ async def top(ctx) -> None:
                     if (movie_or_show == "movie")
                     else entries["grandparent_title"]
                 )
+                print(duration)
                 embed.add_field(
                     name=f"#{i}. {username}",
-                    value=f"{days_hours_minutes(duration)}\n **{media}**",
+                    value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
                     inline=True,
                 )
-        history_data = requests.get(
+    history_data = requests.get(
             API_URL + GET_HISTORY, params=params_get_history
         ).json()
     embed.set_footer(
