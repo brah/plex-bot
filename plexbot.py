@@ -8,9 +8,10 @@ import requests
 from nextcord.ext import commands
 
 import utilities as utils
-
+import tautulli_wrapper as tautulli
 
 CONFIG_DATA = json.load(open("config.json", "r"))
+tautulli = tautulli.Tautulli()
 
 if CONFIG_DATA["qbit_ip"] != "":
     try:
@@ -23,17 +24,9 @@ LOCAL_JSON = "map.json"
 intents = nextcord.Intents.all()
 
 bot = commands.Bot(command_prefix=["plex ", "Plex "], intents=intents)
-
-params_home_stats = {
-    "stats_type": "duration",
-    "stat_id": "top_users",
-    "stats_count": "10",
-    "time_range": "7",
-}
 params_get_history = {"include_activity": "0"}
 params_recently_added = {"count": "5"}
 API_URL = f"http://{CONFIG_DATA['tautulli_ip']}/api/v2?apikey={CONFIG_DATA['tautulli_apikey']}&cmd="
-HOME_STATS = "get_home_stats"
 GET_ACTIVITY = "get_activity"
 RECENTLY_ADDED = "get_recently_added"
 GET_HISTORY = "get_history"
@@ -238,7 +231,13 @@ async def assign_role(ctx, rank, user_id) -> None:
 
 @bot.command()
 async def top(ctx) -> None:
-    request = requests.get(API_URL + HOME_STATS, params=params_home_stats).json()
+    params_home_stats = {
+    "stats_type": "duration",
+    "stat_id": "top_users",
+    "stats_count": "10",
+    "time_range": "7",
+}
+    response = tautulli.get_home_stats(params=params_home_stats)
     i = 0
     embed = nextcord.Embed(color=0x9B59B6)
     embed.set_author(name="Plex Top (last 7 days watchtime)")
@@ -246,7 +245,7 @@ async def top(ctx) -> None:
         url="https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
     )
     top_users = {1: None, 2: None, 3: None}
-    for entries in request["response"]["data"]["rows"]:
+    for entries in response["response"]["data"]["rows"]:
         username = entries["user"]
         for members in json.load(open(LOCAL_JSON)):
             if (
