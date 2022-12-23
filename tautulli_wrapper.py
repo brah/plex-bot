@@ -122,3 +122,51 @@ class Tautulli:
         )
         response = self.session.get(url=url, params=params)
         return response.json()
+
+    def pms_image_proxy(self, img: str = None, rating_key: str = None):
+        if img is None and rating_key is None:
+            return f"{img} or {rating_key} is required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#pms_image_proxy`"
+        else:
+            if img is not None:
+                url = self .tautulli_api_url + f"pms_image_proxy&img={img}"
+            elif rating_key is not None:
+                url = self.tautulli_api_url + f"pms_image_proxy&rating_key={rating_key}"
+            self.session.get(url=url)
+        return None
+
+    def export_metadata(
+        self, section_id: int = None, user_id: int = None, rating_key: int = None
+    ):
+        """Export library or media metadata to a file
+
+        Required parameters:
+        section_id (int):   The section id of the library items to export, OR
+        user_id (int):      The user id of the playlist items to export, OR
+        rating_key (int):   The rating key of the media item to export
+
+
+        Optional parameters:
+        file_format (str):          csv (default), json, xml, or m3u8
+        metadata_level (int):       The level of metadata to export (default 1)
+        media_info_level (int):     The level of media info to export (default 1)
+        thumb_level (int):          The level of poster/cover images to export (default 0)
+        art_level (int):            The level of background artwork images to export (default 0)
+        custom_fields (str):        Comma separated list of custom fields to export
+                                    in addition to the export level selected
+        export_type (str):          'collection' or 'playlist' for library/user export,
+                                    otherwise default to all library items
+        individual_files (bool):    Export each item as an individual file for library/user export.
+        """
+        if section_id is None and user_id is None and rating_key is None:
+            return f"{section_id}, {user_id}, or {rating_key} are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
+        else:
+            if section_id is not None:
+                url = self.tautulli_api_url + f"export_metadata&section_id={section_id}"
+            elif user_id is not None:
+                url = self.tautulli_api_url + f"export_metadata&user_id={user_id}"
+            elif rating_key is not None:
+                url = self.tautulli_api_url + f"export_metadata&rating_key={rating_key}&file_format=json&thumb_level=1&art_level=1"
+                print(url)
+            response = self.session.get(url=url)
+            print(response)
+        return response.json()

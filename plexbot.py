@@ -4,9 +4,11 @@ import pprint
 
 import nextcord
 from nextcord.ext import commands
+from nextcord.ext import menus
 
 import utilities as utils
 import tautulli_wrapper as tautulli
+
 
 # Load/create references to configs
 CONFIG_DATA = json.load(open("config.json", "r"))
@@ -118,10 +120,9 @@ async def watchlist(ctx, member: nextcord.Member = None) -> None:
             for entries in response["response"]["data"]["data"]:
                 if entries["user"] == members["plex_username"]:
                     last_watched_list.append(entries["full_title"])
-            discord_member = await bot.fetch_user(members["discord_id"])
             if len(last_watched_list) <= 0:
                 last_watched_list = ["No history found"]
-
+            discord_member = await bot.fetch_user(members["discord_id"])
     if embed:
         embed.set_thumbnail(url=f"{discord_member.display_avatar.url}")
         embed.add_field(
@@ -307,12 +308,51 @@ async def top(ctx) -> None:
         await ctx.send("No users found")
 
 
+class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
+    def __init__(self, source, timeout=60) -> None:
+        super().__init__(source, timeout=timeout)
+
+        # Add the buttons we want
+        self.add_item(menus.MenuPaginationButton(emoji=self.PREVIOUS_PAGE))
+        self.add_item(menus.MenuPaginationButton(emoji=self.NEXT_PAGE))
+
+        # Disable buttons that are unavailable to be pressed at the start
+        self._disable_unavailable_buttons()
+
+
+class MyEmbedFieldPageSource(menus.ListPageSource):
+    def __init__(self, data) -> None:
+        super().__init__(data, per_page=2)
+
+    async def format_page(self, menu, entries) -> nextcord.Embed:
+        embed = nextcord.Embed(title="Recently added:")
+        for entry in entries:
+            embed.add_field(name=entry[0], value=entry[1], inline=False)
+        embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
+        return embed
+
+
 @bot.command()
-# WIP
-async def recent(ctx):
-    params = {"count": "5"}
-    response = tautulli.get_recently_added(params=params)
-    pprint.pprint(response)
+async def recent(ctx, amount: int = None) -> None:
+    fields = []
+    # can't do above 15
+    if amount is None or amount >= 15:
+        if amount is None:
+            amount = 4
+        else:
+            amount = 14
+    response = tautulli.get_recently_added(count=amount)
+    for entry in response["response"]["data"]["recently_added"]:
+        fields.append(
+            (
+                f"{entry['title']}\nReleased: {entry['originally_available_at']}",
+                f"**{entry['studio']}, RT rating: {entry['rating']}**\n{entry['summary']}",
+            )
+        )
+    pages = NoStopButtonMenuPages(
+        source=MyEmbedFieldPageSource(fields),
+    )
+    await pages.start(ctx)
 
 
 # need to start using cogs soon hehe
@@ -320,7 +360,10 @@ async def recent(ctx):
 async def downloading(ctx):
     try:
         qbt_client = qbittorrentapi.Client(
-            host="media.server", port=8080, username="admin", password="dnmwtf"
+            host=f"{CONFIG_DATA['qbit_ip']}",
+            port=f"{CONFIG_DATA['qbit_port']}",
+            username=f"{CONFIG_DATA['qbit_username']}",
+            password=f"{CONFIG_DATA['qbit_password']}",
         )
     except Exception as err:
         print(
