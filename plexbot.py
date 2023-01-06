@@ -3,10 +3,10 @@ import json
 
 import nextcord
 from nextcord.ext import commands
+from nextcord.ext import menus
 
 import utilities as utils
 import tautulli_wrapper as tautulli
-
 
 # Load/create references to configs
 CONFIG_DATA = json.load(open("config.json", "r"))
@@ -131,7 +131,9 @@ async def watchlist(ctx, member: nextcord.Member = None) -> None:
                 continue
             for entries in response["response"]["data"]["data"]:
                 if entries["user"] == members["plex_username"]:
-                    last_watched_list.append(entries["full_title"])
+                    last_watched_list.append(
+                        f"<t:{entries['date']}:t> {entries['full_title']}"
+                    )
             if len(last_watched_list) <= 0:
                 last_watched_list = ["No history found"]
             discord_member = await bot.fetch_user(members["discord_id"])
@@ -261,7 +263,7 @@ async def top(ctx) -> None:
     }
     response = tautulli.get_home_stats(params=params_home_stats)
     i = 0
-    embed = nextcord.Embed(color=0x9B59B6)
+    embed = nextcord.Embed(color=0xE5A00D)
     embed.set_author(name="Plex Top (last 7 days watchtime)")
     embed.set_thumbnail(
         url="https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
@@ -319,32 +321,29 @@ async def top(ctx) -> None:
     if i == 0:
         await ctx.send("No users found")
 
-
+# much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
+# https://menus.docs.nextcord.dev/en/latest/ext/menus/pagination_examples/#paginated-embeds-using-descriptions
 @bot.command()
-# todo
-# attention span = 0, I will fix this later :-)
 async def recent(ctx, amount: int = None) -> None:
     fields = []
-    # can't do above 15
-    if amount is None or amount >= 15:
-        if amount is None:
-            amount = 4
-            await ctx.send(
-                f"Got no amount, defaulting to {amount} most recent additions"
-            )
-        else:
-            amount = 14
-            await ctx.szend(f"Can't do above 15, limiting to 14 🫡")
     response = tautulli.get_recently_added(count=amount)
     for entry in response["response"]["data"]["recently_added"]:
+        if entry["originally_available_at"] == "":
+            continue
+        # work around to show full show name alongside episode name
+        if entry["grandparent_title"] != "":
+            entry["title"] = f"{entry['grandparent_title']} - {entry['title']}"
+        if entry["studio"] == "":
+            entry["studio"] = "n/a"
+        if entry["rating"] == "":
+            entry["rating"] = "nil"
         fields.append(
             (
-                f"{entry['title']}\nReleased: {entry['originally_available_at']}",
-                f"**{entry['studio']}, RT rating: {entry['rating']}**\n{entry['summary']}",
+                f"🎬 **{entry['title']}** 🕗 {entry['originally_available_at']}\n **Studio:** {entry['studio']} 🍅 **RT rating:** {entry['rating']}/10\n{entry['summary']}"
             )
         )
     pages = utils.NoStopButtonMenuPages(
-        source=utils.MyEmbedFieldPageSource(fields),
+        source=utils.MyEmbedDescriptionPageSource(fields),
     )
     await pages.start(ctx)
 
@@ -381,7 +380,7 @@ async def downloading(ctx):
     num_downloads = 0
     downloads_embed = nextcord.Embed(
         title="qBittorrent Live Downloads",
-        colour=nextcord.Colour(0x6C81DF),
+        color=0x6C81DF,
     )
     downloads_embed.set_thumbnail(
         url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png"

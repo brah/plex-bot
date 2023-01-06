@@ -36,14 +36,11 @@ class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
 
 
 # taken from nextcord docs - to be revised
-class MyEmbedFieldPageSource(menus.ListPageSource):
-    def __init__(self, data) -> None:
+class MyEmbedDescriptionPageSource(menus.ListPageSource):
+    def __init__(self, data):
         super().__init__(data, per_page=2)
 
-    async def format_page(self, menu, entries) -> nextcord.Embed:
-        embed = nextcord.Embed(title="Recently added:")
-        print(f"entry: {entries}")
-        embed.add_field(name=entries["title"], value=entries["summary"], inline=False)
-        embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
-        embed.set_thumbnail(url=entries["url"])
+    async def format_page(self, menu, entries):
+        embed = nextcord.Embed(title="Recently Added", description="\n".join(entries), color=0xE5A00D)
+        embed.set_footer(text=f'Page {menu.current_page + 1}/{self.get_max_pages()}')
         return embed
