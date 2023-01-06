@@ -128,7 +128,7 @@ class Tautulli:
             return f"{img} or {rating_key} is required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#pms_image_proxy`"
         else:
             if img is not None:
-                url = self .tautulli_api_url + f"pms_image_proxy&img={img}"
+                url = self.tautulli_api_url + f"pms_image_proxy&img={img}"
             elif rating_key is not None:
                 url = self.tautulli_api_url + f"pms_image_proxy&rating_key={rating_key}"
             self.session.get(url=url)
@@ -158,15 +158,49 @@ class Tautulli:
         individual_files (bool):    Export each item as an individual file for library/user export.
         """
         if section_id is None and user_id is None and rating_key is None:
-            return f"{section_id}, {user_id}, or {rating_key} are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
+            return f"section_id, user_id, or rating_key are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
         else:
             if section_id is not None:
                 url = self.tautulli_api_url + f"export_metadata&section_id={section_id}"
             elif user_id is not None:
                 url = self.tautulli_api_url + f"export_metadata&user_id={user_id}"
             elif rating_key is not None:
-                url = self.tautulli_api_url + f"export_metadata&rating_key={rating_key}&file_format=json&thumb_level=1&art_level=1"
+                url = (
+                    self.tautulli_api_url
+                    + f"export_metadata&rating_key={rating_key}&file_format=json&thumb_level=1&art_level=1"
+                )
                 print(url)
             response = self.session.get(url=url)
-            print(response)
         return response.json()
+
+    def get_metadata(self, rating_key: str = None, sync_id: str = None, params=None):
+        """Get the metadata for a media item.
+
+        Required parameters:
+        rating_key (str):   Rating key of the item
+        """
+        if rating_key is None and sync_id is None:
+            return f"Either rating_key or sync_id are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
+        else:
+            if rating_key is not None:
+                url = self.tautulli_api_url + f"get_metadata&rating_key={rating_key}"
+            elif sync_id is not None:
+                url = self.tautulli_api_url + f"get_metadata&sync_id={sync_id}"
+            response = self.session.get(url=url, params=params)
+        return response.json()
+
+    class TMDB:
+        def __init__(self) -> None:
+            session = requests.Session()
+            self.session = session
+            self.api_key = CONFIG["tmdb_apikey"]
+            self.tmdb_api_url = f"https://api.themoviedb.org/3/"
+
+        def get_movie_details(self, movie_id: int = None):
+            if movie_id is None:
+                return f"movie_id is required, see https://developers.themoviedb.org/3/movies/get-movie-details"
+            else:
+                url = self.tmdb_api_url + f"movie/{movie_id}?api_key={self.api_key}"
+                print(url)
+                response = self.session.get(url=url)
+            return response.json()

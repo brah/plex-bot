@@ -28,6 +28,7 @@ Tweak [config.json](https://github.com/brah/plex-bot/blob/main/config.json) - Sh
 - **tautulli_ip** - Local DNS records should work fine (i.e. media.server:8181)
 - **tautulli_apikey** - TAUTULLI_IP:PORT/settings#tabs_tabs-web_interface <- Fill your address+port and you can find it at the bottom of that URL
 - **token** - [Guide](https://www.writebots.com/discord-bot-token/)
+- **tmdb_apikey** - [Create one here](https://www.themoviedb.org/settings/api) note: this is optional, it is (currently) used for images in `plex recent` for recent additions to library
 - **server_id** - The bot (currently) is designed to operate on **one** server, right click the server, copy ID and paste it here.
 - **plex_top**
 - **plex_two**

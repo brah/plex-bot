@@ -1,10 +1,8 @@
 import asyncio
 import json
-import pprint
 
 import nextcord
 from nextcord.ext import commands
-from nextcord.ext import menus
 
 import utilities as utils
 import tautulli_wrapper as tautulli
@@ -16,6 +14,7 @@ LOCAL_JSON = "map.json"
 
 # Initialize Tautulli wrapper as tautulli
 tautulli = tautulli.Tautulli()
+tmdb = tautulli.TMDB()
 
 # Initialize qbittorrentapi if qbit_ip is set
 if CONFIG_DATA["qbit_ip"] != "":
@@ -33,23 +32,36 @@ intents.members = True
 
 # Initialize bot with the prefix `plex ` and intents
 # todo: work out which intents are ACTUALLY needed...
-bot = commands.Bot(command_prefix=["plex ", "Plex "], intents=intents)
+bot = commands.Bot(
+    command_prefix=["plex ", "Plex "], intents=intents, help_command=None
+)
 
 
 async def status_task():
+    var = 0
     while True:
         response = tautulli.get_activity()
         stream_count = response["response"]["data"]["stream_count"]
         wan_bandwidth_mbps = round(
             (response["response"]["data"]["wan_bandwidth"] / 1000), 1
         )
-        await bot.change_presence(
-            activity=nextcord.Activity(
-                type=nextcord.ActivityType.playing,
-                name=f"{stream_count} streams at {wan_bandwidth_mbps} mbps",
+        if var == 0:
+            await bot.change_presence(
+                activity=nextcord.Activity(
+                    type=nextcord.ActivityType.playing,
+                    name=f"{stream_count} streams at {wan_bandwidth_mbps} mbps",
+                )
             )
-        )
-        await asyncio.sleep(30)
+            var += 1
+        else:
+            await bot.change_presence(
+                activity=nextcord.Activity(
+                    type=nextcord.ActivityType.listening,
+                    name=f": plex help",
+                )
+            )
+            var -= 1
+        await asyncio.sleep(15)
 
 
 @bot.event
@@ -102,7 +114,7 @@ async def mapdiscord(
 @bot.command()
 async def watchlist(ctx, member: nextcord.Member = None) -> None:
     response = tautulli.get_history()
-    embed = nextcord.Embed(description="", color=0x9B59B6)
+    embed = nextcord.Embed(description="", color=0xE5A00D)
     embed.set_author(name="Plex Stats")
     last_watched_list = []
     if member is None:
@@ -308,39 +320,21 @@ async def top(ctx) -> None:
         await ctx.send("No users found")
 
 
-class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
-    def __init__(self, source, timeout=60) -> None:
-        super().__init__(source, timeout=timeout)
-
-        # Add the buttons we want
-        self.add_item(menus.MenuPaginationButton(emoji=self.PREVIOUS_PAGE))
-        self.add_item(menus.MenuPaginationButton(emoji=self.NEXT_PAGE))
-
-        # Disable buttons that are unavailable to be pressed at the start
-        self._disable_unavailable_buttons()
-
-
-class MyEmbedFieldPageSource(menus.ListPageSource):
-    def __init__(self, data) -> None:
-        super().__init__(data, per_page=2)
-
-    async def format_page(self, menu, entries) -> nextcord.Embed:
-        embed = nextcord.Embed(title="Recently added:")
-        for entry in entries:
-            embed.add_field(name=entry[0], value=entry[1], inline=False)
-        embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
-        return embed
-
-
 @bot.command()
+# todo
+# attention span = 0, I will fix this later :-)
 async def recent(ctx, amount: int = None) -> None:
     fields = []
     # can't do above 15
     if amount is None or amount >= 15:
         if amount is None:
             amount = 4
+            await ctx.send(
+                f"Got no amount, defaulting to {amount} most recent additions"
+            )
         else:
             amount = 14
+            await ctx.szend(f"Can't do above 15, limiting to 14 🫡")
     response = tautulli.get_recently_added(count=amount)
     for entry in response["response"]["data"]["recently_added"]:
         fields.append(
@@ -349,10 +343,25 @@ async def recent(ctx, amount: int = None) -> None:
                 f"**{entry['studio']}, RT rating: {entry['rating']}**\n{entry['summary']}",
             )
         )
-    pages = NoStopButtonMenuPages(
-        source=MyEmbedFieldPageSource(fields),
+    pages = utils.NoStopButtonMenuPages(
+        source=utils.MyEmbedFieldPageSource(fields),
     )
     await pages.start(ctx)
+
+
+@bot.command()
+async def watchers(ctx) -> None:
+    # todo: add ignored users check
+    sessions = tautulli.get_activity()["response"]["data"]["sessions"]
+    total_watchers = 0
+    msg_list = []
+    for users in sessions:
+        total_watchers += 1
+        msg_list.append(
+            f"User **{users['friendly_name']}** is watching **{users['full_title']}** with quality: **{users['quality_profile']}**"
+        )
+    msg_list.insert(0, f"**{total_watchers}** users are currently watching Plex 🐒\n")
+    await ctx.send(f"\n".join(msg_list))
 
 
 # need to start using cogs soon hehe
@@ -379,6 +388,23 @@ async def downloading(ctx):
         dl_info.append(str_)
     dl_info.insert(0, "**Currently downloading:**")
     await ctx.send(f"\n\n".join(dl_info))
+
+
+@bot.command()
+async def help(ctx) -> None:
+    help_embed = nextcord.Embed(
+        title="Plex Utility Bot Commands - prefix is `plex`!",
+        colour=nextcord.Colour(0xE5A00D),
+    )
+    help_embed.set_thumbnail(
+        url="https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
+    )
+    help_embed.add_field(
+        name="🎥 Commands",
+        value="**`plex top`** - ranks top users by watchtime\n**`plex recent`** - shows most recent additions to Plex(WIP)\n**`plex watchers`** - shows who is currently watching Plex\n"
+        "**`plex downloading`** - shows what is currently downloading\n**`plex watchlist [user_tag]`** - shows [user_tag]'s recent watches\n**`plex help`** - shows this message",
+    )
+    await ctx.send(embed=help_embed)
 
 
 bot.run(CONFIG_DATA["token"])
