@@ -1,12 +1,17 @@
 # plex-bot
-Hobby project to interact with Plex through the Tautulli API for fun commands on your Discord server<br>
+
+Hobby project to interact with Plex through the Tautulli API for fun commands on your Discord server
+
+
 If you intend to use it, please do note I can and will break stuff at any and every moment (+ development will likely come in bursts, just one of those things :-))
 
 ## Setup
 
 Preferably on the same machine where Plex and Tautulli reside (not strictly, external requests *should* work OK, but you know)
 
-Note this will install in the directory you are currently sitting in, doesn't matter where it goes. Personally, I created a /home/app folder where I run it from.<br>
+Note this will install in the directory you are currently sitting in, doesn't matter where it goes. Personally, I created a `/home/app` folder where I run it from.
+
+
 1. `git clone https://github.com/brah/plex-bot.git`
 2. `pip install -r requirements.txt`
 3. Create a `config.json` file in the same directory as `plexbot.py`, add the sample values below and fill as necessary - Should be mostly self explanatory, however there is explanations below:
