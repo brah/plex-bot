@@ -378,16 +378,30 @@ async def downloading(ctx):
         print(
             f"Couldn't open connection to qbittorrent, check qBit related JSON values {err}"
         )
-    dl_info = []
+    num_downloads = 0
+    downloads_embed = nextcord.Embed(
+        title="qBittorrent Live Downloads",
+        colour=nextcord.Colour(0x6C81DF),
+    )
+    downloads_embed.set_thumbnail(
+        url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png"
+    )
     # e.g. output:
-    # Currently downloading:
     # debian-11.6.0-amd64-DVD-1.iso Progress: 46.12%, Size: 3.91 GB, ETA: 60 minutes, speed: 10.00 MB/s
-    # todo: make an embed
     for downloads in qbt_client.torrents.info.downloading():
-        str_ = f"`{downloads.name}` **Progress:** `{(downloads.progress * 100):.2f}%`, **Size:** `{downloads.size * 1e-9:.2f}` GB, **ETA:** `{downloads.eta / 60:.0f}` minutes, **speed:** `{downloads.dlspeed * 1.0e-6:.2f}` MB/s"
-        dl_info.append(str_)
-    dl_info.insert(0, "**Currently downloading:**")
-    await ctx.send(f"\n\n".join(dl_info))
+        downloads_embed.add_field(
+            name=f"⏳ {downloads.name}",
+            value=f"**Progress**: {downloads.progress * 100:.2f}%, **Size:** {downloads.size * 1e-9:.2f} GB, **ETA:** {downloads.eta / 60:.0f} minutes, **DL:** {downloads.dlspeed * 1.0e-6:.2f} MB/s",
+            inline=False,
+        )
+        num_downloads += 1
+    if num_downloads < 1:
+        downloads_embed.add_field(
+            name=f"\u200b",
+            value=f"There is no movie currently downloading!",
+            inline=False,
+        )
+    await ctx.send(embed=downloads_embed)
 
 
 @bot.command()
