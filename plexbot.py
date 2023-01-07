@@ -3,7 +3,6 @@ import json
 
 import nextcord
 from nextcord.ext import commands
-from nextcord.ext import menus
 
 import utilities as utils
 import tautulli_wrapper as tautulli
@@ -39,12 +38,26 @@ bot = commands.Bot(
 
 async def status_task():
     var = 0
+    print(f"-------------- Testing connection to Tautulli --------------")
+    r = tautulli.get_home_stats()
+    print(
+        f"----- Response from Tautulli's get_home_stats: {r['response']['result']} -----"
+    )
+    print(
+        f"-- If you got anything but 'success' above, consult your URL + API key in config.json --"
+    )
     while True:
         response = tautulli.get_activity()
-        stream_count = response["response"]["data"]["stream_count"]
-        wan_bandwidth_mbps = round(
-            (response["response"]["data"]["wan_bandwidth"] / 1000), 1
-        )
+        try:
+            stream_count = response["response"]["data"]["stream_count"]
+            wan_bandwidth_mbps = round(
+                (response["response"]["data"]["wan_bandwidth"] / 1000), 1
+            )
+        except KeyError as err:
+            print(
+                f"-- CRITICAL -- Missing KeyError getting stream count or wan_bandwidth_mbps: {err}"
+            )
+            break
         if var == 0:
             await bot.change_presence(
                 activity=nextcord.Activity(
@@ -320,6 +333,7 @@ async def top(ctx) -> None:
     await ctx.send(embed=embed)
     if i == 0:
         await ctx.send("No users found")
+
 
 # much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
 # https://menus.docs.nextcord.dev/en/latest/ext/menus/pagination_examples/#paginated-embeds-using-descriptions

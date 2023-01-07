@@ -36,6 +36,19 @@ class Tautulli:
         response = self.session.get(url=url, params=params)
         return response.json()
 
+    def get_apikey(self, params=None):
+        """Get the apikey. Username and password are required if auth is enabled. Makes and saves the apikey if it does not exist.
+
+        Optional parameters:
+            username (str):     Your Tautulli username
+            password (str):     Your Tautulli password
+        Returns:
+            string:             "apikey"
+        """
+        url = self.tautulli_api_url + "get_apikey"
+        response = self.session.get(url=url, params=params)
+        return response.json()
+
     def get_history(self, params=None):
         """
         Get the Tautulli history.
