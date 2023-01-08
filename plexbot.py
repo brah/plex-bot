@@ -120,7 +120,7 @@ async def mapdiscord(
                         f"Something went wrong, please try again or pass on this error {err}"
                     )
 
-        with open(LOCAL_JSON, "w") as json_file:
+        with open(LOCAL_JSON, "w+") as json_file:
             json.dump(list_object, json_file, indent=4, separators=(",", ": "))
 
 
@@ -235,6 +235,13 @@ async def clean_roles(ctx, top_users) -> None:
         guild.get_role(CONFIG_DATA["plex_two"]),
         guild.get_role(CONFIG_DATA["plex_three"]),
     ]
+    if role_one is None or role_two is None or role_three is None:
+        await ctx.send(
+            "`plex top` relies on three roles: `plex top`, `plex two`, `plex three`, create these in your server, right click them in server settings -> roles and copy ID. Paste them in the config.json file.\n"
+            "Note you may need to enable developer mode on discord if not already.",
+            files=[nextcord.File("img/role_sample.png")],
+        )
+        return
     for members in role_one.members:
         if top_users[1] == members.id:
             continue
@@ -284,29 +291,32 @@ async def top(ctx) -> None:
     top_users = {1: None, 2: None, 3: None}
     for entries in response["response"]["data"]["rows"]:
         username = entries["user"]
-        for members in json.load(open(LOCAL_JSON)):
-            if (
-                members.get("ignore") and members["ignore"] == False
-            ) or not members.get("ignore"):
-                if members["plex_username"] == username:
-                    i = i + 1
-                    duration = entries["total_duration"]
-                    movie_or_show = entries["media_type"]
-                    media = (
-                        entries["grandchild_title"]
-                        if (movie_or_show == "movie")
-                        else entries["grandparent_title"]
-                    )
-                    embed.add_field(
-                        name=f"#{i}. {username}",
-                        value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
-                        inline=True,
-                    )
-                    if i <= 3:
-                        if members["discord_id"] is not None:
-                            top_users[i] = members["discord_id"]
-                            await assign_role(ctx, i, members["discord_id"])
-                    break
+        try:
+            for members in json.load(open(LOCAL_JSON)):
+                if (
+                    members.get("ignore") and members["ignore"] == False
+                ) or not members.get("ignore"):
+                    if members["plex_username"] == username:
+                        i = i + 1
+                        duration = entries["total_duration"]
+                        movie_or_show = entries["media_type"]
+                        media = (
+                            entries["grandchild_title"]
+                            if (movie_or_show == "movie")
+                            else entries["grandparent_title"]
+                        )
+                        embed.add_field(
+                            name=f"#{i}. {username}",
+                            value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
+                            inline=True,
+                        )
+                        if i <= 3:
+                            if members["discord_id"] is not None:
+                                top_users[i] = members["discord_id"]
+                                await assign_role(ctx, i, members["discord_id"])
+                        break
+        except FileNotFoundError as err:
+            print(f"File not found: {err}")
         else:
             # non mapped users (i.e. those without Discord)
             if (
@@ -329,10 +339,13 @@ async def top(ctx) -> None:
     embed.set_footer(
         text=f"Total Plex watchtime (all time): {history_data['response']['data']['total_duration']}"
     )
-    await clean_roles(ctx, top_users=top_users)
-    await ctx.send(embed=embed)
-    if i == 0:
-        await ctx.send("No users found")
+    if i < 1:
+        await ctx.send(
+            "No users found; use `plex mapdiscord plex_username @discord_user` to map yourself or other users."
+        )
+    else:
+        await clean_roles(ctx, top_users=top_users)
+        await ctx.send(embed=embed)
 
 
 # much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
