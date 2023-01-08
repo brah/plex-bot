@@ -41,6 +41,28 @@ class MyEmbedDescriptionPageSource(menus.ListPageSource):
         super().__init__(data, per_page=2)
 
     async def format_page(self, menu, entries):
-        embed = nextcord.Embed(title="Recently Added", description="\n".join(entries), color=0xE5A00D)
-        embed.set_footer(text=f'Page {menu.current_page + 1}/{self.get_max_pages()}')
+        embed = nextcord.Embed(
+            title="Recently Added", description="\n".join(entries), color=0xE5A00D
+        )
+        embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
         return embed
+
+
+import subprocess
+
+
+def get_git_revision_short_hash() -> str:
+    return (
+        subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+        .decode("ascii")
+        .strip()
+    )
+
+def get_git_revision_short_hash_latest():
+    return subprocess.check_output(['git', 'rev-parse', "--short", 'HEAD']).decode('ascii').strip()
+
+import json
+
+def reload_config_json():
+    with open('config.json', 'r') as f:
+        return json.load(f)
