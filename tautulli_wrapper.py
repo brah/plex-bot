@@ -202,6 +202,41 @@ class Tautulli:
             response = self.session.get(url=url, params=params)
         return response.json()
 
+    def get_server_info(self):
+        """Get the PMS server information."""
+        url = self.tautulli_api_url + f"get_server_info"
+        response = self.session.get(url=url)
+        return response.json()
+
+    def terminate_session(
+        self, session_key: int = None, session_id: str = None, message: str = None
+    ):
+        """Stop a streaming session.
+
+        Required parameters:
+        session_key (int):  The session key of the session to terminate, OR
+        session_id (str):   The session id of the session to terminate
+
+        Optional parameters:
+        message (str):      A custom message to send to the client
+        """
+        if session_id and session_key is None:
+            return f"Either session_key or session_id are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#terminate_session`"
+        else:
+            if session_key is not None:
+                url = (
+                    self.tautulli_api_url
+                    + f"terminate_session&session_key={session_key}"
+                )
+            elif session_id is not None:
+                url = (
+                    self.tautulli_api_url + f"terminate_session&session_id={session_id}"
+                )
+            if message is not None:
+                url += f"&message={message}"
+            response = self.session.get(url=url)
+        return response.status_code
+
     class TMDB:
         def __init__(self) -> None:
             session = requests.Session()

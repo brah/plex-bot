@@ -36,6 +36,10 @@ class plex_bot(commands.Cog):
         self.CONFIG_JSON = "config.json"
         self.tautulli = tautulli
         self.tmdb = self.tautulli.TMDB()
+        self.plex_embed = 0xE5A00D
+        self.plex_image = (
+            "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
+        )
 
     async def status_task(self):
         var = 0
@@ -73,14 +77,20 @@ class plex_bot(commands.Cog):
     async def on_ready(self) -> None:
         r = tautulli.get_home_stats()
         status = r["response"]["result"]
-        local_commit, latest_commit = (
-            utils.get_git_revision_short_hash(),
-            utils.get_git_revision_short_hash_latest(),
-        )
-        if local_commit != latest_commit:
-            up_to_date = "Version outdated. Consider running git pull"
-        else:
-            up_to_date = ""
+        try:
+            local_commit, latest_commit = (
+                utils.get_git_revision_short_hash(),
+                utils.get_git_revision_short_hash_latest(),
+            )
+            if local_commit != latest_commit:
+                up_to_date = "Version outdated. Consider running git pull"
+            else:
+                up_to_date = ""
+        except FileNotFoundError as err:
+            print(
+                f"Tried to get git commit, but failed: {err}, check in on https://github.com/brah/plex-bot/commits/main once a while for new changes :-)"
+            )
+
         if status == "success":
             print(f"Connection to Tautulli successful")
         else:
@@ -137,7 +147,7 @@ class plex_bot(commands.Cog):
     @commands.command()
     async def watchlist(self, ctx, member: nextcord.Member = None) -> None:
         response = tautulli.get_history()
-        embed = nextcord.Embed(description="", color=0xE5A00D)
+        embed = nextcord.Embed(description="", color=self.plex_embed)
         embed.set_author(name="Plex Stats")
         last_watched_list = []
         if member is None:
@@ -331,11 +341,10 @@ class plex_bot(commands.Cog):
         }
         response = tautulli.get_home_stats(params=params_home_stats)
         i = 0
-        embed = nextcord.Embed(color=0xE5A00D)
+        embed_file = nextcord.File("img/plexcrown.png")
+        embed = nextcord.Embed(color=self.plex_embed)
         embed.set_author(name=f"Plex Top (last {duration} days watchtime)")
-        embed.set_thumbnail(
-            url="https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
-        )
+        embed.set_thumbnail(url=f"attachment://{embed_file.filename}")
         top_users = {1: None, 2: None, 3: None}
         for entries in response["response"]["data"]["rows"]:
             username = entries["user"]
@@ -395,7 +404,7 @@ class plex_bot(commands.Cog):
             )
         else:
             await self.clean_roles(ctx, top_users=top_users)
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, file=embed_file)
 
     # much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
     # https://menus.docs.nextcord.dev/en/latest/ext/menus/pagination_examples/#paginated-embeds-using-descriptions
@@ -480,17 +489,78 @@ class plex_bot(commands.Cog):
     async def help(self, ctx) -> None:
         help_embed = nextcord.Embed(
             title="Plex Utility Bot Commands - prefix is `plex`!",
-            colour=nextcord.Colour(0xE5A00D),
+            colour=nextcord.Colour(self.plex_embed),
         )
-        help_embed.set_thumbnail(
-            url="https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
-        )
+        help_embed.set_thumbnail(url=self.plex_image)
         help_embed.add_field(
             name="🎥 Commands",
             value="**`plex top`** - ranks top users by watchtime\n**`plex recent`** - shows most recent additions to Plex(WIP)\n**`plex watchers`** - shows who is currently watching Plex\n"
             "**`plex downloading`** - shows what is currently downloading\n**`plex watchlist [user_tag]`** - shows [user_tag]'s recent watches\n**`plex help`** - shows this message",
         )
         await ctx.send(embed=help_embed)
+
+    @commands.command()
+    async def server(self, ctx) -> None:
+        r = self.tautulli.get_server_info()
+        server_info = r["response"]
+        server_embed = nextcord.Embed(
+            title="Plex Server Details",
+            colour=nextcord.Colour(self.plex_embed),
+        )
+        server_embed.set_thumbnail(url=self.plex_image)
+        server_embed.add_field(
+            name="Response", value=f"{server_info['result']}", inline=True
+        )
+        server_embed.add_field(
+            name="Server Name", value=f"{server_info['data']['pms_name']}", inline=True
+        )
+        server_embed.add_field(
+            name="Server Version",
+            value=f"{server_info['data']['pms_version']}",
+            inline=True,
+        )
+        server_embed.add_field(
+            name="Server IP",
+            value=f"{server_info['data']['pms_ip']}:{server_info['data']['pms_port']}",
+        )
+        server_embed.add_field(
+            name="Platform", value=f"{server_info['data']['pms_platform']}"
+        )
+        server_embed.add_field(
+            name="Plex Pass", value=f"{server_info['data']['pms_plexpass']}"
+        )
+        await ctx.send(embed=server_embed)
+
+    @commands.command()
+    async def killstream(
+        self, ctx, session_key: str = None, message: str = None
+    ) -> None:
+        session_keys = []
+        if session_key is None:
+            activity = self.tautulli.get_activity()
+            sessions = activity["response"]["data"]["sessions"]
+            for users in sessions:
+                session_keys.append(
+                    f"\n**Session key:** {users['session_key']} is: **{users['user']}**,"
+                )
+            await ctx.send(
+                f"You provided no session keys, current users are: {''.join(session_keys)}\nYou can use `plex killstream [session_key] '[message]'` to kill a stream above;"
+                "\nMessage will be passed to the user in a pop-up window on their Plex client.\n ⚠️ It is recommended to use 'apostrophes' around the message to avoid errors."
+            )
+            return
+        r = self.tautulli.terminate_session(session_key, message=message)
+        if r == 400:
+            await ctx.send(
+                f"Could not find a stream with **{session_key}** or another error occured"
+            )
+        elif r == 200:
+            await ctx.send(
+                f"Killed stream with session_key: **{session_key}** and message if provided: **{message}**"
+            )
+        else:
+            await ctx.send(
+                "Something unaccounted for occured - Check console for some more info"
+            )
 
 
 bot.add_cog(plex_bot(bot))
