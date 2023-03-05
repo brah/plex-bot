@@ -237,6 +237,36 @@ class Tautulli:
             response = self.session.get(url=url)
         return response.status_code
 
+    def get_library_user_stats(self, section_id: str = None):
+        """Get user stats for a library.
+
+        Parameters:
+            section_id (str):   ID of the section to get the stats for.
+        """
+        url = self.tautulli_api_url + "get_library_user_stats"
+        if section_id is not None:
+            url += f"&section_id={section_id}"
+        else:
+            print("Section ID is required.")
+        response = self.session.get(url=url)
+        return response.json()
+
+    def get_mapped_username(self, member):
+        with open("map.json", "r") as f:
+            mapping = json.load(f)
+
+        for user_map in mapping:
+            if user_map["discord_id"] == member.id:
+                return user_map["plex_username"]
+
+        return member.display_name
+
+    def get_libraries(self):
+        """Get a list of all the libraries."""
+        url = self.tautulli_api_url + "get_libraries"
+        response = self.session.get(url=url)
+        return response.json()
+
     class TMDB:
         def __init__(self) -> None:
             session = requests.Session()

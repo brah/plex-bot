@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 import json
 
 import nextcord
@@ -162,10 +163,14 @@ class plex_bot(commands.Cog):
             for members in dc_plex_json:
                 if member.id != members["discord_id"]:
                     continue
-                for entries in response["response"]["data"]["data"]:
-                    if entries["user"] == members["plex_username"]:
+                for entry in response["response"]["data"]["data"]:
+                    if entry["user"] == members["plex_username"]:
+                        session_duration = entry["duration"] - entry["paused_counter"]
+                        duration_str = (
+                            f"{session_duration // 60}m {session_duration % 60}s"
+                        )
                         last_watched_list.append(
-                            f"<t:{entries['date']}:t> {entries['full_title']}"
+                            f"<t:{entry['date']}:t> {entry['full_title']} ({duration_str})"
                         )
                 if len(last_watched_list) <= 0:
                     last_watched_list = ["No history found"]
@@ -180,7 +185,7 @@ class plex_bot(commands.Cog):
             await ctx.send(embed=embed)
         else:
             await ctx.send(
-                f"You are not mapped, use the command: `plex map_id [plex_username]`"
+                "You are not mapped, use the command: `plex map_id [plex_username]`"
             )
 
     @commands.command()
@@ -561,6 +566,62 @@ class plex_bot(commands.Cog):
             await ctx.send(
                 "Something unaccounted for occured - Check console for some more info"
             )
+
+    @commands.command()
+    async def shows(self, ctx):
+        # Get all TV libraries
+        response = tautulli.get_libraries()
+        libraries = response["response"]["data"]
+        tv_libraries = (
+            library for library in libraries if library["section_type"] == "show"
+        )
+
+        # Get library user stats for each TV library
+        top_users = {}
+        for library in tv_libraries:
+            section_id = library["section_id"]
+            library_name = library["section_name"]
+            response = tautulli.get_library_user_stats(section_id=section_id)
+            data = response["response"]["data"]
+            for user_data in data:
+                username = user_data["username"]
+                total_time = user_data["total_time"]
+                if username not in top_users:
+                    top_users[username] = {
+                        "time": total_time,
+                        "count": 1,
+                        "libraries": [library_name],
+                    }
+                else:
+                    top_users[username]["time"] += total_time
+                    top_users[username]["count"] += 1
+                    top_users[username]["libraries"].append(library_name)
+
+        # Sort users by total time watched and get top 10
+        top_users = sorted(top_users.items(), key=lambda x: x[1]["time"], reverse=True)[
+            :10
+        ]
+
+        # Create embed
+        embed = nextcord.Embed(
+            title="Top Users by Total Time Watched for All TV Libraries",
+            color=self.plex_embed,
+        )
+        embed.set_thumbnail(
+            url="https://www.freepnglogos.com/uploads/tv-png/tv-png-the-whole-enchilada-the-whole-enchilada-9.png"
+        )
+        # Add fields to embed
+        for i, (username, data) in enumerate(top_users):
+            time = str(timedelta(seconds=data["time"]))
+            count = data["count"]
+            libraries_str = ", ".join(data["libraries"])
+            embed.add_field(
+                name=f"{i+1}. {username}",
+                value=f"**{time}** watched across {count} libraries;\n{libraries_str}",
+                inline=False,
+            )
+
+        await ctx.send(embed=embed)
 
 
 bot.add_cog(plex_bot(bot))
