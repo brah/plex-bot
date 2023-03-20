@@ -45,33 +45,30 @@ class plex_bot(commands.Cog):
     async def status_task(self):
         var = 0
         while True:
-            response = tautulli.get_activity()
             try:
+                response = tautulli.get_activity()
                 stream_count = response["response"]["data"]["stream_count"]
                 wan_bandwidth_mbps = round(
                     (response["response"]["data"]["wan_bandwidth"] / 1000), 1
                 )
-            except KeyError as err:
-                print(
-                    f"-- CRITICAL -- Missing KeyError getting stream count or wan_bandwidth_mbps: {err}"
-                )
-                break
-            if var == 0:
-                await bot.change_presence(
-                    activity=nextcord.Activity(
-                        type=nextcord.ActivityType.playing,
-                        name=f"{stream_count} streams at {wan_bandwidth_mbps} mbps",
+                if var == 0:
+                    await bot.change_presence(
+                        activity=nextcord.Activity(
+                            type=nextcord.ActivityType.playing,
+                            name=f"{stream_count} streams at {wan_bandwidth_mbps} mbps",
+                        )
                     )
-                )
-                var += 1
-            else:
-                await bot.change_presence(
-                    activity=nextcord.Activity(
-                        type=nextcord.ActivityType.listening,
-                        name=f": plex help",
+                    var += 1
+                else:
+                    await bot.change_presence(
+                        activity=nextcord.Activity(
+                            type=nextcord.ActivityType.listening,
+                            name=": plex help",
+                        )
                     )
-                )
-                var -= 1
+                    var -= 1
+            except Exception as e:
+                print(f"Error in status_task(): {e}")
             await asyncio.sleep(15)
 
     @commands.Cog.listener()
@@ -93,7 +90,7 @@ class plex_bot(commands.Cog):
             )
 
         if status == "success":
-            print(f"Connection to Tautulli successful")
+            print("Connection to Tautulli successful")
         else:
             print(f"-- CRITICAL -- Connection to Tautulli failed, result {status} --")
         print(
@@ -108,7 +105,7 @@ class plex_bot(commands.Cog):
     ) -> None:
         if plex_username is None or discord_user is None:
             await ctx.send(
-                f"Please provide a plex username and discord user to map. Example: `plex mapd username @user`. Leave the discord user blank to map yourself."
+                "Please provide a plex username and discord user to map. Example: `plex mapd username @user`. Leave the discord user blank to map yourself."
             )
             return
         if discord_user is None:
@@ -240,7 +237,7 @@ class plex_bot(commands.Cog):
             try:
                 dc_plex_json = json.load(json_file)
             except json.JSONDecodeError:
-                print(f"empty json")
+                print("empty json")
             for members in dc_plex_json:
                 if (
                     members["plex_username"] == plex_username
