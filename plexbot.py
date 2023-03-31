@@ -103,18 +103,22 @@ class plex_bot(commands.Cog):
     async def mapdiscord(
         self, ctx, plex_username: str, discord_user: nextcord.User = None
     ) -> None:
-        if plex_username is None or discord_user is None:
-            await ctx.send(
-                "Please provide a plex username and discord user to map. Example: `plex mapd username @user`. Leave the discord user blank to map yourself."
-            )
+        # Input validation
+        if not plex_username.strip():
+            await ctx.send("Please provide a valid plex username.")
             return
-        if discord_user is None:
-            discord_user = ctx.author
+        try:
+            discord_user = discord_user or ctx.author
+        except AttributeError:
+            await ctx.send("Please provide a valid discord user.")
+            return
+
         with open(self.LOCAL_JSON) as json_file:
             try:
                 list_object = json.load(json_file)
             except json.JSONDecodeError:
                 list_object = []
+
             for members in list_object:
                 if members["discord_id"] == discord_user.id:
                     if members["plex_username"] == plex_username:
@@ -129,22 +133,17 @@ class plex_bot(commands.Cog):
                             f"Successfully updated mapping for {discord_user} to {plex_username}."
                         )
                     return
-            try:
-                list_object.append(
-                    {
-                        "discord_id": discord_user.id,
-                        "plex_username": plex_username,
-                    }
-                )
-                with open(self.LOCAL_JSON, "w+") as json_file:
-                    json.dump(list_object, json_file, indent=4, separators=(",", ": "))
-                await ctx.send(
-                    f"Successfully mapped {discord_user} to {plex_username}."
-                )
-            except Exception as err:
-                await ctx.send(
-                    f"Something went wrong, please try again or pass on this error {err}"
-                )
+
+            # Add new user
+            list_object.append(
+                {
+                    "discord_id": discord_user.id,
+                    "plex_username": plex_username,
+                }
+            )
+            with open(self.LOCAL_JSON, "w+") as json_file:
+                json.dump(list_object, json_file, indent=4, separators=(",", ": "))
+            await ctx.send(f"Successfully mapped {discord_user} to {plex_username}.")
 
     @commands.command()
     async def watchlist(self, ctx, member: nextcord.Member = None) -> None:
@@ -192,65 +191,58 @@ class plex_bot(commands.Cog):
     @commands.command()
     async def ignore(self, ctx, plex_username) -> None:
         # Don't show the user in the top list
+        if not plex_username.strip():
+            await ctx.send("Please provide a valid plex username.")
+            return
+
         with open(self.LOCAL_JSON) as json_file:
             try:
                 dc_plex_json = json.load(json_file)
             except json.JSONDecodeError:
-                print(f"empty json")
+                dc_plex_json = []
+
             for members in dc_plex_json:
                 if members["plex_username"] == plex_username:
-                    if members["ignore"] == True:
+                    if members.get("ignore"):
                         await ctx.send(
                             f":warning: {plex_username} is already ignored, undo with `plex unignore {plex_username}`"
                         )
-                        break
-                    try:
+                    else:
                         members["ignore"] = True
-                    except Exception as err:
-                        await ctx.send(f":warning: PROBLEM: {err}")
-                    await ctx.send(
-                        f"{plex_username} will be ignored on plex top now, to undo this use the command: plex unignore"
-                    )
-                    with open(self.LOCAL_JSON, "w") as json_file:
-                        json.dump(
-                            dc_plex_json, json_file, indent=4, separators=(",", ": ")
+                        await ctx.send(
+                            f"{plex_username} will be ignored on plex top now, to undo this use the command: `plex unignore {plex_username}`"
                         )
                     break
             else:
-                try:
-                    dc_plex_json.append(
-                        {
-                            "discord_id": "",
-                            "plex_username": plex_username,
-                            "ignore": True,
-                        }
-                    )
-                except Exception as err:
-                    await ctx.send(
-                        f":warning: TRIED TO ADD {plex_username} WITH NULL VALUES (NOT MAPPED) - PROBLEM: {err}"
-                    )
-                await ctx.send(
-                    f"**{plex_username}** was not mapped, map, they have been inserted with null values and will be ignored on plex top now, to undo this use the command: `plex unignore {plex_username}`"
+                dc_plex_json.append(
+                    {
+                        "discord_id": "",
+                        "plex_username": plex_username,
+                        "ignore": True,
+                    }
                 )
+                await ctx.send(
+                    f"**{plex_username}** was not mapped, they have been inserted with null values and will be ignored on plex top now, to undo this use the command: `plex unignore {plex_username}`"
+                )
+
             with open(self.LOCAL_JSON, "w") as json_file:
                 json.dump(dc_plex_json, json_file, indent=4, separators=(",", ": "))
 
     @commands.command()
     async def unignore(self, ctx, plex_username) -> None:
+        if not plex_username.strip():
+            await ctx.send("Please provide a valid plex username.")
+            return
+
         with open(self.LOCAL_JSON) as json_file:
             try:
                 dc_plex_json = json.load(json_file)
             except json.JSONDecodeError:
-                print("empty json")
+                dc_plex_json = []
+
             for members in dc_plex_json:
-                if (
-                    members["plex_username"] == plex_username
-                    and members["ignore"] == True
-                ):
-                    try:
-                        members["ignore"] = False
-                    except Exception as err:
-                        await ctx.send(f":warning: PROBLEM: {err}")
+                if members["plex_username"] == plex_username and members.get("ignore"):
+                    members["ignore"] = False
                     await ctx.send(
                         f"{plex_username} will no longer be ignored on plex top now, to undo this use the command: `plex ignore {plex_username}`"
                     )
@@ -262,48 +254,34 @@ class plex_bot(commands.Cog):
             else:
                 await ctx.send(f"{plex_username} is not ignored, or not mapped")
 
-    async def clean_roles(self, ctx, top_users) -> None:
-        guild = ctx.guild
-        role_one, role_two, role_three = [
-            guild.get_role(self.CONFIG_DATA["plex_top"]),
-            guild.get_role(self.CONFIG_DATA["plex_two"]),
-            guild.get_role(self.CONFIG_DATA["plex_three"]),
+    async def clean_roles(self, guild, top_users) -> None:
+        role_ids = [
+            self.CONFIG_DATA["plex_top"],
+            self.CONFIG_DATA["plex_two"],
+            self.CONFIG_DATA["plex_three"],
         ]
-        if role_one is None or role_two is None or role_three is None:
-            await ctx.send(
-                "`plex top` relies on three roles: `plex top`, `plex two`, `plex three`, create these in your server, right click them in server settings -> roles and copy ID. Paste them in the config.json file.\n"
-                "Note you may need to enable developer mode on discord if not already.",
-                files=[nextcord.File("img/role_sample.png")],
-            )
+        roles = [guild.get_role(role_id) for role_id in role_ids]
+        if any(role is None for role in roles):
             return
-        for members in role_one.members:
-            if top_users[1] == members.id:
-                continue
-            await members.remove_roles(role_one)
-        for members in role_two.members:
-            if top_users[2] == members.id:
-                continue
-            await members.remove_roles(role_two)
-        for members in role_three.members:
-            if top_users[3] == members.id:
-                continue
-            await members.remove_roles(role_three)
+        for i, role in enumerate(roles):
+            for member in role.members:
+                if member.id != top_users[i + 1]:
+                    await member.remove_roles(role)
 
     @commands.command()
     async def assign_role(self, ctx, rank, user_id) -> None:
         guild = ctx.guild
-        if rank == 1 and user_id is not None:
-            nextcord_user = guild.get_member(user_id)
-            role_one = guild.get_role(self.CONFIG_DATA["plex_top"])
-            await nextcord_user.add_roles(role_one)
-        elif rank == 2 and user_id is not None:
-            nextcord_user = guild.get_member(user_id)
-            role_two = guild.get_role(self.CONFIG_DATA["plex_two"])
-            await nextcord_user.add_roles(role_two)
-        elif rank == 3 and user_id is not None:
-            nextcord_user = guild.get_member(user_id)
-            role_three = guild.get_role(self.CONFIG_DATA["plex_three"])
-            await nextcord_user.add_roles(role_three)
+        nextcord_user = guild.get_member(user_id)
+        if rank == 1:
+            role = guild.get_role(self.CONFIG_DATA["plex_top"])
+        elif rank == 2:
+            role = guild.get_role(self.CONFIG_DATA["plex_two"])
+        elif rank == 3:
+            role = guild.get_role(self.CONFIG_DATA["plex_three"])
+        else:
+            return
+
+        await nextcord_user.add_roles(role)
 
     @commands.command()
     async def top(self, ctx, set_default: int = None) -> None:
@@ -315,7 +293,7 @@ class plex_bot(commands.Cog):
             with open(self.CONFIG_JSON, "w") as json_file:
                 self.CONFIG_DATA["default_duration"] = duration
                 json.dump(self.CONFIG_DATA, json_file, indent=4, separators=(",", ": "))
-                print(f"No duration passed and no default duration set, setting to 7")
+                print("No duration passed and no default duration set, setting to 7")
         if set_default is not None:
             try:
                 if self.CONFIG_DATA["default_duration"] == set_default:
@@ -409,7 +387,7 @@ class plex_bot(commands.Cog):
                 "No users found; use `plex mapdiscord plex_username @discord_user` to map yourself or other users."
             )
         else:
-            await self.clean_roles(ctx, top_users=top_users)
+            await self.clean_roles(ctx.guild, top_users=top_users)
             await ctx.send(embed=embed, file=embed_file)
 
     # much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
@@ -450,7 +428,7 @@ class plex_bot(commands.Cog):
         msg_list.insert(
             0, f"**{total_watchers}** users are currently watching Plex 🐒\n"
         )
-        await ctx.send(f"\n".join(msg_list))
+        await ctx.send("\n".join(msg_list))
 
     # need to start using cogs soon hehe
     @commands.command()
@@ -485,8 +463,8 @@ class plex_bot(commands.Cog):
             num_downloads += 1
         if num_downloads < 1:
             downloads_embed.add_field(
-                name=f"\u200b",
-                value=f"There is no movie currently downloading!",
+                name="\u200b",
+                value="There is no movie currently downloading!",
                 inline=False,
             )
         await ctx.send(embed=downloads_embed)

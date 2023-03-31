@@ -171,7 +171,7 @@ class Tautulli:
         individual_files (bool):    Export each item as an individual file for library/user export.
         """
         if section_id is None and user_id is None and rating_key is None:
-            return f"section_id, user_id, or rating_key are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
+            return "section_id, user_id, or rating_key are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
         else:
             if section_id is not None:
                 url = self.tautulli_api_url + f"export_metadata&section_id={section_id}"
@@ -193,7 +193,7 @@ class Tautulli:
         rating_key (str):   Rating key of the item
         """
         if rating_key is None and sync_id is None:
-            return f"Either rating_key or sync_id are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
+            return "Either rating_key or sync_id are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#export_metadata`"
         else:
             if rating_key is not None:
                 url = self.tautulli_api_url + f"get_metadata&rating_key={rating_key}"
@@ -204,7 +204,7 @@ class Tautulli:
 
     def get_server_info(self):
         """Get the PMS server information."""
-        url = self.tautulli_api_url + f"get_server_info"
+        url = self.tautulli_api_url + "get_server_info"
         response = self.session.get(url=url)
         return response.json()
 
@@ -221,7 +221,7 @@ class Tautulli:
         message (str):      A custom message to send to the client
         """
         if session_id and session_key is None:
-            return f"Either session_key or session_id are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#terminate_session`"
+            return "Either session_key or session_id are required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#terminate_session`"
         else:
             if session_key is not None:
                 url = (
@@ -272,11 +272,11 @@ class Tautulli:
             session = requests.Session()
             self.session = session
             self.api_key = CONFIG["tmdb_apikey"]
-            self.tmdb_api_url = f"https://api.themoviedb.org/3/"
+            self.tmdb_api_url = "https://api.themoviedb.org/3/"
 
         def get_movie_details(self, movie_id: int = None):
             if movie_id is None:
-                return f"movie_id is required, see https://developers.themoviedb.org/3/movies/get-movie-details"
+                return "movie_id is required, see https://developers.themoviedb.org/3/movies/get-movie-details"
             else:
                 url = self.tmdb_api_url + f"movie/{movie_id}?api_key={self.api_key}"
                 print(url)
