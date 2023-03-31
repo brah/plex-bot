@@ -117,30 +117,34 @@ class plex_bot(commands.Cog):
                 list_object = []
             for members in list_object:
                 if members["discord_id"] == discord_user.id:
-                    await ctx.send(
-                        f"You are already mapped, with the username: {members['plex_username']}."
-                    )
-                    # todo: allow users to be removed from the list
+                    if members["plex_username"] == plex_username:
+                        await ctx.send(f"You are already mapped to {plex_username}.")
+                    else:
+                        members["plex_username"] = plex_username
+                        with open(self.LOCAL_JSON, "w+") as json_file:
+                            json.dump(
+                                list_object, json_file, indent=4, separators=(",", ": ")
+                            )
+                        await ctx.send(
+                            f"Successfully updated mapping for {discord_user} to {plex_username}."
+                        )
                     return
-                else:
-                    try:
-                        list_object.append(
-                            {
-                                "discord_id": discord_user.id,
-                                "plex_username": plex_username,
-                            }
-                        )
-                        await ctx.send(
-                            f"Successfully mapped {discord_user} to {plex_username}"
-                        )
-                        break
-                    except Exception as err:
-                        await ctx.send(
-                            f"Something went wrong, please try again or pass on this error {err}"
-                        )
-
-            with open(self.LOCAL_JSON, "w+") as json_file:
-                json.dump(list_object, json_file, indent=4, separators=(",", ": "))
+            try:
+                list_object.append(
+                    {
+                        "discord_id": discord_user.id,
+                        "plex_username": plex_username,
+                    }
+                )
+                with open(self.LOCAL_JSON, "w+") as json_file:
+                    json.dump(list_object, json_file, indent=4, separators=(",", ": "))
+                await ctx.send(
+                    f"Successfully mapped {discord_user} to {plex_username}."
+                )
+            except Exception as err:
+                await ctx.send(
+                    f"Something went wrong, please try again or pass on this error {err}"
+                )
 
     @commands.command()
     async def watchlist(self, ctx, member: nextcord.Member = None) -> None:
