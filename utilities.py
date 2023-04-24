@@ -3,24 +3,41 @@ import nextcord
 from nextcord.ext import menus
 
 
-def days_hours_minutes(seconds) -> str:
-    """_summary_
+def days_hours_minutes(seconds):
+    """Converts seconds to days, hours, minutes.
 
     Args:
-        seconds (any): Seconds to convert to days, hours, minutes (string/int should be passable)
+        seconds (int): Seconds to convert.
 
     Returns:
-        str: Time string in the fashion of `7 hours, 51 minutes`
+        str: Time string in the format of "7 days, 3 hours, 51 minutes".
     """
-    td = datetime.timedelta(seconds=seconds)
-    days, hours, minutes = td.days, td.seconds // 3600, td.seconds // 60 % 60
+    if not isinstance(seconds, int):
+        raise TypeError("Seconds must be an integer.")
+
+    if seconds < 0:
+        raise ValueError("Seconds must be non-negative.")
+
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+
     day_text = "day" if days == 1 else "days"
-    if hours < 1 and days < 1:
-        return f"{minutes} minutes"
-    if days > 1:
-        return f"{days} {day_text}, {hours} hours, {minutes} minutes"
+    hour_text = "hour" if hours == 1 else "hours"
+    minute_text = "minute" if minutes == 1 else "minutes"
+
+    parts = []
+    if days > 0:
+        parts.append(f"{days} {day_text}")
+    if hours > 0:
+        parts.append(f"{hours} {hour_text}")
+    if minutes > 0:
+        parts.append(f"{minutes} {minute_text}")
+
+    if len(parts) == 0:
+        return "0 minutes"
     else:
-        return f"{hours} hours, {minutes} minutes"
+        return ", ".join(parts)
 
 
 class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
@@ -58,11 +75,18 @@ def get_git_revision_short_hash() -> str:
         .strip()
     )
 
+
 def get_git_revision_short_hash_latest():
-    return subprocess.check_output(['git', 'rev-parse', "--short", 'HEAD']).decode('ascii').strip()
+    return (
+        subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+        .decode("ascii")
+        .strip()
+    )
+
 
 import json
 
+
 def reload_config_json():
-    with open('config.json', 'r') as f:
+    with open("config.json", "r") as f:
         return json.load(f)
