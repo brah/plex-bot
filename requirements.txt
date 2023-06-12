@@ -1,4 +1,4 @@
 nextcord==2.4.2
 nextcord-ext-menus==1.5.6
-qbittorrent-api==2023.5.48
+qbittorrent-api==2023.6.49
 requests==2.31.0
