@@ -4,6 +4,7 @@ import json
 
 import nextcord
 from nextcord.ext import commands
+import requests
 
 import utilities as utils
 import tautulli_wrapper as tautulli
@@ -479,13 +480,15 @@ class plex_bot(commands.Cog):
         help_embed.add_field(
             name="🎥 Commands",
             value="**`plex top`** - ranks top users by watchtime\n**`plex recent`** - shows most recent additions to Plex(WIP)\n**`plex watchers`** - shows who is currently watching Plex\n"
-            "**`plex downloading`** - shows what is currently downloading\n**`plex watchlist [user_tag]`** - shows [user_tag]'s recent watches\n**`plex help`** - shows this message",
+            "**`plex downloading`** - shows what is currently downloading\n**`plex watchlist [user_tag]`** - shows [user_tag]'s recent watches\n**`plex help`** - shows this message\n**`plex status`** - shows some details of Plex + Plex's own server status",
         )
         await ctx.send(embed=help_embed)
 
     @commands.command()
-    async def server(self, ctx) -> None:
+    async def status(self, ctx) -> None:
         r = self.tautulli.get_server_info()
+        # can put this in utils.py
+        plex_servers = requests.get("https://status.plex.tv/api/v2/status.json").json()['status']['description']
         server_info = r["response"]
         server_embed = nextcord.Embed(
             title="Plex Server Details",
@@ -512,6 +515,9 @@ class plex_bot(commands.Cog):
         )
         server_embed.add_field(
             name="Plex Pass", value=f"{server_info['data']['pms_plexpass']}"
+        )
+        server_embed.add_field(
+            name="Plex API Status", value=f"{plex_servers}"
         )
         await ctx.send(embed=server_embed)
 
