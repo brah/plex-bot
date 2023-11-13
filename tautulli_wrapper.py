@@ -141,6 +141,7 @@ class Tautulli:
             return f"{img} or {rating_key} is required; see `https://github.com/Tautulli/Tautulli/wiki/Tautulli-API-Reference#pms_image_proxy`"
         else:
             if img is not None:
+                print(f"img wasn't none! {img}")
                 url = self.tautulli_api_url + f"pms_image_proxy&img={img}"
             elif rating_key is not None:
                 url = self.tautulli_api_url + f"pms_image_proxy&rating_key={rating_key}"
@@ -272,8 +273,14 @@ class Tautulli:
         response = self.session.get(url=url)
         return response.json()
     
-    def get_library_media_info(self, section_id, rating_key):
-        url = self.tautulli_api_url + f"get_library_media_info&section_id={section_id}&rating_key={rating_key}"
+    def get_library_media_info(self, section_id=None, rating_key=None):
+        length = 1000
+        if section_id is None and rating_key is None:
+            return "Either section_id or rating_key are required;"
+        if section_id is not None:
+            url = self.tautulli_api_url + f"get_library_media_info&section_id={section_id}&length={length}"
+        else:
+            url = self.tautulli_api_url + f"get_library_media_info&rating_key={rating_key}&length={length}"
         response = self.session.get(url=url)
         return response.json()
 

@@ -1,9 +1,12 @@
 import asyncio
 from datetime import timedelta
+from io import BytesIO
 import json
+import random
 
 import nextcord
 from nextcord.ext import commands
+from nextcord import File
 import requests
 
 import utilities as utils
@@ -422,9 +425,7 @@ class plex_bot(commands.Cog):
         # todo: add ignored users check
         sessions = tautulli.get_activity()["response"]["data"]["sessions"]
         total_watchers = 0
-        embed = nextcord.Embed(
-            title="Plex Watchers", color=self.plex_embed
-        )
+        embed = nextcord.Embed(title="Plex Watchers", color=self.plex_embed)
 
         for users in sessions:
             total_watchers += 1
@@ -635,11 +636,72 @@ class plex_bot(commands.Cog):
 
     @commands.command()
     async def random(self, ctx):
-        # WIP
-        print(f"Libraries list = {tautulli.get_libraries()}")
-        # Post a random media item from the plex Server using Tautulli's get_library
-        # library = tautulli.get_library_media_info("1")
-        # print(f"Library: {library}")
+        # For now, command is based on the first library; whatever it may be.
+        # WIP and TODO: Allow user to specify library somehow; but can assume library 1 is Movies for most.
+        response = self.tautulli.get_library_media_info("1")
+
+        # Check if the API call was successful
+        if response.get("response", {}).get("result") != "success":
+            await ctx.send("Failed to retrieve movies from the library.")
+            return
+
+        # Extracting the nested list of movies from the response
+        movies = response.get("response", {}).get("data", {}).get("data", [])
+
+        # Check if the movies list contains movies
+        if not movies:
+            await ctx.send("No movies found in the library.")
+            return
+
+        # Select a random movie
+        random_movie = random.choice(movies)
+
+        # Extracting details from the random movie
+        title = random_movie.get("title", "Unknown Title")
+        year = random_movie.get("year", "Unknown")
+        thumb_key = random_movie.get("thumb", "")
+        last_played_timestamp = random_movie.get("last_played")
+        play_count = random_movie.get("play_count", 0)
+        if play_count == 0:
+            play_count = "Never"
+        # Convert the last_played timestamp to a readable date
+        if last_played_timestamp:
+            last_played_timestamp = f"<t:{last_played_timestamp}:D>"
+        else:
+            last_played_timestamp = ""
+
+        # Construct the URL to the Tautulli image proxy
+        tautulli_ip = self.tautulli.tautulli_ip  # Tautulli webserver IP
+        if thumb_key:
+            thumb_url = f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
+        else:
+            thumb_url = ""
+
+        # Download the image into memory
+        if thumb_url:
+            response = requests.get(thumb_url)
+            if response.status_code == 200:
+                image_data = BytesIO(response.content)
+                image_data.seek(0)
+                file = File(fp=image_data, filename="image.jpg")
+                embed = nextcord.Embed(
+                    title=f"{title} ({year})", color=nextcord.Color.random()
+                )
+                if last_played_timestamp:
+                    embed.add_field(name="Last Played", value=last_played_timestamp)
+                embed.add_field(name="Play Count", value=str(play_count))
+                embed.set_image(url="attachment://image.jpg")
+                await ctx.send(file=file, embed=embed)
+            else:
+                await ctx.send("Failed to retrieve the movie image.")
+        else:
+            # Send without image if URL is not available
+            embed = nextcord.Embed(title=title, color=nextcord.Color.random())
+            embed.add_field(name="Year", value=year)
+            if last_played_timestamp:
+                embed.add_field(name="Last Played", value=last_played_timestamp)
+            embed.add_field(name="Play Count", value=str(play_count))
+            await ctx.send(embed=embed)
 
 
 bot.add_cog(plex_bot(bot))
