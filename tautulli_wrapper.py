@@ -266,6 +266,16 @@ class Tautulli:
         url = self.tautulli_api_url + "get_libraries"
         response = self.session.get(url=url)
         return response.json()
+    
+    def get_library(self, section_id):
+        url = self.tautulli_api_url + f"get_library&section_id={section_id}"
+        response = self.session.get(url=url)
+        return response.json()
+    
+    def get_library_media_info(self, section_id, rating_key):
+        url = self.tautulli_api_url + f"get_library_media_info&section_id={section_id}&rating_key={rating_key}"
+        response = self.session.get(url=url)
+        return response.json()
 
     class TMDB:
         def __init__(self) -> None:

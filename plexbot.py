@@ -311,7 +311,9 @@ class plex_bot(commands.Cog):
                         await ctx.send(
                             f"Default duration set to: **{set_default}**; to revert use `plex top 7`"
                         )
-            except KeyError:  #  it doesn't exist, but the user passed a value, let's create and set it
+            except (
+                KeyError
+            ):  #  it doesn't exist, but the user passed a value, let's create and set it
                 with open(self.CONFIG_JSON, "w") as json_file:
                     self.CONFIG_DATA["default_duration"] = set_default
                     json.dump(
@@ -420,16 +422,39 @@ class plex_bot(commands.Cog):
         # todo: add ignored users check
         sessions = tautulli.get_activity()["response"]["data"]["sessions"]
         total_watchers = 0
-        msg_list = []
+        embed = nextcord.Embed(
+            title="Plex Watchers", color=self.plex_embed
+        )
+
         for users in sessions:
             total_watchers += 1
-            msg_list.append(
-                f"User **{users['friendly_name']}** is watching **{users['full_title']}** with quality: **{users['quality_profile']}**"
+            state = users.get("state", "Unknown").capitalize()
+
+            # Replace state text with symbols
+            if state.lower() == "playing":
+                state_symbol = "⏵"  # Play symbol
+            elif state.lower() == "paused":
+                state_symbol = "⏸"  # Pause symbol
+            else:
+                state_symbol = state  # Use text for other states
+
+            view_offset_str = users.get("view_offset", "0")
+            try:
+                view_offset = int(view_offset_str)
+            except ValueError:
+                view_offset = 0
+
+            elapsed_time = str(timedelta(milliseconds=view_offset))
+
+            # Add each watcher as a field in the embed
+            embed.add_field(
+                name=users["friendly_name"],
+                value=f"Watching **{users['full_title']}**\nQuality: **{users['quality_profile']}**\nState: **{state_symbol}**\nElapsed Time: **{elapsed_time}**",
+                inline=False,
             )
-        msg_list.insert(
-            0, f"**{total_watchers}** users are currently watching Plex 🐒\n"
-        )
-        await ctx.send("\n".join(msg_list))
+
+        embed.description = f"**{total_watchers}** users are currently watching Plex 🐒"
+        await ctx.send(embed=embed)
 
     # need to start using cogs soon hehe
     @commands.command()
@@ -488,7 +513,9 @@ class plex_bot(commands.Cog):
     async def status(self, ctx) -> None:
         r = self.tautulli.get_server_info()
         # can put this in utils.py
-        plex_servers = requests.get("https://status.plex.tv/api/v2/status.json").json()['status']['description']
+        plex_servers = requests.get("https://status.plex.tv/api/v2/status.json").json()[
+            "status"
+        ]["description"]
         server_info = r["response"]
         server_embed = nextcord.Embed(
             title="Plex Server Details",
@@ -516,9 +543,7 @@ class plex_bot(commands.Cog):
         server_embed.add_field(
             name="Plex Pass", value=f"{server_info['data']['pms_plexpass']}"
         )
-        server_embed.add_field(
-            name="Plex API Status", value=f"{plex_servers}"
-        )
+        server_embed.add_field(name="Plex API Status", value=f"{plex_servers}")
         await ctx.send(embed=server_embed)
 
     @commands.command()
@@ -607,6 +632,14 @@ class plex_bot(commands.Cog):
             )
 
         await ctx.send(embed=embed)
+
+    @commands.command()
+    async def random(self, ctx):
+        # WIP
+        print(f"Libraries list = {tautulli.get_libraries()}")
+        # Post a random media item from the plex Server using Tautulli's get_library
+        # library = tautulli.get_library_media_info("1")
+        # print(f"Library: {library}")
 
 
 bot.add_cog(plex_bot(bot))
