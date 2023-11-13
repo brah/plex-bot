@@ -506,7 +506,8 @@ class plex_bot(commands.Cog):
         help_embed.add_field(
             name="🎥 Commands",
             value="**`plex top`** - ranks top users by watchtime\n**`plex recent`** - shows most recent additions to Plex(WIP)\n**`plex watchers`** - shows who is currently watching Plex\n"
-            "**`plex downloading`** - shows what is currently downloading\n**`plex watchlist [user_tag]`** - shows [user_tag]'s recent watches\n**`plex help`** - shows this message\n**`plex status`** - shows some details of Plex + Plex's own server status",
+            "**`plex downloading`** - shows what is currently downloading\n**`plex watchlist [user_tag]`** - shows [user_tag]'s recent watches\n**`plex help`** - shows this message\n**`plex status`** - shows some details of Plex + Plex's own server status\n"
+            "**`plex random`** - shows a random movie from 'Movies' library\n**`plex shows`** - shows top users by total watchtime for all TV libraries",
         )
         await ctx.send(embed=help_embed)
 
@@ -662,7 +663,7 @@ class plex_bot(commands.Cog):
         thumb_key = random_movie.get("thumb", "")
         last_played_timestamp = random_movie.get("last_played")
         play_count = random_movie.get("play_count", 0)
-        if play_count == 0:
+        if play_count == None:
             play_count = "Never"
         # Convert the last_played timestamp to a readable date
         if last_played_timestamp:
