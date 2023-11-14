@@ -401,7 +401,7 @@ class plex_bot(commands.Cog):
     @commands.command()
     async def recent(self, ctx, amount: int = 10) -> None:
         fields = []
-        response = tautulli.get_recently_added(count=amount)
+        response = self.tautulli.get_recently_added(count=amount)
         for entry in response["response"]["data"]["recently_added"]:
             if entry["originally_available_at"] == "":
                 continue
@@ -410,13 +410,16 @@ class plex_bot(commands.Cog):
                 entry["title"] = f"{entry['grandparent_title']} - {entry['title']}"
             if entry["rating"] == "":
                 entry["rating"] = "nil"
-            fields.append(
-                (
-                    f"**🎥 {entry['title']}** 🕗 {entry['originally_available_at']} 🍅: {entry['rating']}/10\n{entry['summary']}\n"
-                )
-            )
+            entry["thumb_key"] = entry.get("thumb", "")
+            entry_data = {
+                "description": f"**🎥 {entry['title']}** 🕗 {entry['originally_available_at']} 🍅: {entry['rating']}/10\n{entry['summary']}\n",
+                "thumb_key": entry.get("thumb", ""),
+            }
+            fields.append(entry_data)
+
+        tautulli_ip = self.tautulli.tautulli_ip  # Tautulli webserver IP
         pages = utils.NoStopButtonMenuPages(
-            source=utils.MyEmbedDescriptionPageSource(fields),
+            source=utils.MyEmbedDescriptionPageSource(fields, tautulli_ip),
         )
         await pages.start(ctx)
 

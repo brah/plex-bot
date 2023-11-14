@@ -1,6 +1,9 @@
-import datetime
+from io import BytesIO
+import aiohttp
 import nextcord
 from nextcord.ext import menus
+from nextcord import File
+import requests
 
 
 def days_hours_minutes(seconds):
@@ -54,14 +57,32 @@ class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
 
 # taken from nextcord docs - to be revised
 class MyEmbedDescriptionPageSource(menus.ListPageSource):
-    def __init__(self, data):
+    def __init__(self, data, tautulli_ip):
         super().__init__(data, per_page=2)
+        self.tautulli_ip = tautulli_ip
+
+    async def fetch_image(self, url):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    return BytesIO(await response.read())
+                return None
 
     async def format_page(self, menu, entries):
-        embed = nextcord.Embed(
-            title="Recently Added", description="\n".join(entries), color=0xE5A00D
-        )
+        embed = nextcord.Embed(title="Recently Added", color=0xE5A00D)
         embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
+
+        for entry in entries:
+            embed.add_field(name="\u200b", value=entry["description"], inline=False)
+            thumb_key = entry.get("thumb_key", "")
+            if thumb_key:
+                thumb_url = f"http://{self.tautulli_ip}/pms_image_proxy?img={thumb_key}&width=200&height=400&fallback=poster"
+                image_data = await self.fetch_image(thumb_url)
+                if image_data:
+                    file = File(fp=image_data, filename="image.jpg")
+                    embed.set_image(url="attachment://image.jpg")
+                    return {"embed": embed, "file": file}
+
         return embed
 
 
