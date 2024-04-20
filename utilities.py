@@ -3,7 +3,6 @@ import aiohttp
 import nextcord
 from nextcord.ext import menus
 from nextcord import File
-import requests
 
 
 def days_hours_minutes(seconds):

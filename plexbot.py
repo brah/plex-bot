@@ -3,11 +3,11 @@ from datetime import timedelta
 from io import BytesIO
 import json
 import random
-
+from functools import lru_cache
+import aiohttp
 import nextcord
 from nextcord.ext import commands
-from nextcord import File
-import requests
+from nextcord import File, Embed
 
 import utilities as utils
 import tautulli_wrapper as tautulli
@@ -41,13 +41,27 @@ class plex_bot(commands.Cog):
         self.CONFIG_JSON = "config.json"
         self.tautulli = tautulli
         self.tmdb = self.tautulli.TMDB()
-        self.plex_embed = 0xE5A00D
+        self.plex_embed_color = 0xE5A00D
         self.plex_image = (
             "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
         )
 
+    @lru_cache(maxsize=1)
+    def load_user_mappings(self):
+        try:
+            with open(self.LOCAL_JSON, "r") as json_file:
+                return json.load(json_file)
+        except json.JSONDecodeError as err:
+            print(f"Failed to load or decode JSON: {err}")  # Log error for debugging
+            return []
+
+    def save_user_mappings(self, data):
+        with open(self.LOCAL_JSON, "w") as json_file:
+            json.dump(data, json_file, indent=4)
+        self.load_user_mappings.cache_clear()  # Invalidate the cache after updating the file
+
     async def status_task(self):
-        var = 0
+        display_streams = True  # Toggles between showing streams and help command
         while True:
             try:
                 response = tautulli.get_activity()
@@ -55,346 +69,282 @@ class plex_bot(commands.Cog):
                 wan_bandwidth_mbps = round(
                     (response["response"]["data"]["wan_bandwidth"] / 1000), 1
                 )
-                if var == 0:
-                    await bot.change_presence(
-                        activity=nextcord.Activity(
-                            type=nextcord.ActivityType.playing,
-                            name=f"{stream_count} streams at {wan_bandwidth_mbps} mbps",
-                        )
+
+                if display_streams:
+                    activity_text = (
+                        f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
                     )
-                    var += 1
+                    activity_type = nextcord.ActivityType.playing
                 else:
-                    await bot.change_presence(
-                        activity=nextcord.Activity(
-                            type=nextcord.ActivityType.listening,
-                            name=": plex help",
-                        )
-                    )
-                    var -= 1
+                    activity_text = ": plex help"
+                    activity_type = nextcord.ActivityType.listening
+
+                await self.bot.change_presence(
+                    activity=nextcord.Activity(type=activity_type, name=activity_text)
+                )
+                display_streams = not display_streams  # Toggle the display mode
             except Exception as e:
                 print(f"Error in status_task(): {e}")
-            await asyncio.sleep(15)
+
+            await asyncio.sleep(15)  # Control how often to update the status
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        r = tautulli.get_home_stats()
-        status = r["response"]["result"]
         try:
-            local_commit, latest_commit = (
-                utils.get_git_revision_short_hash(),
-                utils.get_git_revision_short_hash_latest(),
-            )
-            if local_commit != latest_commit:
-                up_to_date = "Version outdated. Consider running git pull"
-            else:
-                up_to_date = ""
-        except FileNotFoundError as err:
-            print(
-                f"Tried to get git commit, but failed: {err}, check in on https://github.com/brah/plex-bot/commits/main once a while for new changes :-)"
-            )
+            r = tautulli.get_home_stats()
+            status = r["response"]["result"]
 
-        if status == "success":
-            print("Connection to Tautulli successful")
-        else:
-            print(f"-- CRITICAL -- Connection to Tautulli failed, result {status} --")
-        print(
-            f"Current PlexBot version ID: {local_commit}; latest: {latest_commit}; {up_to_date}\n"
-            f"We have logged in as {bot.user}"
-        )
-        bot.loop.create_task(self.status_task())
+            local_commit, latest_commit = await self.check_version()
+            up_to_date = ""
+            if local_commit and latest_commit:
+                up_to_date = (
+                    "Version outdated. Consider running git pull"
+                    if local_commit != latest_commit
+                    else ""
+                )
+
+            if status == "success":
+                print(f"Logged in as {self.bot.user}")
+                print("Connection to Tautulli successful")
+                print(
+                    f"Current PlexBot version ID: {local_commit if local_commit else 'unknown'}; latest: {latest_commit if latest_commit else 'unknown'}; {up_to_date}"
+                )
+                self.bot.loop.create_task(self.status_task())
+            else:
+                print(
+                    f"-- CRITICAL -- Connection to Tautulli failed, result {status} --"
+                )
+        except Exception as e:
+            print(f"Error during bot initialization: {e}")
+
+    async def check_version(self):
+        try:
+            local_commit = utils.get_git_revision_short_hash()
+            latest_commit = utils.get_git_revision_short_hash_latest()
+            return local_commit, latest_commit
+        except FileNotFoundError as err:
+            print(f"Failed to check git commit version: {err}")
+            return None, None  # Ensure always returning a tuple
 
     @commands.command()
     async def mapdiscord(
         self, ctx, plex_username: str, discord_user: nextcord.User = None
-    ) -> None:
-        # Input validation
+    ):
+        """Map a Discord user to a Plex username."""
         if not plex_username.strip():
-            await ctx.send("Please provide a valid plex username.")
-            return
-        try:
-            discord_user = discord_user or ctx.author
-        except AttributeError:
-            await ctx.send("Please provide a valid discord user.")
+            await ctx.send("Please provide a valid Plex username.")
             return
 
-        with open(self.LOCAL_JSON) as json_file:
-            try:
-                list_object = json.load(json_file)
-            except json.JSONDecodeError:
-                list_object = []
+        discord_user = discord_user or ctx.author
+        dc_plex_json = self.load_user_mappings()
 
-            for members in list_object:
-                if members["discord_id"] == discord_user.id:
-                    if members["plex_username"] == plex_username:
-                        await ctx.send(f"You are already mapped to {plex_username}.")
-                    else:
-                        members["plex_username"] = plex_username
-                        with open(self.LOCAL_JSON, "w+") as json_file:
-                            json.dump(
-                                list_object, json_file, indent=4, separators=(",", ": ")
-                            )
-                        await ctx.send(
-                            f"Successfully updated mapping for {discord_user} to {plex_username}."
-                        )
+        for member in dc_plex_json:
+            if str(member["discord_id"]) == str(discord_user.id):
+                if member["plex_username"] == plex_username:
+                    await ctx.send(f"You are already mapped to {plex_username}.")
+                    return
+                else:
+                    member["plex_username"] = plex_username
+                    self.save_user_mappings(dc_plex_json)
+                    await ctx.send(
+                        f"Successfully updated mapping for {discord_user.display_name} to {plex_username}."
+                    )
                     return
 
-            # Add new user
-            list_object.append(
-                {
-                    "discord_id": discord_user.id,
-                    "plex_username": plex_username,
-                }
-            )
-            with open(self.LOCAL_JSON, "w+") as json_file:
-                json.dump(list_object, json_file, indent=4, separators=(",", ": "))
-            await ctx.send(f"Successfully mapped {discord_user} to {plex_username}.")
+        # If user is not found, add them
+        dc_plex_json.append(
+            {"discord_id": discord_user.id, "plex_username": plex_username}
+        )
+        self.save_user_mappings(dc_plex_json)
+        await ctx.send(
+            f"Successfully mapped {discord_user.display_name} to {plex_username}."
+        )
 
     @commands.command()
-    async def watchlist(self, ctx, member: nextcord.Member = None) -> None:
-        response = tautulli.get_history()
-        embed = nextcord.Embed(description="", color=self.plex_embed)
-        embed.set_author(name="Plex Stats")
-        last_watched_list = []
+    async def watchlist(self, ctx, member: nextcord.Member = None):
+        """Prints a user's previously watched media. Usable with plex watchlist <@user> (if mapped)."""
         if member is None:
             member = ctx.author
-        with open(self.LOCAL_JSON) as json_file:
-            try:
-                dc_plex_json = json.load(json_file)
-            except json.JSONDecodeError as err:
-                await ctx.send(
-                    f":warning: seems like you have no users mapped? Error: {err}"
-                )
-            for members in dc_plex_json:
-                if member.id != members["discord_id"]:
-                    continue
-                for entry in response["response"]["data"]["data"]:
-                    if entry["user"] == members["plex_username"]:
-                        session_duration = entry["duration"] - entry["paused_counter"]
-                        duration_str = (
-                            f"{session_duration // 60}m {session_duration % 60}s"
-                        )
-                        last_watched_list.append(
-                            f"<t:{entry['date']}:t> {entry['full_title']} ({duration_str})"
-                        )
-                if len(last_watched_list) <= 0:
-                    last_watched_list = ["No history found"]
-                discord_member = await bot.fetch_user(members["discord_id"])
-        if embed:
-            embed.set_thumbnail(url=f"{discord_member.display_avatar.url}")
-            embed.add_field(
-                name=f"Last watched by: {discord_member.name}",
-                value="\n".join(last_watched_list),
-                inline=False,
-            )
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send(
-                "You are not mapped, use the command: `plex map_id [plex_username]`"
-            )
 
-    @commands.command()
-    async def ignore(self, ctx, plex_username) -> None:
-        # Don't show the user in the top list
-        if not plex_username.strip():
-            await ctx.send("Please provide a valid plex username.")
+        response = tautulli.get_history()
+        if response["response"]["result"] != "success":
+            await ctx.send("Failed to retrieve watch history from Plex.")
             return
 
-        with open(self.LOCAL_JSON) as json_file:
-            try:
-                dc_plex_json = json.load(json_file)
-            except json.JSONDecodeError:
-                dc_plex_json = []
+        dc_plex_json = self.load_user_mappings()  # Use cached results
+        plex_user = next(
+            (
+                item
+                for item in dc_plex_json
+                if str(member.id) == str(item["discord_id"])
+            ),
+            None,
+        )
 
-            for members in dc_plex_json:
-                if members["plex_username"] == plex_username:
-                    if members.get("ignore"):
-                        await ctx.send(
-                            f":warning: {plex_username} is already ignored, undo with `plex unignore {plex_username}`"
-                        )
-                    else:
-                        members["ignore"] = True
-                        await ctx.send(
-                            f"{plex_username} will be ignored on plex top now, to undo this use the command: `plex unignore {plex_username}`"
-                        )
-                    break
-            else:
-                dc_plex_json.append(
-                    {
-                        "discord_id": "",
-                        "plex_username": plex_username,
-                        "ignore": True,
-                    }
-                )
-                await ctx.send(
-                    f"**{plex_username}** was not mapped, they have been inserted with null values and will be ignored on plex top now, to undo this use the command: `plex unignore {plex_username}`"
-                )
-
-            with open(self.LOCAL_JSON, "w") as json_file:
-                json.dump(dc_plex_json, json_file, indent=4, separators=(",", ": "))
-
-    @commands.command()
-    async def unignore(self, ctx, plex_username) -> None:
-        if not plex_username.strip():
-            await ctx.send("Please provide a valid plex username.")
+        if not plex_user:
+            await ctx.send("The specified member is not mapped to a Plex user.")
             return
 
-        with open(self.LOCAL_JSON) as json_file:
-            try:
-                dc_plex_json = json.load(json_file)
-            except json.JSONDecodeError:
-                dc_plex_json = []
-
-            for members in dc_plex_json:
-                if members["plex_username"] == plex_username and members.get("ignore"):
-                    members["ignore"] = False
-                    await ctx.send(
-                        f"{plex_username} will no longer be ignored on plex top now, to undo this use the command: `plex ignore {plex_username}`"
-                    )
-                    with open(self.LOCAL_JSON, "w") as json_file:
-                        json.dump(
-                            dc_plex_json, json_file, indent=4, separators=(",", ": ")
-                        )
-                    break
-            else:
-                await ctx.send(f"{plex_username} is not ignored, or not mapped")
-
-    async def clean_roles(self, guild, top_users) -> None:
-        role_ids = [
-            self.CONFIG_DATA["plex_top"],
-            self.CONFIG_DATA["plex_two"],
-            self.CONFIG_DATA["plex_three"],
+        plex_username = plex_user["plex_username"]
+        last_watched_list = [
+            f"<t:{entry['date']}:t> {entry['full_title']} ({entry['duration'] // 60}m {entry['duration'] % 60}s)"
+            for entry in response["response"]["data"]["data"]
+            if entry["user"] == plex_username
         ]
-        roles = [guild.get_role(role_id) for role_id in role_ids]
-        if any(role is None for role in roles):
-            return
-        for i, role in enumerate(roles):
-            for member in role.members:
-                if member.id != top_users[i + 1]:
-                    await member.remove_roles(role)
+
+        embed = nextcord.Embed(title="Plex Stats", color=self.plex_embed_color)
+        embed.set_author(
+            name=f"Last watched by {member.display_name}",
+            icon_url=member.display_avatar.url,
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.description = (
+            "\n".join(last_watched_list)
+            if last_watched_list
+            else "No history found for this user."
+        )
+
+        await ctx.send(embed=embed)
 
     @commands.command()
-    async def assign_role(self, ctx, rank, user_id) -> None:
-        guild = ctx.guild
-        nextcord_user = guild.get_member(user_id)
-        if rank == 1:
-            role = guild.get_role(self.CONFIG_DATA["plex_top"])
-        elif rank == 2:
-            role = guild.get_role(self.CONFIG_DATA["plex_two"])
-        elif rank == 3:
-            role = guild.get_role(self.CONFIG_DATA["plex_three"])
-        else:
+    async def ignore(self, ctx, plex_username: str):
+        """Toggle ignoring a user's Plex username from appearing in top lists."""
+        if not plex_username.strip():
+            await ctx.send("Please provide a valid Plex username.")
             return
 
-        await nextcord_user.add_roles(role)
+        data = self.load_user_mappings()  # Use cached data
+        found = False
+
+        for member in data:
+            if member["plex_username"] == plex_username:
+                member["ignore"] = not member.get("ignore", False)
+                found = True
+                status = "no longer" if not member["ignore"] else "now"
+                await ctx.send(f"{plex_username} is {status} ignored in top lists.")
+                break
+
+        if not found:
+            data.append(
+                {"discord_id": "", "plex_username": plex_username, "ignore": True}
+            )
+            await ctx.send(f"{plex_username} is now ignored in top lists.")
+
+        self.save_user_mappings(data)  # Save and clear cache
 
     @commands.command()
-    async def top(self, ctx, set_default: int = None) -> None:
-        try:
-            duration = self.CONFIG_DATA["default_duration"]
-        except KeyError:
-            if set_default is None:
-                duration = 7
-            with open(self.CONFIG_JSON, "w") as json_file:
-                self.CONFIG_DATA["default_duration"] = duration
-                json.dump(self.CONFIG_DATA, json_file, indent=4, separators=(",", ": "))
-                print("No duration passed and no default duration set, setting to 7")
+    async def top(self, ctx, set_default: int = None):
+        """Displays top Plex users or sets the default duration for displaying stats."""
         if set_default is not None:
-            try:
-                if self.CONFIG_DATA["default_duration"] == set_default:
-                    await ctx.send(f"Default duration is already set to {set_default}")
-                else:
-                    self.CONFIG_DATA["default_duration"] = set_default
-                    with open(self.CONFIG_JSON, "w") as json_file:
-                        json.dump(
-                            self.CONFIG_DATA,
-                            json_file,
-                            indent=4,
-                            separators=(",", ": "),
-                        )
-                        await ctx.send(
-                            f"Default duration set to: **{set_default}**; to revert use `plex top 7`"
-                        )
-            except (
-                KeyError
-            ):  #  it doesn't exist, but the user passed a value, let's create and set it
-                with open(self.CONFIG_JSON, "w") as json_file:
-                    self.CONFIG_DATA["default_duration"] = set_default
-                    json.dump(
-                        self.CONFIG_DATA, json_file, indent=4, separators=(",", ": ")
-                    )
-        duration = self.CONFIG_DATA["default_duration"]
-        params_home_stats = {
-            "stats_type": "duration",
-            "stat_id": "top_users",
-            "stats_count": "10",
-            "time_range": duration,
+            self.CONFIG_DATA["default_duration"] = set_default
+            with open(self.CONFIG_JSON, "w") as file:
+                json.dump(self.CONFIG_DATA, file, indent=4)
+            await ctx.send(f"Default duration set to: **{set_default}** days.")
+            return
+
+        duration = self.CONFIG_DATA.get("default_duration", 7)
+        response = tautulli.get_home_stats(
+            params={
+                "stats_type": "duration",
+                "stat_id": "top_users",
+                "stats_count": "10",
+                "time_range": duration,
+            }
+        )
+        if response["response"]["result"] != "success":
+            await ctx.send("Failed to retrieve top users.")
+            return
+
+        embed = nextcord.Embed(
+            title=f"Plex Top (last {duration} days)", color=self.plex_embed_color
+        )
+        rank = 0
+        total_watchtime = 0
+        top_users = {}
+
+        # Load the list of all users and their ignored status using caching
+        user_data = self.load_user_mappings()
+        ignored_users = {
+            user["plex_username"]: user
+            for user in user_data
+            if user.get("ignore", False)
         }
-        response = tautulli.get_home_stats(params=params_home_stats)
-        i = 0
-        embed_file = nextcord.File("img/plexcrown.png")
-        embed = nextcord.Embed(color=self.plex_embed)
-        embed.set_author(name=f"Plex Top (last {duration} days watchtime)")
-        embed.set_thumbnail(url=f"attachment://{embed_file.filename}")
-        top_users = {1: None, 2: None, 3: None}
-        for entries in response["response"]["data"]["rows"]:
-            username = entries["user"]
-            try:
-                for members in json.load(open(self.LOCAL_JSON)):
-                    if (
-                        members.get("ignore") and members["ignore"] == False
-                    ) or not members.get("ignore"):
-                        if members["plex_username"] == username:
-                            i = i + 1
-                            duration = entries["total_duration"]
-                            movie_or_show = entries["media_type"]
-                            media = (
-                                entries["grandchild_title"]
-                                if (movie_or_show == "movie")
-                                else entries["grandparent_title"]
-                            )
-                            embed.add_field(
-                                name=f"#{i}. {username}",
-                                value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
-                                inline=True,
-                            )
-                            if i <= 3:
-                                if members["discord_id"] is not None:
-                                    top_users[i] = members["discord_id"]
-                                    await self.assign_role(
-                                        ctx, i, members["discord_id"]
-                                    )
-                            break
-            except FileNotFoundError as err:
-                print(f"File not found: {err}")
-            else:
-                # non mapped users (i.e. those without Discord)
-                if (
-                    members.get("ignore") and members["ignore"] == False
-                ) or username not in members["plex_username"]:
-                    i = i + 1
-                    duration = entries["total_duration"]
-                    movie_or_show = entries["media_type"]
-                    media = (
-                        entries["grandchild_title"]
-                        if (movie_or_show == "movie")
-                        else entries["grandparent_title"]
-                    )
-                    embed.add_field(
-                        name=f"#{i}. {username}",
-                        value=f"{utils.days_hours_minutes(duration)}\n **{media}**",
-                        inline=True,
-                    )
+
+        for entry in response["response"]["data"]["rows"]:
+            username = entry["user"]
+            if username in ignored_users:
+                continue  # Skip ignored users
+
+            rank += 1
+            watch_time_seconds = entry["total_duration"]
+            total_watchtime += watch_time_seconds
+            watch_time = utils.days_hours_minutes(watch_time_seconds)
+
+            # Determine if the last watched item is a movie or a show
+            movie_or_show = entry.get("media_type")
+            media = (
+                entry.get("grandchild_title")
+                if movie_or_show == "movie"
+                else entry.get("grandparent_title", "No recent activity")
+            )
+
+            embed.add_field(
+                name=f"#{rank} {username}",
+                value=f"{watch_time}\n**{media}**",
+                inline=True,
+            )
+
+            # Find Discord ID for the current top user
+            user_info = next(
+                (user for user in user_data if user["plex_username"] == username), None
+            )
+            if user_info and user_info.get("discord_id"):
+                top_users[rank] = int(user_info["discord_id"])
+
+        if rank == 0:
+            await ctx.send("No top users found or all are ignored.")
+            return
+
+        # Adding total watchtime to the footer
+        total_watch_time_str = utils.days_hours_minutes(total_watchtime)
         history_data = tautulli.get_history()
         embed.set_footer(
-            text=f"Total Plex watchtime (all time): {history_data['response']['data']['total_duration']}"
+            text=f"Total Watchtime: {total_watch_time_str}\nAll time: {history_data['response']['data']['total_duration']}"
         )
-        if i < 1:
-            await ctx.send(
-                "No users found; use `plex mapdiscord plex_username @discord_user` to map yourself or other users."
-            )
-        else:
-            await self.clean_roles(ctx.guild, top_users=top_users)
-            await ctx.send(embed=embed, file=embed_file)
+
+        await ctx.send(embed=embed)
+        await self.clean_roles(ctx, top_users)
+
+    async def clean_roles(self, ctx, top_users):
+        """Remove roles based on new top users and reassign correctly."""
+        role_ids = [
+            self.CONFIG_DATA.get("plex_top"),
+            self.CONFIG_DATA.get("plex_two"),
+            self.CONFIG_DATA.get("plex_three"),
+        ]
+        roles = [ctx.guild.get_role(role_id) for role_id in role_ids if role_id]
+
+        # Remove roles from all members currently holding them
+        for role in roles:
+            if role:
+                members_with_role = role.members[
+                    :
+                ]  # Make a shallow copy to avoid modifying the list during iteration
+                for member in members_with_role:
+                    if member.id not in top_users.values():
+                        await member.remove_roles(role)
+
+        # Assign roles to new top users
+        for rank, user_id in top_users.items():
+            if rank - 1 < len(role_ids):  # Ensure we do not go out of the list bounds
+                role_id = role_ids[rank - 1]
+                if role_id:
+                    role = ctx.guild.get_role(role_id)
+                    member = ctx.guild.get_member(user_id)
+                    if role and member:
+                        await member.add_roles(role)
+            else:
+                continue
 
     # much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
     # https://menus.docs.nextcord.dev/en/latest/ext/menus/pagination_examples/#paginated-embeds-using-descriptions
@@ -425,40 +375,53 @@ class plex_bot(commands.Cog):
 
     @commands.command()
     async def watchers(self, ctx) -> None:
-        # todo: add ignored users check
-        sessions = tautulli.get_activity()["response"]["data"]["sessions"]
-        total_watchers = 0
-        embed = nextcord.Embed(title="Plex Watchers", color=self.plex_embed)
+        """Display current Plex watchers with details about their activity."""
+        try:
+            sessions = tautulli.get_activity()["response"]["data"]["sessions"]
+            if not sessions:
+                await ctx.send("No one is currently watching Plex.")
+                return
 
-        for users in sessions:
-            total_watchers += 1
-            state = users.get("state", "Unknown").capitalize()
+            # Load ignored users list using caching
+            user_data = self.load_user_mappings()
+            ignored_users = {
+                user["plex_username"] for user in user_data if user.get("ignore", False)
+            }
 
-            # Replace state text with symbols
-            if state.lower() == "playing":
-                state_symbol = "⏵"  # Play symbol
-            elif state.lower() == "paused":
-                state_symbol = "⏸"  # Pause symbol
-            else:
-                state_symbol = state  # Use text for other states
+            total_watchers = 0
+            embed = nextcord.Embed(title="Plex Watchers", color=self.plex_embed_color)
+            embed.set_thumbnail(url=self.plex_image)
 
-            view_offset_str = users.get("view_offset", "0")
-            try:
-                view_offset = int(view_offset_str)
-            except ValueError:
-                view_offset = 0
+            for user in sessions:
+                if user["username"] in ignored_users:
+                    continue  # Skip ignored users
 
-            elapsed_time = str(timedelta(milliseconds=view_offset))
+                total_watchers += 1
+                state = user.get("state", "unknown").capitalize()
+                state_symbol = {
+                    "playing": "▶️",
+                    "paused": "⏸️",
+                }.get(state.lower(), state)
 
-            # Add each watcher as a field in the embed
-            embed.add_field(
-                name=users["friendly_name"],
-                value=f"Watching **{users['full_title']}**\nQuality: **{users['quality_profile']}**\nState: **{state_symbol}**\nElapsed Time: **{elapsed_time}**",
-                inline=False,
+                view_offset = int(user.get("view_offset", 0))
+                elapsed_time = str(timedelta(milliseconds=view_offset))
+
+                embed.add_field(
+                    name=user["friendly_name"],
+                    value=f"Watching **{user['full_title']}**\nQuality: **{user['quality_profile']}**\nState: **{state_symbol}**\nElapsed Time: **{elapsed_time}**",
+                    inline=False,
+                )
+
+            embed.description = (
+                f"**{total_watchers}** users are currently watching Plex 🐒"
+                if total_watchers > 0
+                else "No one is active on Plex at the moment. 😔✊"
             )
 
-        embed.description = f"**{total_watchers}** users are currently watching Plex 🐒"
-        await ctx.send(embed=embed)
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            await ctx.send(f"Failed to retrieve watchers: {e}")
 
     # need to start using cogs soon hehe
     @commands.command()
@@ -500,56 +463,118 @@ class plex_bot(commands.Cog):
         await ctx.send(embed=downloads_embed)
 
     @commands.command()
-    async def help(self, ctx) -> None:
-        help_embed = nextcord.Embed(
-            title="Plex Utility Bot Commands - prefix is `plex`!",
-            colour=nextcord.Colour(self.plex_embed),
-        )
-        help_embed.set_thumbnail(url=self.plex_image)
-        help_embed.add_field(
-            name="🎥 Commands",
-            value="**`plex top`** - ranks top users by watchtime\n**`plex recent`** - shows most recent additions to Plex(WIP)\n**`plex watchers`** - shows who is currently watching Plex\n"
-            "**`plex downloading`** - shows what is currently downloading\n**`plex watchlist [user_tag]`** - shows [user_tag]'s recent watches\n**`plex help`** - shows this message\n**`plex status`** - shows some details of Plex + Plex's own server status\n"
-            "**`plex random`** - shows a random movie from 'Movies' library\n**`plex shows`** - shows top users by total watchtime for all TV libraries",
-        )
-        await ctx.send(embed=help_embed)
+    async def help(self, ctx, *commands: str):
+        """Shows all commands available or detailed information about a specific command."""
+        prefix = "plex "
+        if not commands:
+            embed = nextcord.Embed(
+                title="Command List",
+                color=self.plex_embed_color,
+                description="Here's a list of all my commands:",
+            )
+            embed.set_thumbnail(url=self.plex_image)
+
+            # Collecting commands and categorizing them by cog
+            for cog_name, cog in sorted(
+                self.bot.cogs.items(),
+                key=lambda x: len(x[1].get_commands()),
+                reverse=True,
+            ):
+                cog_commands = [
+                    (
+                        f"{prefix}{cmd.name} [{' '.join(cmd.aliases)}]"
+                        if cmd.aliases
+                        else f"{prefix}{cmd.name}"
+                    )
+                    for cmd in cog.get_commands()
+                    if not cmd.hidden
+                ]
+                if cog_commands:
+                    embed.add_field(
+                        name=f"__**{cog_name}**__",
+                        value="\n".join(cog_commands),
+                        inline=False,
+                    )
+
+            embed.set_footer(text="Use plex help <command> for more info on a command.")
+            await ctx.send(embed=embed)
+        else:
+            command_name = commands[0]
+            cmd = self.bot.get_command(command_name)
+            if not cmd:
+                await ctx.send(f"Command not found: {command_name}")
+                return
+
+            # Build detailed command information
+            embed = nextcord.Embed(
+                title=f"{prefix}{cmd.name}",
+                description=cmd.help or "No description provided.",
+                color=self.plex_embed_color,
+            )
+            if cmd.aliases:
+                embed.add_field(
+                    name="Aliases", value=", ".join(cmd.aliases), inline=False
+                )
+
+            # Formatting parameters for usage display
+            params = [
+                f"<{key}>" if param.default is param.empty else f"[{key}]"
+                for key, param in cmd.params.items()
+                if key not in ("self", "ctx")
+            ]
+            if params:
+                embed.add_field(
+                    name="Usage",
+                    value=f"{prefix}{cmd.name} {' '.join(params)}",
+                    inline=False,
+                )
+
+            await ctx.send(embed=embed)
 
     @commands.command()
-    async def status(self, ctx) -> None:
-        r = self.tautulli.get_server_info()
-        # can put this in utils.py
-        plex_servers = requests.get("https://status.plex.tv/api/v2/status.json").json()[
-            "status"
-        ]["description"]
-        server_info = r["response"]
-        server_embed = nextcord.Embed(
-            title="Plex Server Details",
-            colour=nextcord.Colour(self.plex_embed),
-        )
-        server_embed.set_thumbnail(url=self.plex_image)
-        server_embed.add_field(
-            name="Response", value=f"{server_info['result']}", inline=True
-        )
-        server_embed.add_field(
-            name="Server Name", value=f"{server_info['data']['pms_name']}", inline=True
-        )
-        server_embed.add_field(
-            name="Server Version",
-            value=f"{server_info['data']['pms_version']}",
-            inline=True,
-        )
-        server_embed.add_field(
-            name="Server IP",
-            value=f"{server_info['data']['pms_ip']}:{server_info['data']['pms_port']}",
-        )
-        server_embed.add_field(
-            name="Platform", value=f"{server_info['data']['pms_platform']}"
-        )
-        server_embed.add_field(
-            name="Plex Pass", value=f"{server_info['data']['pms_plexpass']}"
-        )
-        server_embed.add_field(name="Plex API Status", value=f"{plex_servers}")
-        await ctx.send(embed=server_embed)
+    async def status(self, ctx):
+        """Displays the status of the Plex server and other related information."""
+        try:
+            # Getting Tautulli server info
+            server_info = self.tautulli.get_server_info()["response"]
+
+            # Fetching Plex status from Plex API asynchronously
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://status.plex.tv/api/v2/status.json"
+                ) as response:
+                    if response.status == 200:
+                        json_response = await response.json()
+                        plex_status = json_response["status"]["description"]
+                    else:
+                        plex_status = "Plex status unavailable"
+
+            # Setting up the embed message with server information and Plex status
+            embed = nextcord.Embed(
+                title="Plex Server Details", colour=self.plex_embed_color
+            )
+            embed.set_thumbnail(url=self.plex_image)
+            embed.add_field(name="Response", value=server_info["result"], inline=True)
+            embed.add_field(
+                name="Server Name", value=server_info["data"]["pms_name"], inline=True
+            )
+            embed.add_field(
+                name="Server Version",
+                value=server_info["data"]["pms_version"],
+                inline=True,
+            )
+            embed.add_field(
+                name="Server IP",
+                value=f"{server_info['data']['pms_ip']}:{server_info['data']['pms_port']}",
+            )
+            embed.add_field(name="Platform", value=server_info["data"]["pms_platform"])
+            embed.add_field(name="Plex Pass", value=server_info["data"]["pms_plexpass"])
+            embed.add_field(name="Plex API Status", value=plex_status)
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            await ctx.send(f"Failed to retrieve server status: {e}")
 
     @commands.command()
     async def killstream(
@@ -620,7 +645,7 @@ class plex_bot(commands.Cog):
         # Create embed
         embed = nextcord.Embed(
             title="Top Users by Total Time Watched for All TV Libraries",
-            color=self.plex_embed,
+            color=self.plex_embed_color,
         )
         embed.set_thumbnail(
             url="https://www.freepnglogos.com/uploads/tv-png/tv-png-the-whole-enchilada-the-whole-enchilada-9.png"
@@ -639,73 +664,104 @@ class plex_bot(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
-    async def random(self, ctx):
-        # For now, command is based on the first library; whatever it may be.
-        # WIP and TODO: Allow user to specify library somehow; but can assume library 1 is Movies for most.
-        response = self.tautulli.get_library_media_info("1")
-
-        # Check if the API call was successful
-        if response.get("response", {}).get("result") != "success":
-            await ctx.send("Failed to retrieve movies from the library.")
+    async def random(self, ctx, library_id=None):
+        """Displays a random media item from a specified or random Plex library of type 'Movies' or 'TV Shows'."""
+        libraries = await self.get_libraries()
+        if not libraries:
+            await ctx.send(
+                "No suitable libraries found or failed to retrieve libraries."
+            )
             return
 
-        # Extracting the nested list of movies from the response
-        movies = response.get("response", {}).get("data", {}).get("data", [])
-
-        # Check if the movies list contains movies
-        if not movies:
-            await ctx.send("No movies found in the library.")
-            return
-
-        # Select a random movie
-        random_movie = random.choice(movies)
-
-        # Extracting details from the random movie
-        title = random_movie.get("title", "Unknown Title")
-        year = random_movie.get("year", "Unknown")
-        thumb_key = random_movie.get("thumb", "")
-        last_played_timestamp = random_movie.get("last_played")
-        play_count = random_movie.get("play_count", 0)
-        if play_count == None:
-            play_count = "Never"
-        # Convert the last_played timestamp to a readable date
-        if last_played_timestamp:
-            last_played_timestamp = f"<t:{last_played_timestamp}:D>"
+        # If no library_id is specified, pick a random library from the filtered list
+        if not library_id:
+            library = random.choice(libraries)
         else:
-            last_played_timestamp = ""
-
-        # Construct the URL to the Tautulli image proxy
-        tautulli_ip = self.tautulli.tautulli_ip  # Tautulli webserver IP
-        if thumb_key:
-            thumb_url = f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
-        else:
-            thumb_url = ""
-
-        # Download the image into memory
-        if thumb_url:
-            response = requests.get(thumb_url)
-            if response.status_code == 200:
-                image_data = BytesIO(response.content)
-                image_data.seek(0)
-                file = File(fp=image_data, filename="image.jpg")
-                embed = nextcord.Embed(
-                    title=f"{title} ({year})", color=nextcord.Color.random()
+            library = next(
+                (lib for lib in libraries if str(lib["section_id"]) == str(library_id)),
+                None,
+            )
+            if not library:
+                await ctx.send(
+                    f"No library found with ID {library_id} or it is not a 'Movie' or 'TV Show' library."
                 )
-                if last_played_timestamp:
-                    embed.add_field(name="Last Played", value=last_played_timestamp)
-                embed.add_field(name="Play Count", value=str(play_count))
-                embed.set_image(url="attachment://image.jpg")
-                await ctx.send(file=file, embed=embed)
-            else:
-                await ctx.send("Failed to retrieve the movie image.")
+                return
+
+        response = self.tautulli.get_library_media_info(library["section_id"])
+        if response.get("response", {}).get("result") != "success":
+            await ctx.send("Failed to retrieve media from the library.")
+            return
+
+        movies = response.get("response", {}).get("data", {}).get("data", [])
+        if not movies:
+            await ctx.send("No media found in the selected library.")
+            return
+
+        random_movie = random.choice(movies)
+        await self.send_movie_embed(ctx, random_movie, libraries)
+
+    async def get_libraries(self):
+        """Fetch all libraries from Tautulli and filter for only Movies and TV Shows."""
+        response = self.tautulli.get_libraries()
+        if response.get("response", {}).get("result") == "success":
+            libraries = response.get("response", {}).get("data", [])
+            # Filter to include only libraries of type 'movie' or 'show'
+            filtered_libraries = [
+                lib for lib in libraries if lib["section_type"] in ("movie", "show")
+            ]
+            return filtered_libraries
+        return []
+
+    async def send_movie_embed(self, ctx, movie, libraries):
+        title = movie.get("title", "Unknown Title")
+        year = movie.get("year", "Unknown")
+        play_count = movie.get("play_count", 0)
+        play_count = "Never" if play_count == 0 else str(play_count)
+        last_played = (
+            f"<t:{movie.get('last_played', '')}:D>" if movie.get("last_played") else ""
+        )
+
+        thumb_url = self.construct_image_url(movie.get("thumb", ""))
+        embed = Embed(title=f"{title} ({year})", color=nextcord.Color.random())
+        embed.add_field(name="Last Played", value=last_played)
+        embed.add_field(name="Play Count", value=play_count)
+
+        if thumb_url:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(thumb_url) as response:
+                    if response.status == 200:
+                        image_data = BytesIO(await response.read())
+                        file = File(fp=image_data, filename="image.jpg")
+                        embed.set_image(url="attachment://image.jpg")
+                    else:
+                        embed.add_field(
+                            name="Image",
+                            value="Failed to retrieve image.",
+                            inline=False,
+                        )
+
+        # Display available libraries after the media embed
+        # Sort libraries by section ID and format names in bold
+        library_list = "\n".join(
+            f"{lib['section_id']} - **{lib['section_name']}**"
+            for lib in sorted(libraries, key=lambda x: int(x["section_id"]))
+        )
+        embed.add_field(
+            name="Explore More Sections",
+            value=f"Try `plex random <ID>`\n{library_list}",
+            inline=False,
+        )
+
+        if thumb_url and "file" in locals():
+            await ctx.send(file=file, embed=embed)
         else:
-            # Send without image if URL is not available
-            embed = nextcord.Embed(title=title, color=nextcord.Color.random())
-            embed.add_field(name="Year", value=year)
-            if last_played_timestamp:
-                embed.add_field(name="Last Played", value=last_played_timestamp)
-            embed.add_field(name="Play Count", value=str(play_count))
             await ctx.send(embed=embed)
+
+    def construct_image_url(self, thumb_key):
+        if thumb_key:
+            tautulli_ip = self.tautulli.tautulli_ip
+            return f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
+        return ""
 
 
 bot.add_cog(plex_bot(bot))
