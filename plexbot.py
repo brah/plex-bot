@@ -258,11 +258,8 @@ class plex_bot(commands.Cog):
         embed = nextcord.Embed(
             title=f"Plex Top (last {duration} days)", color=self.plex_embed_color
         )
-        rank = 0
         total_watchtime = 0
         top_users = {}
-
-        # Load the list of all users and their ignored status using caching
         user_data = self.load_user_mappings()
         ignored_users = {
             user["plex_username"]: user
@@ -270,21 +267,23 @@ class plex_bot(commands.Cog):
             if user.get("ignore", False)
         }
 
+        # Limit the number of top users processed
+        rank = 0
         for entry in response["response"]["data"]["rows"]:
+            if rank >= 3:  # Only process the top 3 users
+                break
             username = entry["user"]
             if username in ignored_users:
-                continue  # Skip ignored users
+                continue
 
             rank += 1
             watch_time_seconds = entry["total_duration"]
             total_watchtime += watch_time_seconds
             watch_time = utils.days_hours_minutes(watch_time_seconds)
-
-            # Determine if the last watched item is a movie or a show
-            movie_or_show = entry.get("media_type")
+            media_type = entry.get("media_type")
             media = (
                 entry.get("grandchild_title")
-                if movie_or_show == "movie"
+                if media_type == "movie"
                 else entry.get("grandparent_title", "No recent activity")
             )
 
@@ -294,18 +293,16 @@ class plex_bot(commands.Cog):
                 inline=True,
             )
 
-            # Find Discord ID for the current top user
             user_info = next(
                 (user for user in user_data if user["plex_username"] == username), None
             )
             if user_info and user_info.get("discord_id"):
                 top_users[rank] = int(user_info["discord_id"])
 
-        if rank == 0:
+        if not top_users:
             await ctx.send("No top users found or all are ignored.")
             return
 
-        # Adding total watchtime to the footer
         total_watch_time_str = utils.days_hours_minutes(total_watchtime)
         history_data = tautulli.get_history()
         embed.set_footer(
@@ -324,27 +321,41 @@ class plex_bot(commands.Cog):
         ]
         roles = [ctx.guild.get_role(role_id) for role_id in role_ids if role_id]
 
-        # Remove roles from all members currently holding them
+        if not all(role for role in roles):
+            print("Some roles could not be found. Check configuration.")
+            return
+
+        if not all(ctx.guild.me.top_role > role for role in roles if role):
+            print("Bot does not have the necessary role hierarchy to manage all roles.")
+            return
+
+        # Fetch all members with any of the roles to ensure comprehensive management
+        members_with_roles = set()
         for role in roles:
             if role:
-                members_with_role = role.members[
-                    :
-                ]  # Make a shallow copy to avoid modifying the list during iteration
-                for member in members_with_role:
-                    if member.id not in top_users.values():
-                        await member.remove_roles(role)
+                members_with_roles.update(role.members)
+        print(top_users.values())
+        # Remove all roles from members who should no longer have them
+        for member in members_with_roles:
+            if member.id not in top_users.values():
+                await member.remove_roles(*roles, reason="Removing non-top user roles.")
 
-        # Assign roles to new top users
-        for rank, user_id in top_users.items():
-            if rank - 1 < len(role_ids):  # Ensure we do not go out of the list bounds
-                role_id = role_ids[rank - 1]
-                if role_id:
-                    role = ctx.guild.get_role(role_id)
-                    member = ctx.guild.get_member(user_id)
-                    if role and member:
-                        await member.add_roles(role)
-            else:
+        # Assign the correct roles to the new top users
+        for rank, user_id in enumerate(top_users.values(), start=1):
+            member = ctx.guild.get_member(user_id)
+            if not member:
+                print(f"Member with ID {user_id} not found in guild.")
                 continue
+
+            if rank <= len(role_ids):
+                correct_role = roles[rank - 1]
+                roles_to_remove = [role for role in roles if role != correct_role]
+                await member.add_roles(
+                    correct_role, reason="Assigning new top user role."
+                )
+                await member.remove_roles(
+                    *roles_to_remove, reason="Cleaning up other top roles."
+                )
 
     # much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
     # https://menus.docs.nextcord.dev/en/latest/ext/menus/pagination_examples/#paginated-embeds-using-descriptions
