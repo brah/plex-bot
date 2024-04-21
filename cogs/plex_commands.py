@@ -259,9 +259,7 @@ class plex_bot(commands.Cog):
             if rank <= 3:
                 discord_id = next((user["discord_id"] for user in user_data if user["plex_username"] == username), None)
                 if discord_id:
-                    top_users[rank] = discord_id
-                else:
-                    continue
+                    top_users[rank] = discord_id                    
             watch_time_seconds = entry["total_duration"]
             total_watchtime += watch_time_seconds
             watch_time = utils.days_hours_minutes(watch_time_seconds)
