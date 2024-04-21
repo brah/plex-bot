@@ -296,13 +296,16 @@ class Tautulli:
         response = self.session.get(url=url)
         return response.json()
 
-    def get_most_watched_movie(self):
+    def get_most_watched_movies(self, time_range: int):
         """Retrieve details about the most watched movie."""
         params = {
-            'stat_id': 'popular_movies'
+            "stat_id": "popular_movies",
+            "time_range": time_range,
         }
         try:
-            response = self.session.get(self.tautulli_api_url + 'get_home_stats', params=params)
+            response = self.session.get(
+                self.tautulli_api_url + "get_home_stats", params=params
+            )
             response.raise_for_status()  # This will raise an exception for HTTP error codes
             return response.json()
         except requests.exceptions.HTTPError as http_err:
@@ -311,13 +314,16 @@ class Tautulli:
             print(f"Other error occurred: {err}")
         return None
 
-    def get_most_watched_show(self):
+    def get_most_watched_shows(self, time_range: int):
         """Retrieve details about the most watched TV show."""
         params = {
-            'stat_id': 'popular_tv'
+            "stat_id": "popular_tv",
+            "time_range": time_range,
         }
         try:
-            response = self.session.get(self.tautulli_api_url + 'get_home_stats', params=params)
+            response = self.session.get(
+                self.tautulli_api_url + "get_home_stats", params=params
+            )
             response.raise_for_status()  # Check for HTTP errors
             return response.json()
         except requests.exceptions.HTTPError as http_err:
@@ -325,7 +331,7 @@ class Tautulli:
         except Exception as err:
             print(f"Other error occurred: {err}")
         return None
-    
+
     class TMDB:
         def __init__(self) -> None:
             session = requests.Session()

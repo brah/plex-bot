@@ -245,10 +245,16 @@ class plex_bot(commands.Cog):
             await ctx.send("Failed to retrieve top users.")
             return
 
-        embed = nextcord.Embed(title=f"Plex Top (last {duration} days)", color=self.plex_embed_color)
+        embed = nextcord.Embed(
+            title=f"Plex Top (last {duration} days)", color=self.plex_embed_color
+        )
         total_watchtime = 0
         user_data = self.load_user_mappings()
-        ignored_users = {user["plex_username"]: user for user in user_data if user.get("ignore", False)}
+        ignored_users = {
+            user["plex_username"]: user
+            for user in user_data
+            if user.get("ignore", False)
+        }
 
         top_users = {}
         for rank, entry in enumerate(response["response"]["data"]["rows"], 1):
@@ -257,16 +263,31 @@ class plex_bot(commands.Cog):
                 continue
 
             if rank <= 3:
-                discord_id = next((user["discord_id"] for user in user_data if user["plex_username"] == username), None)
+                discord_id = next(
+                    (
+                        user["discord_id"]
+                        for user in user_data
+                        if user["plex_username"] == username
+                    ),
+                    None,
+                )
                 if discord_id:
-                    top_users[rank] = discord_id                    
+                    top_users[rank] = discord_id
             watch_time_seconds = entry["total_duration"]
             total_watchtime += watch_time_seconds
             watch_time = utils.days_hours_minutes(watch_time_seconds)
             media_type = entry.get("media_type")
-            media = (entry.get("grandchild_title") if media_type == "movie" else entry.get("grandparent_title", "No recent activity"))
+            media = (
+                entry.get("grandchild_title")
+                if media_type == "movie"
+                else entry.get("grandparent_title", "No recent activity")
+            )
 
-            embed.add_field(name=f"#{rank} {username}", value=f"{watch_time}\n**{media}**", inline=True)
+            embed.add_field(
+                name=f"#{rank} {username}",
+                value=f"{watch_time}\n**{media}**",
+                inline=True,
+            )
 
         if not top_users:
             await ctx.send("No top users found or all are ignored.")
@@ -743,56 +764,94 @@ class plex_bot(commands.Cog):
         return ""
 
     @commands.command()
-    async def stats(self, ctx):
+    async def stats(self, ctx, time: int = 30):
+        if not time:
+            time = 30
+        else:
+            time = int(time)
         try:
-            # Fetching most watched movie and show data
-            most_watched_movie_response = self.tautulli.get_most_watched_movie()
-            most_watched_show_response = self.tautulli.get_most_watched_show()
+            # Fetching data for the top three most watched movies and shows
+            most_watched_movies_response = self.tautulli.get_most_watched_movies(
+                time_range=time
+            )
+            most_watched_shows_response = self.tautulli.get_most_watched_shows(
+                time_range=time
+            )
             libraries_response = self.tautulli.get_libraries_table()
 
-            # Initialize counters
             total_movies = 0
             total_shows = 0
             total_episodes = 0
             total_duration_seconds = 0  # Total duration in seconds
 
-            if libraries_response.get('response', {}).get('result') == 'success':
-                # Accessing the nested 'data' for library items
-                library_data = libraries_response['response']['data'].get('data', [])
+            if libraries_response.get("response", {}).get("result") == "success":
+                library_data = libraries_response["response"]["data"].get("data", [])
                 for library in library_data:
-                    if library['section_type'] == 'movie':
-                        total_movies += int(library['count'])
-                    elif library['section_type'] == 'show':
-                        total_shows += int(library['count'])
-                        total_episodes += int(library['child_count'])
-                    total_duration_seconds += int(library.get('duration', 0))
+                    if library["section_type"] == "movie":
+                        total_movies += int(library["count"])
+                    elif library["section_type"] == "show":
+                        total_shows += int(library["count"])
+                        total_episodes += int(library["child_count"])
+                    total_duration_seconds += int(library.get("duration", 0))
 
-            # Convert total duration from seconds into a more readable format
             total_duration = utils.days_hours_minutes(total_duration_seconds)
 
-            # Extracting top movie and show info
-            most_watched_movie = None
-            most_watched_show = None
-            if most_watched_movie_response.get('response', {}).get('data', {}).get('rows'):
-                most_watched_movie = most_watched_movie_response['response']['data']['rows'][0]
-            if most_watched_show_response.get('response', {}).get('data', {}).get('rows'):
-                most_watched_show = most_watched_show_response['response']['data']['rows'][0]
+            embed = nextcord.Embed(
+                title="🎬 Plex Server Stats 🎥",
+                description=f"Overview of Plex for last {time} days.",
+                color=0x1ABC9C,
+            )
 
-            # Building the embed with the retrieved data
-            embed = nextcord.Embed(title="🎬 Plex Server Stats 🎥", description="Overview of Plex.", color=0x1ABC9C)
-            if most_watched_movie:
-                embed.add_field(name="🎞️ Most Watched Movie", value=f"{most_watched_movie['title']} ({most_watched_movie['total_plays']} plays)", inline=False)
-            if most_watched_show:
-                embed.add_field(name="📺 Most Watched Show", value=f"{most_watched_show['title']} ({most_watched_show['total_plays']} plays)", inline=False)
-            embed.add_field(name="🎬 Total Movies", value=str(total_movies), inline=True)
-            embed.add_field(name="📺 Total TV Shows", value=str(total_shows), inline=True)
-            embed.add_field(name="📋 Total Episodes", value=str(total_episodes), inline=True)
-            embed.add_field(name="⏳ Total Watched Duration", value=str(total_duration), inline=True)
+            # Handling most watched movies
+            if (
+                most_watched_movies_response.get("response", {}).get("result")
+                == "success"
+            ):
+                movies = most_watched_movies_response["response"]["data"]["rows"]
+                movie_text = ""
+                for i, movie in enumerate(movies[:3], 1):  # Display top 3 movies
+                    movie_title = movie["title"]
+                    plays = movie["total_plays"]
+                    unique_users = movie.get("users_watched", "N/A")
+                    movie_text += f"{i}. **{movie_title}** | {plays} plays by {unique_users} people\n"
+                embed.add_field(
+                    name="Most Watched Movies", value=movie_text.strip(), inline=False
+                )
+
+            # Handling most watched shows
+            if (
+                most_watched_shows_response.get("response", {}).get("result")
+                == "success"
+            ):
+                shows = most_watched_shows_response["response"]["data"]["rows"]
+                show_text = ""
+                for i, show in enumerate(shows[:3], 1):  # Display top 3 shows
+                    show_title = show["title"]
+                    plays = show["total_plays"]
+                    unique_users = show.get("users_watched", "N/A")
+                    show_text += f"{i}. **{show_title}** | {plays} plays by {unique_users} people\n"
+                embed.add_field(
+                    name="Most Watched Shows", value=show_text.strip(), inline=False
+                )
+
+            # General library stats
+            embed.add_field(
+                name="🎬 Total Movies", value=str(total_movies), inline=True
+            )
+            embed.add_field(
+                name="📺 Total TV Shows", value=str(total_shows), inline=True
+            )
+            embed.add_field(
+                name="📋 Total Episodes", value=str(total_episodes), inline=True
+            )
+            embed.add_field(
+                name="⏳ Total Watched Duration", value=total_duration, inline=True
+            )
 
             await ctx.send(embed=embed)
 
         except Exception as e:
-            print(f"Error while executing plex_stats: {str(e)}")
+            print(f"Error while executing stats: {str(e)}")
             await ctx.send("An error occurred while fetching Plex stats.")
 
 def setup(bot):
