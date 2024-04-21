@@ -14,6 +14,19 @@ bot = commands.Bot(
 )
 config = json.load(open("config.json", "r"))
 
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"*{error}*\nTry `.help {ctx.command}`")
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send(
+            "You do not have the appropriate permissions to run this command."
+        )
+    elif isinstance(error, commands.BotMissingPermissions):
+        await ctx.send("I don't have sufficient permissions!")
+
 
 bot.load_extension("cogs.plex_commands")
 

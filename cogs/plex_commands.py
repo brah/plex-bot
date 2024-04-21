@@ -742,5 +742,58 @@ class plex_bot(commands.Cog):
             return f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
         return ""
 
+    @commands.command()
+    async def stats(self, ctx):
+        try:
+            # Fetching most watched movie and show data
+            most_watched_movie_response = self.tautulli.get_most_watched_movie()
+            most_watched_show_response = self.tautulli.get_most_watched_show()
+            libraries_response = self.tautulli.get_libraries_table()
+
+            # Initialize counters
+            total_movies = 0
+            total_shows = 0
+            total_episodes = 0
+            total_duration_seconds = 0  # Total duration in seconds
+
+            if libraries_response.get('response', {}).get('result') == 'success':
+                # Accessing the nested 'data' for library items
+                library_data = libraries_response['response']['data'].get('data', [])
+                for library in library_data:
+                    if library['section_type'] == 'movie':
+                        total_movies += int(library['count'])
+                    elif library['section_type'] == 'show':
+                        total_shows += int(library['count'])
+                        total_episodes += int(library['child_count'])
+                    total_duration_seconds += int(library.get('duration', 0))
+
+            # Convert total duration from seconds into a more readable format
+            total_duration = utils.days_hours_minutes(total_duration_seconds)
+
+            # Extracting top movie and show info
+            most_watched_movie = None
+            most_watched_show = None
+            if most_watched_movie_response.get('response', {}).get('data', {}).get('rows'):
+                most_watched_movie = most_watched_movie_response['response']['data']['rows'][0]
+            if most_watched_show_response.get('response', {}).get('data', {}).get('rows'):
+                most_watched_show = most_watched_show_response['response']['data']['rows'][0]
+
+            # Building the embed with the retrieved data
+            embed = nextcord.Embed(title="🎬 Plex Server Stats 🎥", description="Overview of Plex.", color=0x1ABC9C)
+            if most_watched_movie:
+                embed.add_field(name="🎞️ Most Watched Movie", value=f"{most_watched_movie['title']} ({most_watched_movie['total_plays']} plays)", inline=False)
+            if most_watched_show:
+                embed.add_field(name="📺 Most Watched Show", value=f"{most_watched_show['title']} ({most_watched_show['total_plays']} plays)", inline=False)
+            embed.add_field(name="🎬 Total Movies", value=str(total_movies), inline=True)
+            embed.add_field(name="📺 Total TV Shows", value=str(total_shows), inline=True)
+            embed.add_field(name="📋 Total Episodes", value=str(total_episodes), inline=True)
+            embed.add_field(name="⏳ Total Watched Duration", value=str(total_duration), inline=True)
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            print(f"Error while executing plex_stats: {str(e)}")
+            await ctx.send("An error occurred while fetching Plex stats.")
+
 def setup(bot):
     bot.add_cog(plex_bot(bot))

@@ -42,6 +42,23 @@ def days_hours_minutes(seconds):
         return ", ".join(parts)
 
 
+def format_duration(milliseconds):
+    seconds = milliseconds // 1000
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    return f"{hours}h {minutes}m"
+
+
+def format_size(bytes):
+    if bytes < 1024:
+        return f"{bytes} B"
+    elif bytes < 1024**2:
+        return f"{bytes / 1024:.2f} KB"
+    elif bytes < 1024**3:
+        return f"{bytes / 1024 ** 2:.2f} MB"
+    return f"{bytes / 1024 ** 3:.2f} GB"
+
+
 class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     def __init__(self, source, timeout=60) -> None:
         super().__init__(source, timeout=timeout)

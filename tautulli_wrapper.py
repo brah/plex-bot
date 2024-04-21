@@ -262,28 +262,69 @@ class Tautulli:
 
         return member.display_name
 
+    def get_libraries_table(self):
+        """Get the data on the Tautulli libraries table."""
+        url = self.tautulli_api_url + "get_libraries_table"
+        response = self.session.get(url=url)
+        return response.json()
+
     def get_libraries(self):
         """Get a list of all the libraries."""
         url = self.tautulli_api_url + "get_libraries"
         response = self.session.get(url=url)
         return response.json()
-    
+
     def get_library(self, section_id):
         url = self.tautulli_api_url + f"get_library&section_id={section_id}"
         response = self.session.get(url=url)
         return response.json()
-    
+
     def get_library_media_info(self, section_id=None, rating_key=None):
         length = 1000
         if section_id is None and rating_key is None:
             return "Either section_id or rating_key are required;"
         if section_id is not None:
-            url = self.tautulli_api_url + f"get_library_media_info&section_id={section_id}&length={length}"
+            url = (
+                self.tautulli_api_url
+                + f"get_library_media_info&section_id={section_id}&length={length}"
+            )
         else:
-            url = self.tautulli_api_url + f"get_library_media_info&rating_key={rating_key}&length={length}"
+            url = (
+                self.tautulli_api_url
+                + f"get_library_media_info&rating_key={rating_key}&length={length}"
+            )
         response = self.session.get(url=url)
         return response.json()
 
+    def get_most_watched_movie(self):
+        """Retrieve details about the most watched movie."""
+        params = {
+            'stat_id': 'top_movies'
+        }
+        try:
+            response = self.session.get(self.tautulli_api_url + 'get_home_stats', params=params)
+            response.raise_for_status()  # This will raise an exception for HTTP error codes
+            return response.json()
+        except requests.exceptions.HTTPError as http_err:
+            print(f"HTTP error occurred: {http_err}")
+        except Exception as err:
+            print(f"Other error occurred: {err}")
+        return None
+
+    def get_most_watched_show(self):
+        """Retrieve details about the most watched TV show."""
+        params = {
+            'stat_id': 'top_tv'
+        }
+        try:
+            response = self.session.get(self.tautulli_api_url + 'get_home_stats', params=params)
+            response.raise_for_status()  # Check for HTTP errors
+            return response.json()
+        except requests.exceptions.HTTPError as http_err:
+            print(f"HTTP error occurred: {http_err}")
+        except Exception as err:
+            print(f"Other error occurred: {err}")
+        return None
     class TMDB:
         def __init__(self) -> None:
             session = requests.Session()
