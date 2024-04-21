@@ -299,7 +299,7 @@ class Tautulli:
     def get_most_watched_movie(self):
         """Retrieve details about the most watched movie."""
         params = {
-            'stat_id': 'top_movies'
+            'stat_id': 'popular_movies'
         }
         try:
             response = self.session.get(self.tautulli_api_url + 'get_home_stats', params=params)
@@ -314,7 +314,7 @@ class Tautulli:
     def get_most_watched_show(self):
         """Retrieve details about the most watched TV show."""
         params = {
-            'stat_id': 'top_tv'
+            'stat_id': 'popular_tv'
         }
         try:
             response = self.session.get(self.tautulli_api_url + 'get_home_stats', params=params)
@@ -325,6 +325,7 @@ class Tautulli:
         except Exception as err:
             print(f"Other error occurred: {err}")
         return None
+    
     class TMDB:
         def __init__(self) -> None:
             session = requests.Session()
