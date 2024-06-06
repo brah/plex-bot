@@ -150,11 +150,20 @@ class plex_bot(commands.Cog):
             f"Successfully mapped {discord_user.display_name} to {plex_username}."
         )
 
+
     @commands.command()
-    async def watchlist(self, ctx, member: nextcord.Member = None):
-        """Prints a user's previously watched media. Usable with plex watchlist <@user> (if mapped)."""
-        if member is None:
-            member = ctx.author
+    async def history(self, ctx, *, identifier: str = None):
+        """Prints a user's previously watched media. Usable with plex watchlist <@user> or <plex_username>."""
+        member = None
+        plex_username = None
+
+        # Check if identifier is a Discord member mention
+        if identifier:
+            member = ctx.guild.get_member_named(identifier)
+
+        if not member:
+            # If not a Discord member, assume it's a Plex username
+            plex_username = identifier
 
         response = tautulli.get_history()
         if response["response"]["result"] != "success":
@@ -162,36 +171,49 @@ class plex_bot(commands.Cog):
             return
 
         dc_plex_json = self.load_user_mappings()  # Use cached results
-        plex_user = next(
-            (
-                item
-                for item in dc_plex_json
-                if str(member.id) == str(item["discord_id"])
-            ),
-            None,
-        )
 
-        if not plex_user:
-            await ctx.send("The specified member is not mapped to a Plex user.")
-            return
+        if member:
+            # Find Plex username by Discord member ID
+            plex_user = next(
+                (
+                    item
+                    for item in dc_plex_json
+                    if str(member.id) == str(item["discord_id"])
+                ),
+                None,
+            )
 
-        plex_username = plex_user["plex_username"]
+            if not plex_user:
+                await ctx.send("The specified member is not mapped to a Plex user.")
+                return
+
+            plex_username = plex_user["plex_username"]
+
+        # Show all history if no specific user is specified
         last_watched_list = [
-            f"<t:{entry['date']}:t> {entry['full_title']} ({entry['duration'] // 60}m {entry['duration'] % 60}s)"
+            f"<t:{entry['date']}:t> {entry['full_title']} ({entry['duration'] // 60}m {entry['duration'] % 60}s) by {entry['user']}"
             for entry in response["response"]["data"]["data"]
-            if entry["user"] == plex_username
+            if not plex_username or entry["user"] == plex_username
         ]
 
         embed = nextcord.Embed(title="Plex Stats", color=self.plex_embed_color)
-        embed.set_author(
-            name=f"Last watched by {member.display_name}",
-            icon_url=member.display_avatar.url,
-        )
-        embed.set_thumbnail(url=member.display_avatar.url)
+        if member:
+            embed.set_author(
+                name=f"Last watched by {member.display_name}",
+                icon_url=member.display_avatar.url,
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+        else:
+            embed.set_author(
+                name="Recent watch history",
+                icon_url=self.bot.user.display_avatar.url,  # Use bot's avatar for universal history
+            )
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)  # Use bot's avatar for universal history
+
         embed.description = (
             "\n".join(last_watched_list)
             if last_watched_list
-            else "No history found for this user."
+            else "No history found."
         )
 
         await ctx.send(embed=embed)
