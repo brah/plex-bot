@@ -157,13 +157,13 @@ class plex_bot(commands.Cog):
         member = None
         plex_username = None
 
-        # Check if identifier is a Discord member mention
         if identifier:
-            member = ctx.guild.get_member_named(identifier)
-
-        if not member:
-            # If not a Discord member, assume it's a Plex username
-            plex_username = identifier
+            try:
+                # Try to convert the identifier to a member
+                member = await commands.MemberConverter().convert(ctx, identifier)
+            except commands.MemberNotFound:
+                # If not a member, assume it's a Plex username
+                plex_username = identifier
 
         response = tautulli.get_history()
         if response["response"]["result"] != "success":
