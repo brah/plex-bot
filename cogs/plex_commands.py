@@ -1,20 +1,26 @@
+# plex_commands.py
+
 import asyncio
 from datetime import timedelta
 from io import BytesIO
 import json
 import random
 from functools import lru_cache
-import aiohttp
+from pathlib import Path
+import aiohttp  # For asynchronous HTTP requests
+import aiofiles  # For asynchronous file operations
 import nextcord
-from nextcord.ext import commands
-from nextcord import File, Embed
+from nextcord.ext import commands, tasks
+from nextcord import File
 import logging
 
 import utilities as utils
 from tautulli_wrapper import Tautulli, TMDB
 
+# Load configuration
 config = json.load(open("./config.json", "r"))
 
+# Attempt to import qbittorrentapi if qbit_ip is provided
 if config["qbit_ip"] != "":
     try:
         import qbittorrentapi
@@ -25,6 +31,16 @@ if config["qbit_ip"] != "":
 # Configure logging for this module
 logger = logging.getLogger('plexbot.plex_commands')
 logger.setLevel(logging.INFO)  # Set to INFO level for production
+
+# Ensure handlers are added if not already present
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s %(name)s: %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 
 class plex_bot(commands.Cog):
     def __init__(self, bot) -> None:
@@ -38,28 +54,187 @@ class plex_bot(commands.Cog):
         self.plex_image = (
             "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
         )
+        self.media_cache = []
+        self.cache_lock = asyncio.Lock()
+        self.cache_file_path = Path("cache/media_cache.json")
+        self.bot.loop.create_task(self.initialize())
+
         logger.info("Plex bot cog initialized.")
+
+    async def initialize(self):
+        """Asynchronous initializer for the cog."""
+        await self.bot.wait_until_ready()
+        await self.tautulli.initialize()
+        await self.tmdb.initialize()
+        await self.load_cache_from_disk()
+        self.update_media_cache.start()
+
+    def cog_unload(self):
+        self.update_media_cache.cancel()
+        self.bot.loop.create_task(self.save_cache_to_disk())
+        self.bot.loop.create_task(self.tautulli.close())
+        self.bot.loop.create_task(self.tmdb.close())
+
+    @tasks.loop(hours=1)
+    async def update_media_cache(self):
+        """Background task to update the media cache every hour."""
+        async with self.cache_lock:
+            logger.info("Updating media cache...")
+            self.media_cache = await self.fetch_all_media_items()
+            await self.save_cache_to_disk()
+            logger.info("Media cache updated and saved to disk.")
+
+    async def fetch_all_media_items(self):
+        """Fetch all media items and their metadata, and store them in the cache."""
+        all_media_items = []
+        libraries = await self.get_libraries()
+        logger.info(f"Starting to fetch media items from {len(libraries)} libraries.")
+
+        for library in libraries:
+            try:
+                logger.info(
+                    f"Fetching media items for library: {library['section_name']} (ID: {library['section_id']})"
+                )
+                response = await self.tautulli.get_library_media_info(
+                    section_id=library["section_id"],
+                    length=10000,  # Adjust as needed
+                    include_metadata=0  # Since it doesn't include genres
+                )
+                if response.get("response", {}).get("result") != "success":
+                    logger.error(
+                        f"Failed to fetch media info for library {library['section_id']}"
+                    )
+                    continue
+
+                media_items = response.get("response", {}).get("data", {}).get("data", [])
+                if not media_items:
+                    logger.info(
+                        f"No media items found in library {library['section_name']}"
+                    )
+                    continue
+
+                logger.info(
+                    f"Processing {len(media_items)} items from library '{library['section_name']}'"
+                )
+
+                # Collect the rating keys
+                rating_keys = [item["rating_key"] for item in media_items]
+
+                # Limit the number of concurrent requests
+                semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent requests
+
+                # Define an async function to fetch metadata for an item
+                async def fetch_item_metadata(rating_key):
+                    async with semaphore:
+                        logger.debug(f"Fetching metadata for rating_key: {rating_key}")
+                        try:
+                            metadata_response = await self.tautulli.get_metadata(rating_key=rating_key)
+                            if metadata_response and metadata_response.get("response", {}).get("result") == "success":
+                                metadata = metadata_response.get("response", {}).get("data", {})
+                                genres = [genre.lower() for genre in metadata.get("genres", [])]
+
+                                item_data = {
+                                    "rating_key": rating_key,
+                                    "title": metadata.get("title") or "Unknown Title",
+                                    "media_type": (metadata.get("media_type") or "unknown").lower(),
+                                    "genres": genres,
+                                    "thumb": metadata.get("thumb"),
+                                    "year": metadata.get("year"),
+                                    "play_count": metadata.get("play_count", 0),
+                                    "last_played": metadata.get("last_played"),
+                                    "summary": metadata.get("summary", ""),
+                                    "rating": metadata.get("rating", ""),
+                                }
+                                logger.debug(f"Metadata fetched for rating_key: {rating_key}")
+                                return item_data
+                            else:
+                                logger.error(f"Failed to fetch metadata for rating_key {rating_key}")
+                                return None
+                        except Exception as e:
+                            logger.error(f"Exception while fetching metadata for {rating_key}: {e}")
+                            return None
+
+                # Use asyncio.gather to fetch metadata concurrently with exception handling
+                tasks = [fetch_item_metadata(rating_key) for rating_key in rating_keys]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Handle exceptions and filter out None results
+                for idx, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        logger.error(
+                            f"Exception occurred while fetching metadata for rating_key {rating_keys[idx]}: {result}"
+                        )
+                    elif result:
+                        all_media_items.append(result)
+
+                # Yield control to the event loop
+                await asyncio.sleep(0)
+
+            except Exception as e:
+                logger.exception(f"Error processing library {library['section_name']}: {e}")
+
+        logger.info(f"Fetched total {len(all_media_items)} media items.")
+        return all_media_items
+
+    async def save_cache_to_disk(self):
+        """Save the media cache to disk asynchronously."""
+        cache_dir = self.cache_file_path.parent
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            logger.info(f"Saving media cache to {self.cache_file_path}")
+            async with aiofiles.open(self.cache_file_path, "w", encoding="utf-8") as f:
+                data_to_write = json.dumps(self.media_cache, ensure_ascii=False, indent=4)
+                await f.write(data_to_write)
+                logger.debug(f"Data to write: {data_to_write[:100]}...")  # Log first 100 chars
+            logger.info(f"Media cache saved to {self.cache_file_path}")
+        except Exception as e:
+            logger.exception("Failed to save media cache to disk.")
+
+    async def load_cache_from_disk(self):
+        """Load the media cache from disk asynchronously."""
+        if self.cache_file_path.exists():
+            async with self.cache_lock:
+                try:
+                    async with aiofiles.open(self.cache_file_path, "r", encoding="utf-8") as f:
+                        contents = await f.read()
+                        self.media_cache = json.loads(contents)
+                    logger.info(f"Media cache loaded from {self.cache_file_path}")
+                except Exception as e:
+                    logger.exception("Failed to load media cache from disk.")
+                    self.media_cache = []
+        else:
+            logger.info("No media cache file found. Starting with an empty cache.")
+            self.media_cache = []
+            # Optionally, trigger an immediate cache update
+            self.bot.loop.create_task(self.update_media_cache())
 
     @lru_cache(maxsize=1)
     def load_user_mappings(self):
         try:
-            with open(self.LOCAL_JSON, "r") as json_file:
+            with open(self.LOCAL_JSON, "r", encoding="utf-8") as json_file:
                 return json.load(json_file)
         except json.JSONDecodeError as err:
             logger.error(f"Failed to load or decode JSON: {err}")
             return []
+        except FileNotFoundError:
+            logger.error("User mappings file not found.")
+            return []
 
     def save_user_mappings(self, data):
-        with open(self.LOCAL_JSON, "w") as json_file:
-            json.dump(data, json_file, indent=4)
-        self.load_user_mappings.cache_clear()  # Invalidate the cache after updating the file
-        logger.info("User mappings saved and cache cleared.")
+        try:
+            with open(self.LOCAL_JSON, "w", encoding="utf-8") as json_file:
+                json.dump(data, json_file, indent=4)
+            self.load_user_mappings.cache_clear()  # Invalidate the cache after updating the file
+            logger.info("User mappings saved and cache cleared.")
+        except Exception as e:
+            logger.exception(f"Failed to save user mappings: {e}")
 
     async def status_task(self):
+        """Background task to update the bot's presence."""
         display_streams = True  # Toggles between showing streams and help command
         while True:
             try:
-                response = self.tautulli.get_activity()
+                response = await self.tautulli.get_activity()
                 stream_count = response["response"]["data"]["stream_count"]
                 wan_bandwidth_mbps = round(
                     (response["response"]["data"]["wan_bandwidth"] / 1000), 1
@@ -86,7 +261,7 @@ class plex_bot(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         try:
-            r = self.tautulli.get_home_stats()
+            r = await self.tautulli.get_home_stats()
             status = r["response"]["result"]
 
             local_commit, latest_commit = await self.check_version()
@@ -115,11 +290,14 @@ class plex_bot(commands.Cog):
     async def check_version(self):
         try:
             local_commit = utils.get_git_revision_short_hash()
-            latest_commit = utils.get_git_revision_short_hash_latest()
+            latest_commit = await utils.get_git_revision_short_hash_latest_async()
             return local_commit, latest_commit
         except FileNotFoundError as err:
             logger.error(f"Failed to check git commit version: {err}")
             return None, None  # Ensure always returning a tuple
+        except Exception as e:
+            logger.error(f"Unexpected error during version check: {e}")
+            return None, None
 
     @commands.command()
     async def mapdiscord(
@@ -134,8 +312,8 @@ class plex_bot(commands.Cog):
         dc_plex_json = self.load_user_mappings()
 
         for member in dc_plex_json:
-            if str(member["discord_id"]) == str(discord_user.id):
-                if member["plex_username"] == plex_username:
+            if str(member.get("discord_id")) == str(discord_user.id):
+                if member.get("plex_username") == plex_username:
                     await ctx.send(f"You are already mapped to {plex_username}.")
                     return
                 else:
@@ -171,7 +349,7 @@ class plex_bot(commands.Cog):
                 # If not a member, assume it's a Plex username
                 plex_username = identifier
 
-        response = self.tautulli.get_history()
+        response = await self.tautulli.get_history()
         if response["response"]["result"] != "success":
             await ctx.send("Failed to retrieve watch history from Plex.")
             logger.error("Failed to retrieve watch history from Tautulli.")
@@ -185,7 +363,7 @@ class plex_bot(commands.Cog):
                 (
                     item
                     for item in dc_plex_json
-                    if str(member.id) == str(item["discord_id"])
+                    if str(item.get("discord_id")) == str(member.id)
                 ),
                 None,
             )
@@ -195,7 +373,7 @@ class plex_bot(commands.Cog):
                 logger.warning(f"Member {member.display_name} not mapped to a Plex user.")
                 return
 
-            plex_username = plex_user["plex_username"]
+            plex_username = plex_user.get("plex_username")
 
         # Show all history if no specific user is specified
         last_watched_list = [
@@ -237,7 +415,7 @@ class plex_bot(commands.Cog):
         found = False
 
         for member in data:
-            if member["plex_username"] == plex_username:
+            if member.get("plex_username") == plex_username:
                 member["ignore"] = not member.get("ignore", False)
                 found = True
                 status = "no longer" if not member["ignore"] else "now"
@@ -259,14 +437,18 @@ class plex_bot(commands.Cog):
         """Displays top Plex users or sets the default duration for displaying stats."""
         if set_default is not None:
             self.CONFIG_DATA["default_duration"] = set_default
-            with open(self.CONFIG_JSON, "w") as file:
-                json.dump(self.CONFIG_DATA, file, indent=4)
-            await ctx.send(f"Default duration set to: **{set_default}** days.")
-            logger.info(f"Default duration set to {set_default} days.")
+            try:
+                async with aiofiles.open(self.CONFIG_JSON, "w", encoding="utf-8") as file:
+                    await file.write(json.dumps(self.CONFIG_DATA, indent=4))
+                await ctx.send(f"Default duration set to: **{set_default}** days.")
+                logger.info(f"Default duration set to {set_default} days.")
+            except Exception as e:
+                logger.exception(f"Failed to set default duration: {e}")
+                await ctx.send("Failed to set default duration.")
             return
 
         duration = self.CONFIG_DATA.get("default_duration", 7)
-        response = self.tautulli.get_home_stats(
+        response = await self.tautulli.get_home_stats(
             params={
                 "stats_type": "duration",
                 "stat_id": "top_users",
@@ -301,7 +483,7 @@ class plex_bot(commands.Cog):
                     (
                         user["discord_id"]
                         for user in user_data
-                        if user["plex_username"] == username
+                        if user.get("plex_username") == username
                     ),
                     None,
                 )
@@ -329,9 +511,12 @@ class plex_bot(commands.Cog):
             return
 
         total_watch_time_str = utils.days_hours_minutes(total_watchtime)
-        history_data = self.tautulli.get_history()
+        history_data = await self.tautulli.get_history()
+        total_duration_all_time = utils.days_hours_minutes(
+            history_data["response"]["data"]["total_duration"]
+        )
         embed.set_footer(
-            text=f"Total Watchtime: {total_watch_time_str}\nAll time: {history_data['response']['data']['total_duration']}"
+            text=f"Total Watchtime: {total_watch_time_str}\nAll time: {total_duration_all_time}"
         )
 
         await ctx.send(embed=embed)
@@ -362,7 +547,11 @@ class plex_bot(commands.Cog):
         # Remove all roles from members who should no longer have them
         for member in members_with_roles:
             if member.id not in top_users.values():
-                await member.remove_roles(*roles, reason="Removing non-top user roles.")
+                try:
+                    await member.remove_roles(*roles, reason="Removing non-top user roles.")
+                    logger.info(f"Removed roles from {member.display_name}.")
+                except Exception as e:
+                    logger.error(f"Failed to remove roles from {member.display_name}: {e}")
 
         # Assign the correct roles to the new top users
         for rank, user_id in enumerate(top_users.values(), start=1):
@@ -374,43 +563,54 @@ class plex_bot(commands.Cog):
             if rank <= len(role_ids):
                 correct_role = roles[rank - 1]
                 roles_to_remove = [role for role in roles if role != correct_role]
-                await member.add_roles(
-                    correct_role, reason="Assigning new top user role."
-                )
-                await member.remove_roles(
-                    *roles_to_remove, reason="Cleaning up other top roles."
-                )
+                try:
+                    await member.add_roles(
+                        correct_role, reason="Assigning new top user role."
+                    )
+                    await member.remove_roles(
+                        *roles_to_remove, reason="Cleaning up other top roles."
+                    )
+                    logger.info(
+                        f"Assigned role '{correct_role.name}' to {member.display_name} and removed other top roles."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to assign roles to {member.display_name}: {e}")
 
     @commands.command()
     async def recent(self, ctx, amount: int = 10) -> None:
+        """Displays recently added media items."""
         fields = []
-        response = self.tautulli.get_recently_added(count=amount)
-        for entry in response["response"]["data"]["recently_added"]:
-            if entry["originally_available_at"] == "":
-                continue
-            # work around to show full show name alongside episode name
-            if entry["grandparent_title"] != "":
-                entry["title"] = f"{entry['grandparent_title']} - {entry['title']}"
-            if entry["rating"] == "":
-                entry["rating"] = "nil"
-            entry["thumb_key"] = entry.get("thumb", "")
-            entry_data = {
-                "description": f"**🎥 {entry['title']}** 🕗 {entry['originally_available_at']} 🍅: {entry['rating']}/10\n{entry['summary']}\n",
-                "thumb_key": entry.get("thumb", ""),
-            }
-            fields.append(entry_data)
+        try:
+            response = await self.tautulli.get_recently_added(count=amount)
+            for entry in response["response"]["data"]["recently_added"]:
+                if entry.get("originally_available_at") == "":
+                    continue
+                # Work around to show full show name alongside episode name
+                if entry.get("grandparent_title"):
+                    entry["title"] = f"{entry['grandparent_title']} - {entry['title']}"
+                if entry.get("rating") == "":
+                    entry["rating"] = "nil"
+                entry_data = {
+                    "description": f"**🎥 {entry['title']}** 🕗 {entry['originally_available_at']} 🍅: {entry['rating']}/10\n{entry.get('summary', '')}\n",
+                    "thumb_key": entry.get("thumb", ""),
+                }
+                fields.append(entry_data)
 
-        tautulli_ip = self.tautulli.tautulli_ip  # Tautulli webserver IP
-        pages = utils.NoStopButtonMenuPages(
-            source=utils.MyEmbedDescriptionPageSource(fields, tautulli_ip),
-        )
-        await pages.start(ctx)
+            tautulli_ip = self.tautulli.tautulli_ip  # Tautulli webserver IP
+            pages = utils.NoStopButtonMenuPages(
+                source=utils.MyEmbedDescriptionPageSource(fields, tautulli_ip),
+            )
+            await pages.start(ctx)
+        except Exception as e:
+            logger.error(f"Failed to retrieve recent additions: {e}")
+            await ctx.send("Failed to retrieve recent additions.")
 
     @commands.command()
     async def watchers(self, ctx) -> None:
         """Display current Plex watchers with details about their activity."""
         try:
-            sessions = self.tautulli.get_activity()["response"]["data"]["sessions"]
+            response = await self.tautulli.get_activity()
+            sessions = response["response"]["data"]["sessions"]
             if not sessions:
                 await ctx.send("No one is currently watching Plex.")
                 return
@@ -432,9 +632,9 @@ class plex_bot(commands.Cog):
                 total_watchers += 1
                 state = user.get("state", "unknown").capitalize()
                 state_symbol = {
-                    "playing": "▶️",
-                    "paused": "⏸️",
-                }.get(state.lower(), state)
+                    "Playing": "▶️",
+                    "Paused": "⏸️",
+                }.get(state, state)
 
                 view_offset = int(user.get("view_offset", 0))
                 elapsed_time = str(timedelta(milliseconds=view_offset))
@@ -459,6 +659,12 @@ class plex_bot(commands.Cog):
 
     @commands.command()
     async def downloading(self, ctx):
+        """Display current live downloads from qBittorrent."""
+        if not self.CONFIG_DATA.get("qbit_ip"):
+            await ctx.send("qBittorrent is not configured.")
+            logger.error("qBittorrent configuration missing.")
+            return
+
         try:
             qbt_client = qbittorrentapi.Client(
                 host=f"{self.CONFIG_DATA['qbit_ip']}",
@@ -466,6 +672,7 @@ class plex_bot(commands.Cog):
                 username=f"{self.CONFIG_DATA['qbit_username']}",
                 password=f"{self.CONFIG_DATA['qbit_password']}",
             )
+            qbt_client.auth_log_in()
         except Exception as err:
             logger.error(
                 f"Couldn't open connection to qbittorrent, check qBit related JSON values: {err}"
@@ -473,30 +680,35 @@ class plex_bot(commands.Cog):
             await ctx.send("Failed to connect to qBittorrent. Check configuration.")
             return
 
-        num_downloads = 0
-        downloads_embed = nextcord.Embed(
-            title="qBittorrent Live Downloads",
-            color=0x6C81DF,
-        )
-        downloads_embed.set_thumbnail(
-            url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png"
-        )
-        # e.g. output:
-        # debian-11.6.0-amd64-DVD-1.iso Progress: 46.12%, Size: 3.91 GB, ETA: 60 minutes, speed: 10.00 MB/s
-        for downloads in qbt_client.torrents.info.downloading():
-            downloads_embed.add_field(
-                name=f"⏳ {downloads.name}",
-                value=f"**Progress**: {downloads.progress * 100:.2f}%, **Size:** {downloads.size * 1e-9:.2f} GB, **ETA:** {downloads.eta / 60:.0f} minutes, **DL:** {downloads.dlspeed * 1.0e-6:.2f} MB/s",
-                inline=False,
+        try:
+            torrents = qbt_client.torrents_info(status_filter='downloading')
+            num_downloads = 0
+            downloads_embed = nextcord.Embed(
+                title="qBittorrent Live Downloads",
+                color=0x6C81DF,
             )
-            num_downloads += 1
-        if num_downloads < 1:
-            downloads_embed.add_field(
-                name="\u200b",
-                value="There is no movie currently downloading!",
-                inline=False,
+            downloads_embed.set_thumbnail(
+                url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png"
             )
-        await ctx.send(embed=downloads_embed)
+            # e.g. output:
+            # debian-11.6.0-amd64-DVD-1.iso Progress: 46.12%, Size: 3.91 GB, ETA: 60 minutes, speed: 10.00 MB/s
+            for torrent in torrents:
+                downloads_embed.add_field(
+                    name=f"⏳ {torrent.name}",
+                    value=f"**Progress**: {torrent.progress * 100:.2f}%, **Size:** {torrent.size * 1e-9:.2f} GB, **ETA:** {torrent.eta / 60:.0f} minutes, **DL:** {torrent.dlspeed * 1.0e-6:.2f} MB/s",
+                    inline=False,
+                )
+                num_downloads += 1
+            if num_downloads < 1:
+                downloads_embed.add_field(
+                    name="\u200b",
+                    value="There is no movie currently downloading!",
+                    inline=False,
+                )
+            await ctx.send(embed=downloads_embed)
+        except Exception as e:
+            logger.error(f"Failed to retrieve downloads from qBittorrent: {e}")
+            await ctx.send("Failed to retrieve downloads from qBittorrent.")
 
     @commands.command()
     async def help(self, ctx, *commands: str):
@@ -572,7 +784,8 @@ class plex_bot(commands.Cog):
         """Displays the status of the Plex server and other related information."""
         try:
             # Getting Tautulli server info
-            server_info = self.tautulli.get_server_info()["response"]
+            server_info_response = await self.tautulli.get_server_info()
+            server_info = server_info_response["response"]
 
             # Fetching Plex status from Plex API asynchronously
             async with aiohttp.ClientSession() as session:
@@ -617,9 +830,10 @@ class plex_bot(commands.Cog):
     async def killstream(
         self, ctx, session_key: str = None, message: str = None
     ) -> None:
+        """Terminates a Plex stream based on the session key."""
         session_keys = []
         if session_key is None:
-            activity = self.tautulli.get_activity()
+            activity = await self.tautulli.get_activity()
             sessions = activity["response"]["data"]["sessions"]
             for users in sessions:
                 session_keys.append(
@@ -630,175 +844,255 @@ class plex_bot(commands.Cog):
                 "\nMessage will be passed to the user in a pop-up window on their Plex client.\n ⚠️ It is recommended to use 'apostrophes' around the message to avoid errors."
             )
             return
-        r = self.tautulli.terminate_session(session_key, message=message)
-        if r == 400:
-            await ctx.send(
-                f"Could not find a stream with **{session_key}** or another error occurred"
-            )
-            logger.warning(f"Failed to terminate session with key {session_key}.")
-        elif r == 200:
-            await ctx.send(
-                f"Killed stream with session_key: **{session_key}** and message if provided: **{message}**"
-            )
-            logger.info(f"Terminated session {session_key} with message: {message}")
-        else:
-            await ctx.send(
-                "An unexpected error occurred - check logs for more information."
-            )
-            logger.error(f"Unexpected response code {r} when terminating session {session_key}.")
+        try:
+            r = await self.tautulli.terminate_session(session_key, message=message)
+            if r == 400:
+                await ctx.send(
+                    f"Could not find a stream with **{session_key}** or another error occurred"
+                )
+                logger.warning(f"Failed to terminate session with key {session_key}.")
+            elif r == 200:
+                await ctx.send(
+                    f"Killed stream with session_key: **{session_key}** and message if provided: **{message}**"
+                )
+                logger.info(f"Terminated session {session_key} with message: {message}")
+            else:
+                await ctx.send(
+                    "An unexpected error occurred - check logs for more information."
+                )
+                logger.error(f"Unexpected response code {r} when terminating session {session_key}.")
+        except Exception as e:
+            logger.error(f"Exception occurred while terminating session {session_key}: {e}")
+            await ctx.send("Failed to terminate the session due to an error.")
 
     @commands.command()
     async def shows(self, ctx):
-        # Get all TV libraries
-        response = self.tautulli.get_libraries()
-        libraries = response["response"]["data"]
-        tv_libraries = (
-            library for library in libraries if library["section_type"] == "show"
-        )
-
-        # Get library user stats for each TV library
-        top_users = {}
-        for library in tv_libraries:
-            section_id = library["section_id"]
-            library_name = library["section_name"]
-            response = self.tautulli.get_library_user_stats(section_id=section_id)
-            data = response["response"]["data"]
-            for user_data in data:
-                username = user_data["username"]
-                total_time = user_data["total_time"]
-                if username not in top_users:
-                    top_users[username] = {
-                        "time": total_time,
-                        "count": 1,
-                        "libraries": [library_name],
-                    }
-                else:
-                    top_users[username]["time"] += total_time
-                    top_users[username]["count"] += 1
-                    top_users[username]["libraries"].append(library_name)
-
-        # Sort users by total time watched and get top 10
-        top_users = sorted(top_users.items(), key=lambda x: x[1]["time"], reverse=True)[
-            :10
-        ]
-
-        # Create embed
-        embed = nextcord.Embed(
-            title="Top Users by Total Time Watched for All TV Libraries",
-            color=self.plex_embed_color,
-        )
-        embed.set_thumbnail(
-            url="https://www.freepnglogos.com/uploads/tv-png/tv-png-the-whole-enchilada-the-whole-enchilada-9.png"
-        )
-        # Add fields to embed
-        for i, (username, data) in enumerate(top_users):
-            time = str(timedelta(seconds=data["time"]))
-            count = data["count"]
-            libraries_str = ", ".join(data["libraries"])
-            embed.add_field(
-                name=f"{i+1}. {username}",
-                value=f"**{time}** watched across {count} libraries;\n{libraries_str}",
-                inline=False,
+        """Displays the top users by total watch time across all TV libraries."""
+        try:
+            # Get all TV libraries
+            response = await self.tautulli.get_libraries()
+            libraries = response["response"]["data"]
+            tv_libraries = (
+                library for library in libraries if library["section_type"] == "show"
             )
 
-        await ctx.send(embed=embed)
+            # Get library user stats for each TV library
+            top_users = {}
+            for library in tv_libraries:
+                section_id = library["section_id"]
+                library_name = library["section_name"]
+                response = await self.tautulli.get_library_user_stats(section_id=section_id)
+                data = response["response"]["data"]
+                for user_data in data:
+                    username = user_data["username"]
+                    total_time = user_data["total_time"]
+                    if username not in top_users:
+                        top_users[username] = {
+                            "time": total_time,
+                            "count": 1,
+                            "libraries": [library_name],
+                        }
+                    else:
+                        top_users[username]["time"] += total_time
+                        top_users[username]["count"] += 1
+                        top_users[username]["libraries"].append(library_name)
+
+            # Sort users by total time watched and get top 10
+            top_users = sorted(top_users.items(), key=lambda x: x[1]["time"], reverse=True)[
+                :10
+            ]
+
+            # Create embed
+            embed = nextcord.Embed(
+                title="Top Users by Total Time Watched for All TV Libraries",
+                color=self.plex_embed_color,
+            )
+            embed.set_thumbnail(
+                url="https://www.freepnglogos.com/uploads/tv-png/tv-png-the-whole-enchilada-the-whole-enchilada-9.png"
+            )
+            # Add fields to embed
+            for i, (username, data) in enumerate(top_users):
+                time = str(timedelta(seconds=data["time"]))
+                count = data["count"]
+                libraries_str = ", ".join(data["libraries"])
+                embed.add_field(
+                    name=f"{i+1}. {username}",
+                    value=f"**{time}** watched across {count} libraries;\n{libraries_str}",
+                    inline=False,
+                )
+
+            await ctx.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Error while executing shows: {str(e)}")
+            await ctx.send("An error occurred while fetching top shows.")
 
     @commands.command()
-    async def random(self, ctx, library_id=None):
-        """Displays a random media item from a specified or random Plex library of type 'Movies' or 'TV Shows'."""
-        libraries = await self.get_libraries()
-        if not libraries:
-            await ctx.send(
-                "No suitable libraries found or failed to retrieve libraries."
-            )
+    async def random(self, ctx, *args):
+        """Displays a random media item from the Plex libraries, optionally filtered by media type and genre.
+
+        Usage:
+        plex random [media_type] [genre]
+
+        Examples:
+        plex random
+        plex random movie
+        plex random tv comedy
+        plex random movie horror
+        """
+        # Parse arguments
+        media_type = None
+        genre = None
+
+        if args:
+            # If first argument is 'movie', 'tv', or 'any', it's the media_type
+            if args[0].lower() in ['movie', 'tv', 'any']:
+                media_type = args[0].lower()
+                if len(args) > 1:
+                    genre = ' '.join(args[1:]).lower()
+            else:
+                # No media_type specified, treat all args as genre
+                genre = ' '.join(args).lower()
+        logger.info(f"Searching for {genre} of mediatype {media_type}")
+
+        # Use the cached media items
+        async with self.cache_lock:
+            media_items = self.media_cache.copy()
+
+        if not media_items:
+            await ctx.send("Media cache is empty. Please try again later.")
             return
 
-        # If no library_id is specified, pick a random library from the filtered list
-        if not library_id:
-            library = random.choice(libraries)
-        else:
-            library = next(
-                (lib for lib in libraries if str(lib["section_id"]) == str(library_id)),
-                None,
-            )
-            if not library:
-                await ctx.send(
-                    f"No library found with ID {library_id} or it is not a 'Movie' or 'TV Show' library."
-                )
-                return
-
-        response = self.tautulli.get_library_media_info(library["section_id"])
-        if response.get("response", {}).get("result") != "success":
-            await ctx.send("Failed to retrieve media from the library.")
-            logger.error("Failed to retrieve media from the library.")
-            return
-
-        movies = response.get("response", {}).get("data", {}).get("data", [])
-        if not movies:
-            await ctx.send("No media found in the selected library.")
-            return
-
-        random_movie = random.choice(movies)
-        await self.send_movie_embed(ctx, random_movie, libraries)
-
-    async def get_libraries(self):
-        """Fetch all libraries from Tautulli and filter for only Movies and TV Shows."""
-        response = self.tautulli.get_libraries()
-        if response.get("response", {}).get("result") == "success":
-            libraries = response.get("response", {}).get("data", [])
-            # Filter to include only libraries of type 'movie' or 'show'
-            filtered_libraries = [
-                lib for lib in libraries if lib["section_type"] in ("movie", "show")
+        # Filter media items by media type
+        if media_type and media_type != 'any':
+            if media_type == 'tv':
+                valid_media_types = ['show', 'episode']
+            elif media_type == 'movie':
+                valid_media_types = ['movie']
+            else:
+                valid_media_types = [media_type]
+            media_items = [
+                item for item in media_items
+                if item.get("media_type", "unknown").lower() in valid_media_types
             ]
-            return filtered_libraries
-        return []
 
-    async def send_movie_embed(self, ctx, movie, libraries):
-        title = movie.get("title", "Unknown Title")
-        year = movie.get("year", "Unknown")
-        play_count = movie.get("play_count", 0)
-        play_count = "Never" if play_count == 0 else str(play_count)
-        last_played = (
-            f"<t:{movie.get('last_played', '')}:D>" if movie.get("last_played") else ""
-        )
+        # Filter media items by genre
+        if genre:
+            media_items = [
+                item for item in media_items
+                if genre.lower() in [g.lower() for g in item.get("genres", [])]
+            ]
 
-        thumb_url = self.construct_image_url(movie.get("thumb", ""))
-        embed = Embed(title=f"{title} ({year})", color=nextcord.Color.random())
-        embed.add_field(name="Last Played", value=last_played)
-        embed.add_field(name="Play Count", value=play_count)
+        if not media_items:
+            await ctx.send("No media items found matching the criteria.")
+            return
 
-        if thumb_url:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(thumb_url) as response:
-                    if response.status == 200:
-                        image_data = BytesIO(await response.read())
-                        file = File(fp=image_data, filename="image.jpg")
-                        embed.set_image(url="attachment://image.jpg")
-                    else:
+        # Select a random media item
+        random_item = random.choice(media_items)
+
+        await self.send_movie_embed(ctx, random_item)
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def refresh_cache(self, ctx):
+        """Manually refresh the media cache."""
+        await ctx.send("Refreshing media cache...")
+        async with self.cache_lock:
+            self.media_cache = await self.fetch_all_media_items()
+            await self.save_cache_to_disk()
+        await ctx.send("Media cache has been refreshed.")
+        logger.info("Media cache has been manually refreshed.")
+
+    async def send_movie_embed(self, ctx, item):
+        """Send an embed with the media item's details."""
+        try:
+            # Construct the embed using item data
+            embed = nextcord.Embed(
+                title=f"{item['title']} ({item['year']})",
+                color=nextcord.Color.random()
+            )
+
+            # Add summary
+            if item.get("summary"):
+                embed.add_field(name="Summary", value=item["summary"], inline=False)
+
+            # Add rating
+            if item.get("rating"):
+                embed.add_field(name="Rating", value=item["rating"], inline=True)
+
+            # Add genres
+            if item.get("genres"):
+                genres_formatted = ', '.join([g.title() for g in item["genres"]])
+                embed.add_field(name="Genres", value=genres_formatted, inline=True)
+
+            # Add play count
+            play_count = item.get("play_count", 0)
+            play_count = "Never" if play_count == 0 else str(play_count)
+            embed.add_field(name="Play Count", value=play_count, inline=True)
+
+            # Add last played
+            if item.get("last_played"):
+                last_played = f"<t:{item.get('last_played', '')}:D>"
+                embed.add_field(name="Last Played", value=last_played, inline=True)
+
+            # Add thumbnail if available
+            if item.get("thumb"):
+                thumb_url = self.construct_image_url(item["thumb"])
+                if thumb_url:
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(thumb_url) as response:
+                                if response.status == 200:
+                                    image_data = BytesIO(await response.read())
+                                    file = File(fp=image_data, filename="image.jpg")
+                                    embed.set_image(url="attachment://image.jpg")
+                                    await ctx.send(file=file, embed=embed)
+                                    return
+                                else:
+                                    embed.add_field(
+                                        name="Image",
+                                        value="Failed to retrieve image.",
+                                        inline=False,
+                                    )
+                    except Exception as e:
+                        logger.error(f"Failed to retrieve thumbnail image: {e}")
                         embed.add_field(
                             name="Image",
                             value="Failed to retrieve image.",
                             inline=False,
                         )
 
-        # Display available libraries after the media embed
-        # Sort libraries by section ID and format names in bold
-        library_list = "\n".join(
-            f"{lib['section_id']} - **{lib['section_name']}**"
-            for lib in sorted(libraries, key=lambda x: int(x["section_id"]))
-        )
-        embed.add_field(
-            name="Explore More Sections",
-            value=f"Try `plex random <ID>`\n{library_list}",
-            inline=False,
-        )
-
-        if thumb_url and "file" in locals():
-            await ctx.send(file=file, embed=embed)
-        else:
+            # If no image was sent
             await ctx.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Failed to send movie embed: {e}")
+            await ctx.send("Failed to display the media item.")
+
+    async def get_libraries(self, media_type=None):
+        """Fetch all libraries from Tautulli and filter them by media type.
+
+        Args:
+            media_type (str, optional): 'movie', 'tv', or None
+
+        Returns:
+            list: A list of library dictionaries
+        """
+        response = await self.tautulli.get_libraries()
+        if response.get("response", {}).get("result") == "success":
+            libraries = response.get("response", {}).get("data", [])
+            # Filter to include only libraries of the specified media_type
+            if media_type == 'movie':
+                filtered_libraries = [lib for lib in libraries if lib["section_type"] == "movie"]
+            elif media_type == 'tv':
+                filtered_libraries = [lib for lib in libraries if lib["section_type"] in ("show", "episode")]
+            else:
+                filtered_libraries = [lib for lib in libraries if lib["section_type"] in ("movie", "show", "episode")]
+            logger.debug(f"Filtered libraries based on media_type '{media_type}': {[lib['section_name'] for lib in filtered_libraries]}")
+            return filtered_libraries
+        logger.error("Failed to fetch libraries from Tautulli.")
+        return []
 
     def construct_image_url(self, thumb_key):
+        """Construct the full image URL for thumbnails."""
         if thumb_key:
             tautulli_ip = self.tautulli.tautulli_ip
             return f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
@@ -806,19 +1100,20 @@ class plex_bot(commands.Cog):
 
     @commands.command()
     async def stats(self, ctx, time: int = 30):
+        """Displays Plex server statistics for a given time range."""
         if not time:
             time = 30
         else:
             time = int(time)
         try:
             # Fetching data for the top three most watched movies and shows
-            most_watched_movies_response = self.tautulli.get_most_watched_movies(
+            most_watched_movies_response = await self.tautulli.get_most_watched_movies(
                 time_range=time
             )
-            most_watched_shows_response = self.tautulli.get_most_watched_shows(
+            most_watched_shows_response = await self.tautulli.get_most_watched_shows(
                 time_range=time
             )
-            libraries_response = self.tautulli.get_libraries_table()
+            libraries_response = await self.tautulli.get_libraries_table()
 
             total_movies = 0
             total_shows = 0
