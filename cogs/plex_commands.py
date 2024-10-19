@@ -512,9 +512,10 @@ class plex_bot(commands.Cog):
 
         total_watch_time_str = utils.days_hours_minutes(total_watchtime)
         history_data = await self.tautulli.get_history()
-        total_duration_all_time = utils.days_hours_minutes(
+        logger.info(f"total_duration untouched = {history_data['response']['data']['total_duration']}")
+        total_duration_all_time = utils.days_hours_minutes(int(
             history_data["response"]["data"]["total_duration"]
-        )
+        ))
         embed.set_footer(
             text=f"Total Watchtime: {total_watch_time_str}\nAll time: {total_duration_all_time}"
         )
