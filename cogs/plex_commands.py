@@ -8,9 +8,10 @@ import aiohttp
 import nextcord
 from nextcord.ext import commands
 from nextcord import File, Embed
+import logging
 
 import utilities as utils
-import tautulli_wrapper as tautulli
+from tautulli_wrapper import Tautulli, TMDB
 
 config = json.load(open("./config.json", "r"))
 
@@ -18,10 +19,12 @@ if config["qbit_ip"] != "":
     try:
         import qbittorrentapi
     except Exception as err:
-        print(f"Error importing qbittorrentapi: {err}")
+        # Replace print with logging
+        logging.error(f"Error importing qbittorrentapi: {err}")
 
-tautulli = tautulli.Tautulli()
-
+# Configure logging for this module
+logger = logging.getLogger('plexbot.plex_commands')
+logger.setLevel(logging.INFO)  # Set to INFO level for production
 
 class plex_bot(commands.Cog):
     def __init__(self, bot) -> None:
@@ -29,12 +32,13 @@ class plex_bot(commands.Cog):
         self.CONFIG_DATA = config
         self.LOCAL_JSON = "map.json"
         self.CONFIG_JSON = "config.json"
-        self.tautulli = tautulli
-        self.tmdb = self.tautulli.TMDB()
+        self.tautulli = Tautulli()
+        self.tmdb = TMDB()
         self.plex_embed_color = 0xE5A00D
         self.plex_image = (
             "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
         )
+        logger.info("Plex bot cog initialized.")
 
     @lru_cache(maxsize=1)
     def load_user_mappings(self):
@@ -42,19 +46,20 @@ class plex_bot(commands.Cog):
             with open(self.LOCAL_JSON, "r") as json_file:
                 return json.load(json_file)
         except json.JSONDecodeError as err:
-            print(f"Failed to load or decode JSON: {err}")  # Log error for debugging
+            logger.error(f"Failed to load or decode JSON: {err}")
             return []
 
     def save_user_mappings(self, data):
         with open(self.LOCAL_JSON, "w") as json_file:
             json.dump(data, json_file, indent=4)
         self.load_user_mappings.cache_clear()  # Invalidate the cache after updating the file
+        logger.info("User mappings saved and cache cleared.")
 
     async def status_task(self):
         display_streams = True  # Toggles between showing streams and help command
         while True:
             try:
-                response = tautulli.get_activity()
+                response = self.tautulli.get_activity()
                 stream_count = response["response"]["data"]["stream_count"]
                 wan_bandwidth_mbps = round(
                     (response["response"]["data"]["wan_bandwidth"] / 1000), 1
@@ -74,14 +79,14 @@ class plex_bot(commands.Cog):
                 )
                 display_streams = not display_streams  # Toggle the display mode
             except Exception as e:
-                print(f"Error in status_task(): {e}")
+                logger.error(f"Error in status_task(): {e}")
 
             await asyncio.sleep(15)  # Control how often to update the status
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         try:
-            r = tautulli.get_home_stats()
+            r = self.tautulli.get_home_stats()
             status = r["response"]["result"]
 
             local_commit, latest_commit = await self.check_version()
@@ -94,18 +99,18 @@ class plex_bot(commands.Cog):
                 )
 
             if status == "success":
-                print(f"Logged in as {self.bot.user}")
-                print("Connection to Tautulli successful")
-                print(
+                logger.info(f"Logged in as {self.bot.user}")
+                logger.info("Connection to Tautulli successful")
+                logger.info(
                     f"Current PlexBot version ID: {local_commit if local_commit else 'unknown'}; latest: {latest_commit if latest_commit else 'unknown'}; {up_to_date}"
                 )
                 self.bot.loop.create_task(self.status_task())
             else:
-                print(
-                    f"-- CRITICAL -- Connection to Tautulli failed, result {status} --"
+                logger.critical(
+                    f"Connection to Tautulli failed, result {status}"
                 )
         except Exception as e:
-            print(f"Error during bot initialization: {e}")
+            logger.error(f"Error during bot initialization: {e}")
 
     async def check_version(self):
         try:
@@ -113,7 +118,7 @@ class plex_bot(commands.Cog):
             latest_commit = utils.get_git_revision_short_hash_latest()
             return local_commit, latest_commit
         except FileNotFoundError as err:
-            print(f"Failed to check git commit version: {err}")
+            logger.error(f"Failed to check git commit version: {err}")
             return None, None  # Ensure always returning a tuple
 
     @commands.command()
@@ -139,6 +144,7 @@ class plex_bot(commands.Cog):
                     await ctx.send(
                         f"Successfully updated mapping for {discord_user.display_name} to {plex_username}."
                     )
+                    logger.info(f"Updated mapping for {discord_user.display_name} to {plex_username}.")
                     return
 
         # If user is not found, add them
@@ -149,7 +155,7 @@ class plex_bot(commands.Cog):
         await ctx.send(
             f"Successfully mapped {discord_user.display_name} to {plex_username}."
         )
-
+        logger.info(f"Mapped {discord_user.display_name} to {plex_username}.")
 
     @commands.command()
     async def history(self, ctx, *, identifier: str = None):
@@ -165,9 +171,10 @@ class plex_bot(commands.Cog):
                 # If not a member, assume it's a Plex username
                 plex_username = identifier
 
-        response = tautulli.get_history()
+        response = self.tautulli.get_history()
         if response["response"]["result"] != "success":
             await ctx.send("Failed to retrieve watch history from Plex.")
+            logger.error("Failed to retrieve watch history from Tautulli.")
             return
 
         dc_plex_json = self.load_user_mappings()  # Use cached results
@@ -185,6 +192,7 @@ class plex_bot(commands.Cog):
 
             if not plex_user:
                 await ctx.send("The specified member is not mapped to a Plex user.")
+                logger.warning(f"Member {member.display_name} not mapped to a Plex user.")
                 return
 
             plex_username = plex_user["plex_username"]
@@ -234,6 +242,7 @@ class plex_bot(commands.Cog):
                 found = True
                 status = "no longer" if not member["ignore"] else "now"
                 await ctx.send(f"{plex_username} is {status} ignored in top lists.")
+                logger.info(f"{plex_username} is {status} ignored in top lists.")
                 break
 
         if not found:
@@ -241,6 +250,7 @@ class plex_bot(commands.Cog):
                 {"discord_id": "", "plex_username": plex_username, "ignore": True}
             )
             await ctx.send(f"{plex_username} is now ignored in top lists.")
+            logger.info(f"{plex_username} is now ignored in top lists.")
 
         self.save_user_mappings(data)  # Save and clear cache
 
@@ -252,10 +262,11 @@ class plex_bot(commands.Cog):
             with open(self.CONFIG_JSON, "w") as file:
                 json.dump(self.CONFIG_DATA, file, indent=4)
             await ctx.send(f"Default duration set to: **{set_default}** days.")
+            logger.info(f"Default duration set to {set_default} days.")
             return
 
         duration = self.CONFIG_DATA.get("default_duration", 7)
-        response = tautulli.get_home_stats(
+        response = self.tautulli.get_home_stats(
             params={
                 "stats_type": "duration",
                 "stat_id": "top_users",
@@ -265,6 +276,7 @@ class plex_bot(commands.Cog):
         )
         if response["response"]["result"] != "success":
             await ctx.send("Failed to retrieve top users.")
+            logger.error("Failed to retrieve top users from Tautulli.")
             return
 
         embed = nextcord.Embed(
@@ -313,10 +325,11 @@ class plex_bot(commands.Cog):
 
         if not top_users:
             await ctx.send("No top users found or all are ignored.")
+            logger.info("No top users found or all are ignored.")
             return
 
         total_watch_time_str = utils.days_hours_minutes(total_watchtime)
-        history_data = tautulli.get_history()
+        history_data = self.tautulli.get_history()
         embed.set_footer(
             text=f"Total Watchtime: {total_watch_time_str}\nAll time: {history_data['response']['data']['total_duration']}"
         )
@@ -334,11 +347,11 @@ class plex_bot(commands.Cog):
         roles = [ctx.guild.get_role(role_id) for role_id in role_ids if role_id]
 
         if not all(role for role in roles):
-            print("Some roles could not be found. Check configuration.")
+            logger.warning("Some roles could not be found. Check configuration.")
             return
 
         if not all(ctx.guild.me.top_role > role for role in roles if role):
-            print("Bot does not have the necessary role hierarchy to manage all roles.")
+            logger.warning("Bot does not have the necessary role hierarchy to manage all roles.")
             return
 
         # Fetch all members with any of the roles to ensure comprehensive management
@@ -355,7 +368,7 @@ class plex_bot(commands.Cog):
         for rank, user_id in enumerate(top_users.values(), start=1):
             member = ctx.guild.get_member(user_id)
             if not member:
-                print(f"Member with ID {user_id} not found in guild.")
+                logger.warning(f"Member with ID {user_id} not found in guild.")
                 continue
 
             if rank <= len(role_ids):
@@ -368,8 +381,6 @@ class plex_bot(commands.Cog):
                     *roles_to_remove, reason="Cleaning up other top roles."
                 )
 
-    # much bigger plans for this command, but nextcord/discord's buttons/paginations are really harsh to implement freely :\
-    # https://menus.docs.nextcord.dev/en/latest/ext/menus/pagination_examples/#paginated-embeds-using-descriptions
     @commands.command()
     async def recent(self, ctx, amount: int = 10) -> None:
         fields = []
@@ -399,7 +410,7 @@ class plex_bot(commands.Cog):
     async def watchers(self, ctx) -> None:
         """Display current Plex watchers with details about their activity."""
         try:
-            sessions = tautulli.get_activity()["response"]["data"]["sessions"]
+            sessions = self.tautulli.get_activity()["response"]["data"]["sessions"]
             if not sessions:
                 await ctx.send("No one is currently watching Plex.")
                 return
@@ -443,9 +454,9 @@ class plex_bot(commands.Cog):
             await ctx.send(embed=embed)
 
         except Exception as e:
-            await ctx.send(f"Failed to retrieve watchers: {e}")
+            logger.error(f"Failed to retrieve watchers: {e}")
+            await ctx.send("Failed to retrieve watchers.")
 
-    # need to start using cogs soon hehe
     @commands.command()
     async def downloading(self, ctx):
         try:
@@ -456,9 +467,12 @@ class plex_bot(commands.Cog):
                 password=f"{self.CONFIG_DATA['qbit_password']}",
             )
         except Exception as err:
-            print(
-                f"Couldn't open connection to qbittorrent, check qBit related JSON values {err}"
+            logger.error(
+                f"Couldn't open connection to qbittorrent, check qBit related JSON values: {err}"
             )
+            await ctx.send("Failed to connect to qBittorrent. Check configuration.")
+            return
+
         num_downloads = 0
         downloads_embed = nextcord.Embed(
             title="qBittorrent Live Downloads",
@@ -596,7 +610,8 @@ class plex_bot(commands.Cog):
             await ctx.send(embed=embed)
 
         except Exception as e:
-            await ctx.send(f"Failed to retrieve server status: {e}")
+            logger.error(f"Failed to retrieve server status: {e}")
+            await ctx.send("Failed to retrieve server status.")
 
     @commands.command()
     async def killstream(
@@ -618,21 +633,24 @@ class plex_bot(commands.Cog):
         r = self.tautulli.terminate_session(session_key, message=message)
         if r == 400:
             await ctx.send(
-                f"Could not find a stream with **{session_key}** or another error occured"
+                f"Could not find a stream with **{session_key}** or another error occurred"
             )
+            logger.warning(f"Failed to terminate session with key {session_key}.")
         elif r == 200:
             await ctx.send(
                 f"Killed stream with session_key: **{session_key}** and message if provided: **{message}**"
             )
+            logger.info(f"Terminated session {session_key} with message: {message}")
         else:
             await ctx.send(
-                "Something unaccounted for occured - Check console for some more info"
+                "An unexpected error occurred - check logs for more information."
             )
+            logger.error(f"Unexpected response code {r} when terminating session {session_key}.")
 
     @commands.command()
     async def shows(self, ctx):
         # Get all TV libraries
-        response = tautulli.get_libraries()
+        response = self.tautulli.get_libraries()
         libraries = response["response"]["data"]
         tv_libraries = (
             library for library in libraries if library["section_type"] == "show"
@@ -643,7 +661,7 @@ class plex_bot(commands.Cog):
         for library in tv_libraries:
             section_id = library["section_id"]
             library_name = library["section_name"]
-            response = tautulli.get_library_user_stats(section_id=section_id)
+            response = self.tautulli.get_library_user_stats(section_id=section_id)
             data = response["response"]["data"]
             for user_data in data:
                 username = user_data["username"]
@@ -712,6 +730,7 @@ class plex_bot(commands.Cog):
         response = self.tautulli.get_library_media_info(library["section_id"])
         if response.get("response", {}).get("result") != "success":
             await ctx.send("Failed to retrieve media from the library.")
+            logger.error("Failed to retrieve media from the library.")
             return
 
         movies = response.get("response", {}).get("data", {}).get("data", [])
@@ -873,7 +892,7 @@ class plex_bot(commands.Cog):
             await ctx.send(embed=embed)
 
         except Exception as e:
-            print(f"Error while executing stats: {str(e)}")
+            logger.error(f"Error while executing stats: {str(e)}")
             await ctx.send("An error occurred while fetching Plex stats.")
 
 def setup(bot):
