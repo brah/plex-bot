@@ -290,7 +290,7 @@ class plex_bot(commands.Cog):
     async def check_version(self):
         try:
             local_commit = utils.get_git_revision_short_hash()
-            latest_commit = await utils.get_git_revision_short_hash_latest_async()
+            latest_commit = utils.get_git_revision_short_hash_latest()
             return local_commit, latest_commit
         except FileNotFoundError as err:
             logger.error(f"Failed to check git commit version: {err}")
