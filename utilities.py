@@ -4,7 +4,9 @@ import asyncio
 import json
 import logging
 import subprocess
+from functools import lru_cache
 from io import BytesIO
+from typing import List, Dict, Any
 
 import aiohttp
 import nextcord
@@ -13,6 +15,88 @@ from nextcord import File
 
 logger = logging.getLogger('plexbot.utilities')
 logger.setLevel(logging.INFO)
+
+class Config:
+    _config_data = None
+
+    @classmethod
+    def load_config(cls, filename: str = "config.json") -> Dict[str, Any]:
+        """Load the configuration data from a JSON file."""
+        if cls._config_data is None:
+            try:
+                with open(filename, "r", encoding="utf-8") as f:
+                    cls._config_data = json.load(f)
+                logger.info("Configuration loaded successfully.")
+            except Exception as e:
+                logger.exception("Failed to load configuration.")
+                cls._config_data = {}
+        return cls._config_data
+
+    @classmethod
+    def get(cls, key: str, default: Any = None) -> Any:
+        """Get a configuration value."""
+        config = cls.load_config()
+        return config.get(key, default)
+
+    @classmethod
+    def save_config(cls, data: Dict[str, Any], filename: str = "config.json") -> None:
+        """Save the configuration data to a JSON file."""
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+            cls._config_data = data
+            logger.info("Configuration saved successfully.")
+        except Exception as e:
+            logger.exception("Failed to save configuration.")
+
+    @classmethod
+    def reload_config(cls, filename: str = "config.json") -> Dict[str, Any]:
+        """Reload the configuration data from the JSON file."""
+        cls._config_data = None
+        return cls.load_config(filename)
+
+class UserMappings:
+    _mappings = None
+    _mapping_file = "map.json"
+
+    @classmethod
+    @lru_cache(maxsize=1)
+    def load_user_mappings(cls) -> List[Dict[str, Any]]:
+        """Load user mappings from the JSON file."""
+        if cls._mappings is None:
+            try:
+                with open(cls._mapping_file, "r", encoding="utf-8") as json_file:
+                    cls._mappings = json.load(json_file)
+                logger.info("User mappings loaded successfully.")
+            except (json.JSONDecodeError, FileNotFoundError) as err:
+                logger.error(f"Failed to load or decode JSON: {err}")
+                cls._mappings = []
+        return cls._mappings
+
+    @classmethod
+    def save_user_mappings(cls, data: List[Dict[str, Any]]) -> None:
+        """Save user mappings to the JSON file."""
+        try:
+            with open(cls._mapping_file, "w", encoding="utf-8") as json_file:
+                json.dump(data, json_file, indent=4)
+            cls._mappings = data
+            cls.load_user_mappings.cache_clear()  # Invalidate the cache
+            logger.info("User mappings saved and cache cleared.")
+        except Exception as e:
+            logger.exception(f"Failed to save user mappings: {e}")
+
+    @classmethod
+    def get_mapping_by_discord_id(cls, discord_id: str) -> Dict[str, Any]:
+        """Get the mapping for a given Discord ID."""
+        mappings = cls.load_user_mappings()
+        return next((m for m in mappings if str(m.get("discord_id")) == discord_id), None)
+
+    @classmethod
+    def get_mapping_by_plex_username(cls, plex_username: str) -> Dict[str, Any]:
+        """Get the mapping for a given Plex username."""
+        mappings = cls.load_user_mappings()
+        return next((m for m in mappings if m.get("plex_username") == plex_username), None)
+
 
 def days_hours_minutes(seconds: int) -> str:
     """Converts seconds to days, hours, minutes."""
@@ -36,22 +120,33 @@ def days_hours_minutes(seconds: int) -> str:
 
     return ", ".join(parts) if parts else "0 minutes"
 
-def format_duration(milliseconds: int) -> str:
-    """Formats duration given in milliseconds to a string."""
-    seconds = milliseconds // 1000
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    return f"{hours}h {minutes}m"
 
-def format_size(bytes: int) -> str:
-    """Formats size given in bytes to a human-readable string."""
-    if bytes < 1024:
-        return f"{bytes} B"
-    elif bytes < 1024**2:
-        return f"{bytes / 1024:.2f} KB"
-    elif bytes < 1024**3:
-        return f"{bytes / 1024 ** 2:.2f} MB"
-    return f"{bytes / 1024 ** 3:.2f} GB"
+def get_git_revision_short_hash() -> str:
+    """Get the current git commit short hash."""
+    try:
+        return (
+            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            .decode("ascii")
+            .strip()
+        )
+    except Exception as e:
+        logger.error(f"Failed to get git revision: {e}")
+        return "unknown"
+
+
+def get_git_revision_short_hash_latest() -> str:
+    """Get the latest git commit short hash from origin."""
+    try:
+        subprocess.check_call(["git", "fetch"])
+        return (
+            subprocess.check_output(["git", "rev-parse", "--short", "origin/HEAD"])
+            .decode("ascii")
+            .strip()
+        )
+    except Exception as e:
+        logger.error(f"Failed to get latest git revision: {e}")
+        return "unknown"
+
 
 class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     def __init__(self, source, timeout=60) -> None:
@@ -61,6 +156,7 @@ class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
         self.add_item(menus.MenuPaginationButton(emoji=self.NEXT_PAGE))
         # Disable buttons that are unavailable to be pressed at the start
         self._disable_unavailable_buttons()
+
 
 class MyEmbedDescriptionPageSource(menus.ListPageSource):
     def __init__(self, data, tautulli_ip):
@@ -91,37 +187,3 @@ class MyEmbedDescriptionPageSource(menus.ListPageSource):
                     return {"embed": embed, "file": file}
 
         return embed
-
-def get_git_revision_short_hash() -> str:
-    """Get the current git commit short hash."""
-    try:
-        return (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-            .decode("ascii")
-            .strip()
-        )
-    except Exception as e:
-        logger.error(f"Failed to get git revision: {e}")
-        return "unknown"
-
-def get_git_revision_short_hash_latest() -> str:
-    """Get the latest git commit short hash from origin."""
-    try:
-        subprocess.check_call(["git", "fetch"])
-        return (
-            subprocess.check_output(["git", "rev-parse", "--short", "origin/HEAD"])
-            .decode("ascii")
-            .strip()
-        )
-    except Exception as e:
-        logger.error(f"Failed to get latest git revision: {e}")
-        return "unknown"
-
-def reload_config_json():
-    """Reload the configuration from 'config.json'."""
-    try:
-        with open("config.json", "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Failed to reload config.json: {e}")
-        return {}

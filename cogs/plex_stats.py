@@ -1,15 +1,13 @@
 # cogs/plex_stats.py
 
-import asyncio
-import json
 import logging
 from datetime import timedelta
-from functools import lru_cache
 
 import nextcord
 from nextcord.ext import commands
 
 import utilities as utils
+from utilities import Config, UserMappings
 from tautulli_wrapper import Tautulli
 
 # Configure logging for this module
@@ -20,51 +18,22 @@ logger.setLevel(logging.INFO)
 class PlexStats(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.CONFIG_DATA = json.load(open("./config.json", "r"))
-        self.CONFIG_JSON = "config.json"
-        self.LOCAL_JSON = "map.json"
-        self.tautulli = Tautulli()  # Assume Tautulli is properly initialized
+        self.tautulli: Tautulli = bot.shared_resources.get('tautulli')
         self.plex_embed_color = 0xE5A00D
-
-        self.bot.loop.create_task(self.initialize())
-
-    async def initialize(self):
-        """Asynchronous initializer for the cog."""
-        await self.bot.wait_until_ready()
-        await self.tautulli.initialize()
-
-    def cog_unload(self):
-        self.bot.loop.create_task(self.tautulli.close())
-
-    @lru_cache(maxsize=1)
-    def load_user_mappings(self):
-        """Load user mappings from the JSON file."""
-        try:
-            with open(self.LOCAL_JSON, "r", encoding="utf-8") as json_file:
-                return json.load(json_file)
-        except json.JSONDecodeError as err:
-            logger.error(f"Failed to load or decode JSON: {err}")
-            return []
-        except FileNotFoundError:
-            logger.error("User mappings file not found.")
-            return []
 
     @commands.command()
     async def top(self, ctx, set_default: int = None):
         """Displays top Plex users or sets the default duration for displaying stats."""
         if set_default is not None:
-            self.CONFIG_DATA["default_duration"] = set_default
-            try:
-                async with open(self.CONFIG_JSON, "w", encoding="utf-8") as file:
-                    await file.write(json.dumps(self.CONFIG_DATA, indent=4))
-                await ctx.send(f"Default duration set to: **{set_default}** days.")
-                logger.info(f"Default duration set to {set_default} days.")
-            except Exception as e:
-                logger.exception(f"Failed to set default duration: {e}")
-                await ctx.send("Failed to set default duration.")
+            config_data = Config.load_config()
+            config_data["default_duration"] = set_default
+            Config.save_config(config_data)
+            await ctx.send(f"Default duration set to: **{set_default}** days.")
+            logger.info(f"Default duration set to {set_default} days.")
             return
 
-        duration = self.CONFIG_DATA.get("default_duration", 7)
+        config_data = Config.load_config()
+        duration = config_data.get("default_duration", 7)
         response = await self.tautulli.get_home_stats(
             params={
                 "stats_type": "duration",
@@ -73,7 +42,7 @@ class PlexStats(commands.Cog):
                 "time_range": duration,
             }
         )
-        if response["response"]["result"] != "success":
+        if not response or response.get("response", {}).get("result") != "success":
             await ctx.send("Failed to retrieve top users.")
             logger.error("Failed to retrieve top users from Tautulli.")
             return
@@ -82,7 +51,7 @@ class PlexStats(commands.Cog):
             title=f"Plex Top (last {duration} days)", color=self.plex_embed_color
         )
         total_watchtime = 0
-        user_data = self.load_user_mappings()
+        user_data = UserMappings.load_user_mappings()
         ignored_users = {
             user["plex_username"]: user
             for user in user_data
@@ -131,7 +100,7 @@ class PlexStats(commands.Cog):
         history_data = await self.tautulli.get_history()
         total_duration_all_time = (history_data["response"]["data"]["total_duration"])
         embed.set_footer(
-            text=f"Total Watchtime: {total_watch_time_str}\nAll time: {total_duration_all_time}"
+            text=f"Total Watchtime: {total_watch_time_str}\nAll time: {utils.days_hours_minutes(total_duration_all_time)}"
         )
 
         await ctx.send(embed=embed)
@@ -139,10 +108,11 @@ class PlexStats(commands.Cog):
 
     async def clean_roles(self, ctx, top_users):
         """Remove roles based on new top users and reassign correctly."""
+        config_data = Config.load_config()
         role_ids = [
-            self.CONFIG_DATA.get("plex_top"),
-            self.CONFIG_DATA.get("plex_two"),
-            self.CONFIG_DATA.get("plex_three"),
+            config_data.get("plex_top"),
+            config_data.get("plex_two"),
+            config_data.get("plex_three"),
         ]
         roles = [ctx.guild.get_role(role_id) for role_id in role_ids if role_id]
 
@@ -169,13 +139,13 @@ class PlexStats(commands.Cog):
                     logger.error(f"Failed to remove roles from {member.display_name}: {e}")
 
         # Assign the correct roles to the new top users
-        for rank, user_id in enumerate(top_users.values(), start=1):
-            member = ctx.guild.get_member(user_id)
+        for rank, user_id in top_users.items():
+            member = ctx.guild.get_member(int(user_id))
             if not member:
                 logger.warning(f"Member with ID {user_id} not found in guild.")
                 continue
 
-            if rank <= len(role_ids):
+            if rank <= len(roles):
                 correct_role = roles[rank - 1]
                 roles_to_remove = [role for role in roles if role != correct_role]
                 try:
@@ -346,7 +316,7 @@ class PlexStats(commands.Cog):
 
     @commands.command()
     async def history(self, ctx, *, identifier: str = None):
-        """Prints a user's previously watched media. Usable with plex watchlist <@user> or <plex_username>."""
+        """Prints a user's previously watched media. Usable with plex history <@user> or <plex_username>."""
         member = None
         plex_username = None
 
@@ -364,14 +334,14 @@ class PlexStats(commands.Cog):
             logger.error("Failed to retrieve watch history from Tautulli.")
             return
 
-        dc_plex_json = self.load_user_mappings()  # Use cached results
+        user_data = UserMappings.load_user_mappings()
 
         if member:
             # Find Plex username by Discord member ID
             plex_user = next(
                 (
                     item
-                    for item in dc_plex_json
+                    for item in user_data
                     if str(item.get("discord_id")) == str(member.id)
                 ),
                 None,

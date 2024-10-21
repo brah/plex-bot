@@ -2,25 +2,24 @@
 
 import asyncio
 import logging
-import json
 from datetime import timedelta
 
 import aiohttp
 import nextcord
 from nextcord.ext import commands
 
-import utilities as utils
+from utilities import Config, get_git_revision_short_hash, get_git_revision_short_hash_latest
 from tautulli_wrapper import Tautulli
 
 # Configure logging for this module
 logger = logging.getLogger('plexbot.server_commands')
 logger.setLevel(logging.INFO)
 
+
 class ServerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.CONFIG_DATA = json.load(open("./config.json", "r"))
-        self.tautulli = Tautulli()
+        self.tautulli: Tautulli = bot.shared_resources.get('tautulli')
         self.plex_embed_color = 0xE5A00D
         self.plex_image = "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
         self.bot.loop.create_task(self.initialize())
@@ -39,6 +38,10 @@ class ServerCommands(commands.Cog):
         while not self.bot.is_closed():
             try:
                 response = await self.tautulli.get_activity()
+                if response.get("response", {}).get("result") != "success":
+                    logger.error("Failed to retrieve activity from Tautulli.")
+                    await asyncio.sleep(15)
+                    continue
                 stream_count = response["response"]["data"]["stream_count"]
                 wan_bandwidth_mbps = round(
                     (response["response"]["data"]["wan_bandwidth"] / 1000), 1
@@ -68,7 +71,8 @@ class ServerCommands(commands.Cog):
             r = await self.tautulli.get_home_stats()
             status = r["response"]["result"]
 
-            local_commit, latest_commit = await self.check_version()
+            local_commit = get_git_revision_short_hash()
+            latest_commit = get_git_revision_short_hash_latest()
             up_to_date = ""
             if local_commit and latest_commit:
                 up_to_date = (
@@ -90,24 +94,16 @@ class ServerCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error during bot initialization: {e}")
 
-    async def check_version(self):
-        try:
-            local_commit = utils.get_git_revision_short_hash()
-            latest_commit = utils.get_git_revision_short_hash_latest()
-            return local_commit, latest_commit
-        except FileNotFoundError as err:
-            logger.error(f"Failed to check git commit version: {err}")
-            return None, None
-        except Exception as e:
-            logger.error(f"Unexpected error during version check: {e}")
-            return None, None
-
     @commands.command()
     async def status(self, ctx):
         """Displays the status of the Plex server and other related information."""
         try:
             # Getting Tautulli server info
             server_info_response = await self.tautulli.get_server_info()
+            if server_info_response.get("response", {}).get("result") != "success":
+                await ctx.send("Failed to retrieve server info from Tautulli.")
+                logger.error("Failed to retrieve server info from Tautulli.")
+                return
             server_info = server_info_response["response"]
 
             # Fetching Plex status from Plex API asynchronously
@@ -151,7 +147,7 @@ class ServerCommands(commands.Cog):
 
     @commands.command()
     async def killstream(
-        self, ctx, session_key: str = None, message: str = None
+        self, ctx, session_key: str = None, *, message: str = None
     ):
         """Terminates a Plex stream based on the session key."""
         session_keys = []

@@ -6,15 +6,16 @@ Entry point for the PlexBot Discord bot.
 Initializes the bot, loads configurations, sets up logging, and starts the bot.
 """
 
-import json
 import logging
-import os
 import sys
 import traceback
 from pathlib import Path
 
 import nextcord
 from nextcord.ext import commands
+
+from utilities import Config
+from tautulli_wrapper import Tautulli, TMDB
 
 # Configure logging
 logging.basicConfig(
@@ -29,12 +30,9 @@ def main():
     logger.info("Starting PlexBot...")
 
     # Load configuration
-    try:
-        with open("config.json", "r") as f:
-            config = json.load(f)
-        logger.info("Configuration loaded successfully.")
-    except Exception as e:
-        logger.exception("Failed to load configuration.")
+    config = Config.load_config()
+    if not config:
+        logger.error("Failed to load configuration.")
         return
 
     # Validate required configuration keys
@@ -46,15 +44,24 @@ def main():
 
     # Create the bot and configure intents
     intents = nextcord.Intents.default()
-    # Need message_content for prefix commands
     intents.message_content = True
-    # Need members for role changes in plex_top
     intents.members = True
 
     # Initialize bot with the prefix `plex ` and intents
     bot = commands.Bot(
         command_prefix=["plex ", "Plex "], intents=intents, help_command=None
     )
+
+    # Initialize shared resources
+    tautulli = Tautulli(api_key=config["tautulli_apikey"], tautulli_ip=config["tautulli_ip"])
+    tmdb_api_key = config.get("tmdb_apikey")
+    tmdb = TMDB(api_key=tmdb_api_key) if tmdb_api_key else None
+
+    # Pass shared resources to cogs upon initialization
+    bot.shared_resources = {
+        'tautulli': tautulli,
+        'tmdb': tmdb,
+    }
 
     @bot.event
     async def on_ready():

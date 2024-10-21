@@ -1,34 +1,38 @@
 # cogs/media_commands.py
 
 import asyncio
-from datetime import timedelta
 import json
 import logging
 import random
-from pathlib import Path
+from datetime import timedelta
 from io import BytesIO
-from functools import lru_cache
+from pathlib import Path
 
 import aiofiles
 import aiohttp
 import nextcord
-from nextcord.ext import commands, tasks
 from nextcord import File
+from nextcord.ext import commands, tasks
 
-import utilities as utils
-from tautulli_wrapper import Tautulli
-from tautulli_wrapper import TMDB
+from utilities import (
+    Config,
+    UserMappings,
+    NoStopButtonMenuPages,
+    MyEmbedDescriptionPageSource,
+    days_hours_minutes,
+)
+from tautulli_wrapper import Tautulli, TMDB
 
 # Configure logging for this module
 logger = logging.getLogger('plexbot.media_commands')
 logger.setLevel(logging.INFO)
 
+
 class MediaCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.CONFIG_DATA = json.load(open("./config.json", "r"))
-        self.tautulli = Tautulli()
-        self.tmdb = TMDB()  # Assuming you use TMDB in your commands
+        self.tautulli: Tautulli = bot.shared_resources.get('tautulli')
+        self.tmdb: TMDB = bot.shared_resources.get('tmdb')
         self.plex_embed_color = 0xE5A00D
         self.plex_image = (
             "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
@@ -44,7 +48,8 @@ class MediaCommands(commands.Cog):
         """Asynchronous initializer for the cog."""
         await self.bot.wait_until_ready()
         await self.tautulli.initialize()
-        await self.tmdb.initialize()
+        if self.tmdb:
+            await self.tmdb.initialize()
         await self.load_cache_from_disk()
         self.update_media_cache.start()
 
@@ -52,7 +57,8 @@ class MediaCommands(commands.Cog):
         self.update_media_cache.cancel()
         self.bot.loop.create_task(self.save_cache_to_disk())
         self.bot.loop.create_task(self.tautulli.close())
-        self.bot.loop.create_task(self.tmdb.close())
+        if self.tmdb:
+            self.bot.loop.create_task(self.tmdb.close())
 
     @tasks.loop(hours=1)
     async def update_media_cache(self):
@@ -134,8 +140,8 @@ class MediaCommands(commands.Cog):
                             return None
 
                 # Use asyncio.gather to fetch metadata concurrently with exception handling
-                tasks = [fetch_item_metadata(rating_key) for rating_key in rating_keys]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+                tasks_list = [fetch_item_metadata(rating_key) for rating_key in rating_keys]
+                results = await asyncio.gather(*tasks_list, return_exceptions=True)
 
                 # Handle exceptions and filter out None results
                 for idx, result in enumerate(results):
@@ -193,6 +199,11 @@ class MediaCommands(commands.Cog):
         fields = []
         try:
             response = await self.tautulli.get_recently_added(count=amount)
+            if response.get("response", {}).get("result") != "success":
+                await ctx.send("Failed to retrieve recent additions.")
+                logger.error("Failed to retrieve recent additions from Tautulli.")
+                return
+
             for entry in response["response"]["data"]["recently_added"]:
                 if entry.get("originally_available_at") == "":
                     continue
@@ -200,7 +211,7 @@ class MediaCommands(commands.Cog):
                 if entry.get("grandparent_title"):
                     entry["title"] = f"{entry['grandparent_title']} - {entry['title']}"
                 if entry.get("rating") == "":
-                    entry["rating"] = "nil"
+                    entry["rating"] = "N/A"
                 entry_data = {
                     "description": f"**🎥 {entry['title']}** 🕗 {entry['originally_available_at']} 🍅: {entry['rating']}/10\n{entry.get('summary', '')}\n",
                     "thumb_key": entry.get("thumb", ""),
@@ -208,8 +219,8 @@ class MediaCommands(commands.Cog):
                 fields.append(entry_data)
 
             tautulli_ip = self.tautulli.tautulli_ip  # Tautulli webserver IP
-            pages = utils.NoStopButtonMenuPages(
-                source=utils.MyEmbedDescriptionPageSource(fields, tautulli_ip),
+            pages = NoStopButtonMenuPages(
+                source=MyEmbedDescriptionPageSource(fields, tautulli_ip),
             )
             await pages.start(ctx)
         except Exception as e:
@@ -387,8 +398,8 @@ class MediaCommands(commands.Cog):
                 await ctx.send("No one is currently watching Plex.")
                 return
 
-            # Load ignored users list using caching
-            user_data = self.load_user_mappings()
+            # Load ignored users list
+            user_data = UserMappings.load_user_mappings()
             ignored_users = {
                 user["plex_username"] for user in user_data if user.get("ignore", False)
             }
@@ -429,20 +440,11 @@ class MediaCommands(commands.Cog):
             logger.error(f"Failed to retrieve watchers: {e}")
             await ctx.send("Failed to retrieve watchers.")
 
-    @lru_cache(maxsize=1)
-    def load_user_mappings(self):
-        """Load user mappings from the JSON file."""
-        try:
-            with open("map.json", "r", encoding="utf-8") as json_file:
-                return json.load(json_file)
-        except (json.JSONDecodeError, FileNotFoundError) as err:
-            logger.error(f"Failed to load or decode JSON: {err}")
-            return []
-
     @commands.command()
     async def downloading(self, ctx):
         """Display current live downloads from qBittorrent."""
-        if not self.CONFIG_DATA.get("qbit_ip"):
+        config_data = Config.load_config()
+        if not config_data.get("qbit_ip"):
             await ctx.send("qBittorrent is not configured.")
             logger.error("qBittorrent configuration missing.")
             return
@@ -456,10 +458,10 @@ class MediaCommands(commands.Cog):
 
         try:
             qbt_client = qbittorrentapi.Client(
-                host=f"{self.CONFIG_DATA['qbit_ip']}",
-                port=f"{self.CONFIG_DATA['qbit_port']}",
-                username=f"{self.CONFIG_DATA['qbit_username']}",
-                password=f"{self.CONFIG_DATA['qbit_password']}",
+                host=f"{config_data['qbit_ip']}",
+                port=f"{config_data['qbit_port']}",
+                username=f"{config_data['qbit_username']}",
+                password=f"{config_data['qbit_password']}",
             )
             qbt_client.auth_log_in()
         except Exception as err:

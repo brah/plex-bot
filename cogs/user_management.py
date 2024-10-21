@@ -1,11 +1,11 @@
 # cogs/user_management.py
 
-import json
 import logging
-from functools import lru_cache
 
 import nextcord
 from nextcord.ext import commands
+
+from utilities import UserMappings
 
 # Configure logging for this module
 logger = logging.getLogger('plexbot.user_management')
@@ -15,31 +15,6 @@ logger.setLevel(logging.INFO)
 class UserManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.LOCAL_JSON = "map.json"
-        self.CONFIG_JSON = "config.json"
-
-    @lru_cache(maxsize=1)
-    def load_user_mappings(self):
-        """Load user mappings from the JSON file."""
-        try:
-            with open(self.LOCAL_JSON, "r", encoding="utf-8") as json_file:
-                return json.load(json_file)
-        except json.JSONDecodeError as err:
-            logger.error(f"Failed to load or decode JSON: {err}")
-            return []
-        except FileNotFoundError:
-            logger.error("User mappings file not found.")
-            return []
-
-    def save_user_mappings(self, data):
-        """Save user mappings to the JSON file."""
-        try:
-            with open(self.LOCAL_JSON, "w", encoding="utf-8") as json_file:
-                json.dump(data, json_file, indent=4)
-            self.load_user_mappings.cache_clear()  # Invalidate the cache after updating the file
-            logger.info("User mappings saved and cache cleared.")
-        except Exception as e:
-            logger.exception(f"Failed to save user mappings: {e}")
 
     @commands.command()
     async def mapdiscord(
@@ -51,16 +26,16 @@ class UserManagement(commands.Cog):
             return
 
         discord_user = discord_user or ctx.author
-        dc_plex_json = self.load_user_mappings()
+        mappings = UserMappings.load_user_mappings()
 
-        for member in dc_plex_json:
+        for member in mappings:
             if str(member.get("discord_id")) == str(discord_user.id):
                 if member.get("plex_username") == plex_username:
                     await ctx.send(f"You are already mapped to {plex_username}.")
                     return
                 else:
                     member["plex_username"] = plex_username
-                    self.save_user_mappings(dc_plex_json)
+                    UserMappings.save_user_mappings(mappings)
                     await ctx.send(
                         f"Successfully updated mapping for {discord_user.display_name} to {plex_username}."
                     )
@@ -68,10 +43,10 @@ class UserManagement(commands.Cog):
                     return
 
         # If user is not found, add them
-        dc_plex_json.append(
+        mappings.append(
             {"discord_id": discord_user.id, "plex_username": plex_username}
         )
-        self.save_user_mappings(dc_plex_json)
+        UserMappings.save_user_mappings(mappings)
         await ctx.send(
             f"Successfully mapped {discord_user.display_name} to {plex_username}."
         )
@@ -84,10 +59,10 @@ class UserManagement(commands.Cog):
             await ctx.send("Please provide a valid Plex username.")
             return
 
-        data = self.load_user_mappings()  # Use cached data
+        mappings = UserMappings.load_user_mappings()
         found = False
 
-        for member in data:
+        for member in mappings:
             if member.get("plex_username") == plex_username:
                 member["ignore"] = not member.get("ignore", False)
                 found = True
@@ -97,13 +72,13 @@ class UserManagement(commands.Cog):
                 break
 
         if not found:
-            data.append(
+            mappings.append(
                 {"discord_id": "", "plex_username": plex_username, "ignore": True}
             )
             await ctx.send(f"{plex_username} is now ignored in top lists.")
             logger.info(f"{plex_username} is now ignored in top lists.")
 
-        self.save_user_mappings(data)  # Save and clear cache
+        UserMappings.save_user_mappings(mappings)
 
 
 def setup(bot):

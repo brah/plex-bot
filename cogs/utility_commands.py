@@ -4,7 +4,6 @@ import logging
 import nextcord
 from nextcord.ext import commands
 
-# Configure logging for this module
 logger = logging.getLogger('plexbot.utility_commands')
 logger.setLevel(logging.INFO)
 
