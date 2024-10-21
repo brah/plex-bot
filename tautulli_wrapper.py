@@ -260,3 +260,40 @@ class TMDB:
             else:
                 logger.error(f"Failed to get movie details: {response.status}")
                 return None
+
+    async def get_genre_id(self, genre_name: str) -> Optional[int]:
+        """Get the TMDB genre ID for a given genre name."""
+        url = self.tmdb_api_url + "genre/movie/list"
+        params = {'api_key': self.api_key, 'language': 'en-US'}
+        async with self.session.get(url=url, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                genres = data.get('genres', [])
+                for genre in genres:
+                    if genre['name'].lower() == genre_name.lower():
+                        return genre['id']
+            else:
+                logger.error(f"Failed to get genre list: {response.status}")
+        return None
+
+    async def get_popular_items(self, genre_id: int) -> Optional[list]:
+        """Get popular movies or shows for a given genre ID."""
+        recommendations = []
+        for media_type in ['movie', 'tv']:
+            url = self.tmdb_api_url + f"discover/{media_type}"
+            params = {
+                'api_key': self.api_key,
+                'language': 'en-US',
+                'sort_by': 'popularity.desc',
+                'with_genres': genre_id,
+                'include_adult': 'false',  # Convert boolean to string
+            }
+            async with self.session.get(url=url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    for item in data.get('results', []):
+                        item['media_type'] = media_type
+                        recommendations.append(item)
+                else:
+                    logger.error(f"Failed to get popular items for {media_type}: {response.status}")
+        return recommendations
