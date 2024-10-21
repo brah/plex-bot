@@ -1,3 +1,5 @@
+# plex_bot.py
+
 """
 Entry point for the PlexBot Discord bot.
 
