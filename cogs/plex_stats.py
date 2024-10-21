@@ -100,7 +100,7 @@ class PlexStats(commands.Cog):
         history_data = await self.tautulli.get_history()
         total_duration_all_time = (history_data["response"]["data"]["total_duration"])
         embed.set_footer(
-            text=f"Total Watchtime: {total_watch_time_str}\nAll time: {utils.days_hours_minutes(total_duration_all_time)}"
+            text=f"Total Watchtime: {total_watch_time_str}\nAll time: {total_duration_all_time}"
         )
 
         await ctx.send(embed=embed)
