@@ -233,26 +233,33 @@ class MediaCommands(commands.Cog):
 
         Usage:
         plex random [media_type] [genre]
+        plex random [genre] [media_type]
 
         Examples:
         plex random
         plex random movie
         plex random tv comedy
         plex random movie horror
+        plex random horror movie
         """
         # Parse arguments
         media_type = None
         genre = None
 
         if args:
-            # If first argument is 'movie', 'tv', or 'any', it's the media_type
-            if args[0].lower() in ['movie', 'tv', 'any']:
-                media_type = args[0].lower()
-                if len(args) > 1:
-                    genre = ' '.join(args[1:]).lower()
-            else:
-                # No media_type specified, treat all args as genre
-                genre = ' '.join(args).lower()
+            # Lowercase all arguments for case-insensitive comparison
+            args_lower = [arg.lower() for arg in args]
+            # Possible media types
+            media_types = ['movie', 'tv', 'any']
+            # Check for media type in args
+            media_type_in_args = set(args_lower) & set(media_types)
+            if media_type_in_args:
+                media_type = media_type_in_args.pop()
+                # Remove the media type from args
+                args_lower.remove(media_type)
+            # The remaining args are genre
+            if args_lower:
+                genre = ' '.join(args_lower).lower()
         logger.info(f"Searching for {genre} of mediatype {media_type}")
 
         # Use the cached media items
