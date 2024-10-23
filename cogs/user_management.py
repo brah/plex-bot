@@ -8,7 +8,7 @@ from nextcord.ext import commands
 from utilities import UserMappings
 
 # Configure logging for this module
-logger = logging.getLogger('plexbot.user_management')
+logger = logging.getLogger("plexbot.user_management")
 logger.setLevel(logging.INFO)
 
 
@@ -17,9 +17,7 @@ class UserManagement(commands.Cog):
         self.bot = bot
 
     @commands.command()
-    async def mapdiscord(
-        self, ctx, plex_username: str, discord_user: nextcord.User = None
-    ):
+    async def mapdiscord(self, ctx, plex_username: str, discord_user: nextcord.User = None):
         """Map a Discord user to a Plex username."""
         if not plex_username.strip():
             await ctx.send("Please provide a valid Plex username.")
@@ -43,13 +41,9 @@ class UserManagement(commands.Cog):
                     return
 
         # If user is not found, add them
-        mappings.append(
-            {"discord_id": discord_user.id, "plex_username": plex_username}
-        )
+        mappings.append({"discord_id": discord_user.id, "plex_username": plex_username})
         UserMappings.save_user_mappings(mappings)
-        await ctx.send(
-            f"Successfully mapped {discord_user.display_name} to {plex_username}."
-        )
+        await ctx.send(f"Successfully mapped {discord_user.display_name} to {plex_username}.")
         logger.info(f"Mapped {discord_user.display_name} to {plex_username}.")
 
     @commands.command()
@@ -72,9 +66,7 @@ class UserManagement(commands.Cog):
                 break
 
         if not found:
-            mappings.append(
-                {"discord_id": "", "plex_username": plex_username, "ignore": True}
-            )
+            mappings.append({"discord_id": "", "plex_username": plex_username, "ignore": True})
             await ctx.send(f"{plex_username} is now ignored in top lists.")
             logger.info(f"{plex_username} is now ignored in top lists.")
 

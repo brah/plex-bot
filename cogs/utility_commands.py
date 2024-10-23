@@ -4,8 +4,9 @@ import logging
 import nextcord
 from nextcord.ext import commands
 
-logger = logging.getLogger('plexbot.utility_commands')
+logger = logging.getLogger("plexbot.utility_commands")
 logger.setLevel(logging.INFO)
+
 
 class UtilityCommands(commands.Cog):
     def __init__(self, bot):
@@ -63,9 +64,7 @@ class UtilityCommands(commands.Cog):
                 color=self.plex_embed_color,
             )
             if cmd.aliases:
-                embed.add_field(
-                    name="Aliases", value=", ".join(cmd.aliases), inline=False
-                )
+                embed.add_field(name="Aliases", value=", ".join(cmd.aliases), inline=False)
 
             # Formatting parameters for usage display
             params = [
@@ -81,6 +80,7 @@ class UtilityCommands(commands.Cog):
                 )
 
             await ctx.send(embed=embed)
+
 
 def setup(bot):
     bot.add_cog(UtilityCommands(bot))

@@ -15,21 +15,21 @@ from io import BytesIO
 from nextcord import File
 
 # Configure logging for this module
-logger = logging.getLogger('plexbot.recommendations')
+logger = logging.getLogger("plexbot.recommendations")
 logger.setLevel(logging.INFO)
 
 
 class Recommendations(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.tautulli: Tautulli = bot.shared_resources.get('tautulli')
+        self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.plex_embed_color = 0xE5A00D
 
         # Mapping from number emoji to integer
         self.number_emojis = {
-            '1️⃣': 0,
-            '2️⃣': 1,
-            '3️⃣': 2,
+            "1️⃣": 0,
+            "2️⃣": 1,
+            "3️⃣": 2,
         }
 
     @commands.command()
@@ -42,7 +42,7 @@ class Recommendations(commands.Cog):
         If no member is specified, recommends based on the invoking user's history.
         """
         # Access the media cache and lock from the MediaCommands cog
-        media_commands_cog = self.bot.get_cog('MediaCommands')
+        media_commands_cog = self.bot.get_cog("MediaCommands")
         if media_commands_cog:
             media_cache = media_commands_cog.media_cache
             cache_lock = media_commands_cog.cache_lock
@@ -64,14 +64,14 @@ class Recommendations(commands.Cog):
             logger.warning(f"{member.display_name} is not mapped to a Plex user.")
             return
 
-        plex_username = user_mapping.get('plex_username')
+        plex_username = user_mapping.get("plex_username")
 
         # Fetch user's watch history
         params = {
-            'user': plex_username,
-            'length': 10000,  # Fetch a large number of history entries
-            'order_column': 'date',
-            'order_dir': 'desc',
+            "user": plex_username,
+            "length": 10000,  # Fetch a large number of history entries
+            "order_column": "date",
+            "order_dir": "desc",
         }
         response = await self.tautulli.get_history(params=params)
 
@@ -89,7 +89,7 @@ class Recommendations(commands.Cog):
         # Collect all possible rating keys from the history entries
         watched_rating_keys = set()
         for entry in history_entries:
-            for key in ['rating_key', 'parent_rating_key', 'grandparent_rating_key']:
+            for key in ["rating_key", "parent_rating_key", "grandparent_rating_key"]:
                 if entry.get(key):
                     watched_rating_keys.add(str(entry[key]))
 
@@ -100,12 +100,12 @@ class Recommendations(commands.Cog):
         async with cache_lock:
             for item in media_cache:
                 item_keys = [
-                    str(item.get('rating_key')),
-                    str(item.get('parent_rating_key')),
-                    str(item.get('grandparent_rating_key')),
+                    str(item.get("rating_key")),
+                    str(item.get("parent_rating_key")),
+                    str(item.get("grandparent_rating_key")),
                 ]
-                if any(key in watched_rating_keys for key in item_keys) and item.get('genres'):
-                    watched_genres.extend(item['genres'])
+                if any(key in watched_rating_keys for key in item_keys) and item.get("genres"):
+                    watched_genres.extend(item["genres"])
 
         logger.debug(f"Watched genres: {watched_genres}")
 
@@ -126,7 +126,7 @@ class Recommendations(commands.Cog):
             return
 
         # Inform the user about their top genres
-        genres_formatted = ', '.join(top_genres)
+        genres_formatted = ", ".join(top_genres)
         await ctx.send(f"Based on your favorite genres: **{genres_formatted}**")
 
         # Find media items in the top genres that the user hasn't watched yet
@@ -134,14 +134,13 @@ class Recommendations(commands.Cog):
         async with cache_lock:
             for item in media_cache:
                 item_keys = [
-                    str(item.get('rating_key')),
-                    str(item.get('parent_rating_key')),
-                    str(item.get('grandparent_rating_key')),
+                    str(item.get("rating_key")),
+                    str(item.get("parent_rating_key")),
+                    str(item.get("grandparent_rating_key")),
                 ]
-                item_genres = [genre.title() for genre in item.get('genres', [])]
-                if (
-                    any(genre in top_genres for genre in item_genres) and
-                    not any(key in watched_rating_keys for key in item_keys)
+                item_genres = [genre.title() for genre in item.get("genres", [])]
+                if any(genre in top_genres for genre in item_genres) and not any(
+                    key in watched_rating_keys for key in item_keys
                 ):
                     recommendations.append(item)
 
@@ -156,7 +155,7 @@ class Recommendations(commands.Cog):
         # Get the number of unique users who watched each recommendation
         user_counts = []
         for item in selected_recommendations:
-            rating_key = item.get('rating_key')
+            rating_key = item.get("rating_key")
             watched_users = await self.get_watched_users(rating_key, return_count=True)
             user_counts.append(watched_users)
 
@@ -169,11 +168,11 @@ class Recommendations(commands.Cog):
         embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
         for idx, (item, user_count) in enumerate(zip(selected_recommendations, user_counts), start=1):
-            title = item.get('title') or 'Unknown Title'
-            overview = item.get('summary', 'No description available.')
-            year = item.get('year', 'Unknown')
-            media_type = item.get('media_type', 'movie').capitalize()
-            genres = ', '.join([genre.title() for genre in item.get('genres', [])])
+            title = item.get("title") or "Unknown Title"
+            overview = item.get("summary", "No description available.")
+            year = item.get("year", "Unknown")
+            media_type = item.get("media_type", "movie").capitalize()
+            genres = ", ".join([genre.title() for genre in item.get("genres", [])])
 
             field_value = (
                 f"**Summary**: {overview}\n"
@@ -190,17 +189,25 @@ class Recommendations(commands.Cog):
         message = await ctx.send(embed=embed)
 
         # Add number reactions
-        for emoji in list(self.number_emojis.keys())[:len(selected_recommendations)]:
+        for emoji in list(self.number_emojis.keys())[: len(selected_recommendations)]:
             await message.add_reaction(emoji)
 
         interaction_timeout = 180  # 3 minutes
         end_time = asyncio.get_event_loop().time() + interaction_timeout
 
         def add_check(reaction, user):
-            return reaction.message.id == message.id and user == ctx.author and str(reaction.emoji) in self.number_emojis
+            return (
+                reaction.message.id == message.id
+                and user == ctx.author
+                and str(reaction.emoji) in self.number_emojis
+            )
 
         def remove_check(reaction, user):
-            return reaction.message.id == message.id and user == ctx.author and str(reaction.emoji) in self.number_emojis
+            return (
+                reaction.message.id == message.id
+                and user == ctx.author
+                and str(reaction.emoji) in self.number_emojis
+            )
 
         # Keep a copy of the original embed
         original_embed = embed.copy()
@@ -212,8 +219,8 @@ class Recommendations(commands.Cog):
                 break
 
             tasks = [
-                self.bot.wait_for('reaction_add', timeout=time_remaining, check=add_check),
-                self.bot.wait_for('reaction_remove', timeout=time_remaining, check=remove_check)
+                self.bot.wait_for("reaction_add", timeout=time_remaining, check=add_check),
+                self.bot.wait_for("reaction_remove", timeout=time_remaining, check=remove_check),
             ]
 
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -235,7 +242,9 @@ class Recommendations(commands.Cog):
                 # Check if it's a reaction add or remove
                 if reaction.count > 1:
                     # Reaction added
-                    detailed_message = await self.show_detailed_info(ctx, selected_item, plex_username, detailed_message)
+                    detailed_message = await self.show_detailed_info(
+                        ctx, selected_item, plex_username, detailed_message
+                    )
                 else:
                     # Reaction removed
                     # Delete the detailed message
@@ -254,7 +263,9 @@ class Recommendations(commands.Cog):
                         emoji = user_reactions[0]
                         selected_index = self.number_emojis[emoji]
                         selected_item = selected_recommendations[selected_index]
-                        detailed_message = await self.show_detailed_info(ctx, selected_item, plex_username, detailed_message)
+                        detailed_message = await self.show_detailed_info(
+                            ctx, selected_item, plex_username, detailed_message
+                        )
                     else:
                         # No reactions left from the user, remove detailed message
                         if detailed_message:
@@ -266,10 +277,10 @@ class Recommendations(commands.Cog):
 
     async def show_detailed_info(self, ctx, item, plex_username, detailed_message=None):
         """Shows detailed information for the selected media item."""
-        title = item.get('title') or 'Unknown Title'
-        year = item.get('year', 'Unknown')
-        media_type = item.get('media_type', 'movie').capitalize()
-        thumb = item.get('thumb')  # Use 'thumb' key as in media_commands.py
+        title = item.get("title") or "Unknown Title"
+        year = item.get("year", "Unknown")
+        media_type = item.get("media_type", "movie").capitalize()
+        thumb = item.get("thumb")  # Use 'thumb' key as in media_commands.py
 
         # Create a new embed with the poster and additional details
         embed = nextcord.Embed(
@@ -278,24 +289,20 @@ class Recommendations(commands.Cog):
         )
 
         # Include additional details
-        overview = item.get('summary', 'No description available.')
-        rating = item.get('rating') or 'N/A'
-        genres = ', '.join([genre.title() for genre in item.get('genres', [])])
+        overview = item.get("summary", "No description available.")
+        rating = item.get("rating") or "N/A"
+        genres = ", ".join([genre.title() for genre in item.get("genres", [])])
 
         # Get the list of Discord usernames of users who watched this item
-        rating_key = item.get('rating_key')
+        rating_key = item.get("rating_key")
         watched_users = await self.get_watched_users(rating_key, exclude_user=plex_username)
 
-        field_value = (
-            f"**Summary**: {overview}\n"
-            f"**Genres**: {genres}\n"
-            f"**Rating**: {rating}\n"
-        )
+        field_value = f"**Summary**: {overview}\n" f"**Genres**: {genres}\n" f"**Rating**: {rating}\n"
 
         if watched_users:
             field_value += f"**Watched by**: {', '.join(watched_users)}\n"
         else:
-            field_value += f"**Watched by**: None of your friends have watched this yet!\n"
+            field_value += f"**Watched by**: No one yet!\n"
 
         embed.description = field_value
 
@@ -340,7 +347,9 @@ class Recommendations(commands.Cog):
         """Construct the full image URL for thumbnails."""
         if thumb_key:
             tautulli_ip = self.tautulli.tautulli_ip
-            return f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
+            return (
+                f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
+            )
         return ""
 
     async def get_watched_users(self, rating_key, exclude_user=None, return_count=False):
@@ -355,12 +364,12 @@ class Recommendations(commands.Cog):
 
         watched_users = []
         for user_stat in user_stats:
-            plex_username = user_stat.get('username')
+            plex_username = user_stat.get("username")
             if exclude_user and plex_username == exclude_user:
                 continue  # Exclude the requesting user
             user_mapping = UserMappings.get_mapping_by_plex_username(plex_username)
-            if user_mapping and not user_mapping.get('ignore', False):
-                discord_id = user_mapping.get('discord_id')
+            if user_mapping and not user_mapping.get("ignore", False):
+                discord_id = user_mapping.get("discord_id")
                 try:
                     discord_user = self.bot.get_user(int(discord_id))
                     if discord_user is None:
@@ -372,6 +381,7 @@ class Recommendations(commands.Cog):
         if return_count:
             return len(watched_users)
         return watched_users
+
 
 def setup(bot):
     bot.add_cog(Recommendations(bot))

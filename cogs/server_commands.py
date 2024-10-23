@@ -8,18 +8,22 @@ import aiohttp
 import nextcord
 from nextcord.ext import commands
 
-from utilities import Config, get_git_revision_short_hash, get_git_revision_short_hash_latest
+from utilities import (
+    Config,
+    get_git_revision_short_hash,
+    get_git_revision_short_hash_latest,
+)
 from tautulli_wrapper import Tautulli
 
 # Configure logging for this module
-logger = logging.getLogger('plexbot.server_commands')
+logger = logging.getLogger("plexbot.server_commands")
 logger.setLevel(logging.INFO)
 
 
 class ServerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.tautulli: Tautulli = bot.shared_resources.get('tautulli')
+        self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.plex_embed_color = 0xE5A00D
         self.plex_image = "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
         self.bot.loop.create_task(self.initialize())
@@ -43,14 +47,10 @@ class ServerCommands(commands.Cog):
                     await asyncio.sleep(15)
                     continue
                 stream_count = response["response"]["data"]["stream_count"]
-                wan_bandwidth_mbps = round(
-                    (response["response"]["data"]["wan_bandwidth"] / 1000), 1
-                )
+                wan_bandwidth_mbps = round((response["response"]["data"]["wan_bandwidth"] / 1000), 1)
 
                 if display_streams:
-                    activity_text = (
-                        f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
-                    )
+                    activity_text = f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
                     activity_type = nextcord.ActivityType.playing
                 else:
                     activity_text = ": plex help"
@@ -76,9 +76,7 @@ class ServerCommands(commands.Cog):
             up_to_date = ""
             if local_commit and latest_commit:
                 up_to_date = (
-                    "Version outdated. Consider running git pull"
-                    if local_commit != latest_commit
-                    else ""
+                    "Version outdated. Consider running git pull" if local_commit != latest_commit else ""
                 )
 
             if status == "success":
@@ -88,9 +86,7 @@ class ServerCommands(commands.Cog):
                     f"Current PlexBot version ID: {local_commit if local_commit else 'unknown'}; latest: {latest_commit if latest_commit else 'unknown'}; {up_to_date}"
                 )
             else:
-                logger.critical(
-                    f"Connection to Tautulli failed, result {status}"
-                )
+                logger.critical(f"Connection to Tautulli failed, result {status}")
         except Exception as e:
             logger.error(f"Error during bot initialization: {e}")
 
@@ -108,9 +104,7 @@ class ServerCommands(commands.Cog):
 
             # Fetching Plex status from Plex API asynchronously
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    "https://status.plex.tv/api/v2/status.json"
-                ) as response:
+                async with session.get("https://status.plex.tv/api/v2/status.json") as response:
                     if response.status == 200:
                         json_response = await response.json()
                         plex_status = json_response["status"]["description"]
@@ -118,14 +112,10 @@ class ServerCommands(commands.Cog):
                         plex_status = "Plex status unavailable"
 
             # Setting up the embed message with server information and Plex status
-            embed = nextcord.Embed(
-                title="Plex Server Details", colour=self.plex_embed_color
-            )
+            embed = nextcord.Embed(title="Plex Server Details", colour=self.plex_embed_color)
             embed.set_thumbnail(url=self.plex_image)
             embed.add_field(name="Response", value=server_info["result"], inline=True)
-            embed.add_field(
-                name="Server Name", value=server_info["data"]["pms_name"], inline=True
-            )
+            embed.add_field(name="Server Name", value=server_info["data"]["pms_name"], inline=True)
             embed.add_field(
                 name="Server Version",
                 value=server_info["data"]["pms_version"],
@@ -146,18 +136,14 @@ class ServerCommands(commands.Cog):
             await ctx.send("Failed to retrieve server status.")
 
     @commands.command()
-    async def killstream(
-        self, ctx, session_key: str = None, *, message: str = None
-    ):
+    async def killstream(self, ctx, session_key: str = None, *, message: str = None):
         """Terminates a Plex stream based on the session key."""
         session_keys = []
         if session_key is None:
             activity = await self.tautulli.get_activity()
             sessions = activity["response"]["data"]["sessions"]
             for users in sessions:
-                session_keys.append(
-                    f"\n**Session key:** {users['session_key']} is: **{users['user']}**,"
-                )
+                session_keys.append(f"\n**Session key:** {users['session_key']} is: **{users['user']}**,")
             await ctx.send(
                 f"You provided no session keys, current users are: {''.join(session_keys)}\nYou can use `plex killstream [session_key] '[message]'` to kill a stream above;"
                 "\nMessage will be passed to the user in a pop-up window on their Plex client.\n ⚠️ It is recommended to use 'apostrophes' around the message to avoid errors."
@@ -166,9 +152,7 @@ class ServerCommands(commands.Cog):
         try:
             r = await self.tautulli.terminate_session(session_key, message=message)
             if r == 400:
-                await ctx.send(
-                    f"Could not find a stream with **{session_key}** or another error occurred"
-                )
+                await ctx.send(f"Could not find a stream with **{session_key}** or another error occurred")
                 logger.warning(f"Failed to terminate session with key {session_key}.")
             elif r == 200:
                 await ctx.send(
@@ -176,13 +160,12 @@ class ServerCommands(commands.Cog):
                 )
                 logger.info(f"Terminated session {session_key} with message: {message}")
             else:
-                await ctx.send(
-                    "An unexpected error occurred - check logs for more information."
-                )
+                await ctx.send("An unexpected error occurred - check logs for more information.")
                 logger.error(f"Unexpected response code {r} when terminating session {session_key}.")
         except Exception as e:
             logger.error(f"Exception occurred while terminating session {session_key}: {e}")
             await ctx.send("Failed to terminate the session due to an error.")
+
 
 def setup(bot):
     bot.add_cog(ServerCommands(bot))

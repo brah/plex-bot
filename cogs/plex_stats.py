@@ -11,14 +11,14 @@ from utilities import Config, UserMappings
 from tautulli_wrapper import Tautulli
 
 # Configure logging for this module
-logger = logging.getLogger('plexbot.plex_stats')
+logger = logging.getLogger("plexbot.plex_stats")
 logger.setLevel(logging.INFO)
 
 
 class PlexStats(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.tautulli: Tautulli = bot.shared_resources.get('tautulli')
+        self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.plex_embed_color = 0xE5A00D
 
     @commands.command()
@@ -47,16 +47,10 @@ class PlexStats(commands.Cog):
             logger.error("Failed to retrieve top users from Tautulli.")
             return
 
-        embed = nextcord.Embed(
-            title=f"Plex Top (last {duration} days)", color=self.plex_embed_color
-        )
+        embed = nextcord.Embed(title=f"Plex Top (last {duration} days)", color=self.plex_embed_color)
         total_watchtime = 0
         user_data = UserMappings.load_user_mappings()
-        ignored_users = {
-            user["plex_username"]: user
-            for user in user_data
-            if user.get("ignore", False)
-        }
+        ignored_users = {user["plex_username"]: user for user in user_data if user.get("ignore", False)}
 
         top_users = {}
         for rank, entry in enumerate(response["response"]["data"]["rows"], 1):
@@ -66,11 +60,7 @@ class PlexStats(commands.Cog):
 
             if rank <= 3:
                 discord_id = next(
-                    (
-                        user["discord_id"]
-                        for user in user_data
-                        if user.get("plex_username") == username
-                    ),
+                    (user["discord_id"] for user in user_data if user.get("plex_username") == username),
                     None,
                 )
                 if discord_id:
@@ -98,7 +88,7 @@ class PlexStats(commands.Cog):
 
         total_watch_time_str = utils.days_hours_minutes(total_watchtime)
         history_data = await self.tautulli.get_history()
-        total_duration_all_time = (history_data["response"]["data"]["total_duration"])
+        total_duration_all_time = history_data["response"]["data"]["total_duration"]
         embed.set_footer(
             text=f"Total Watchtime: {total_watch_time_str}\nAll time: {total_duration_all_time}"
         )
@@ -149,12 +139,8 @@ class PlexStats(commands.Cog):
                 correct_role = roles[rank - 1]
                 roles_to_remove = [role for role in roles if role != correct_role]
                 try:
-                    await member.add_roles(
-                        correct_role, reason="Assigning new top user role."
-                    )
-                    await member.remove_roles(
-                        *roles_to_remove, reason="Cleaning up other top roles."
-                    )
+                    await member.add_roles(correct_role, reason="Assigning new top user role.")
+                    await member.remove_roles(*roles_to_remove, reason="Cleaning up other top roles.")
                     logger.info(
                         f"Assigned role '{correct_role.name}' to {member.display_name} and removed other top roles."
                     )
@@ -170,12 +156,8 @@ class PlexStats(commands.Cog):
             time = int(time)
         try:
             # Fetching data for the top three most watched movies and shows
-            most_watched_movies_response = await self.tautulli.get_most_watched_movies(
-                time_range=time
-            )
-            most_watched_shows_response = await self.tautulli.get_most_watched_shows(
-                time_range=time
-            )
+            most_watched_movies_response = await self.tautulli.get_most_watched_movies(time_range=time)
+            most_watched_shows_response = await self.tautulli.get_most_watched_shows(time_range=time)
             libraries_response = await self.tautulli.get_libraries_table()
 
             total_movies = 0
@@ -202,10 +184,7 @@ class PlexStats(commands.Cog):
             )
 
             # Handling most watched movies
-            if (
-                most_watched_movies_response.get("response", {}).get("result")
-                == "success"
-            ):
+            if most_watched_movies_response.get("response", {}).get("result") == "success":
                 movies = most_watched_movies_response["response"]["data"]["rows"]
                 movie_text = ""
                 for i, movie in enumerate(movies[:3], 1):  # Display top 3 movies
@@ -213,15 +192,10 @@ class PlexStats(commands.Cog):
                     plays = movie["total_plays"]
                     unique_users = movie.get("users_watched", "N/A")
                     movie_text += f"{i}. **{movie_title}** | {plays} plays by {unique_users} people\n"
-                embed.add_field(
-                    name="Most Watched Movies", value=movie_text.strip(), inline=False
-                )
+                embed.add_field(name="Most Watched Movies", value=movie_text.strip(), inline=False)
 
             # Handling most watched shows
-            if (
-                most_watched_shows_response.get("response", {}).get("result")
-                == "success"
-            ):
+            if most_watched_shows_response.get("response", {}).get("result") == "success":
                 shows = most_watched_shows_response["response"]["data"]["rows"]
                 show_text = ""
                 for i, show in enumerate(shows[:3], 1):  # Display top 3 shows
@@ -229,23 +203,13 @@ class PlexStats(commands.Cog):
                     plays = show["total_plays"]
                     unique_users = show.get("users_watched", "N/A")
                     show_text += f"{i}. **{show_title}** | {plays} plays by {unique_users} people\n"
-                embed.add_field(
-                    name="Most Watched Shows", value=show_text.strip(), inline=False
-                )
+                embed.add_field(name="Most Watched Shows", value=show_text.strip(), inline=False)
 
             # General library stats
-            embed.add_field(
-                name="🎬 Total Movies", value=str(total_movies), inline=True
-            )
-            embed.add_field(
-                name="📺 Total TV Shows", value=str(total_shows), inline=True
-            )
-            embed.add_field(
-                name="📋 Total Episodes", value=str(total_episodes), inline=True
-            )
-            embed.add_field(
-                name="⏳ Total Watched Duration", value=total_duration, inline=True
-            )
+            embed.add_field(name="🎬 Total Movies", value=str(total_movies), inline=True)
+            embed.add_field(name="📺 Total TV Shows", value=str(total_shows), inline=True)
+            embed.add_field(name="📋 Total Episodes", value=str(total_episodes), inline=True)
+            embed.add_field(name="⏳ Total Watched Duration", value=total_duration, inline=True)
 
             await ctx.send(embed=embed)
 
@@ -260,9 +224,7 @@ class PlexStats(commands.Cog):
             # Get all TV libraries
             response = await self.tautulli.get_libraries()
             libraries = response["response"]["data"]
-            tv_libraries = (
-                library for library in libraries if library["section_type"] == "show"
-            )
+            tv_libraries = (library for library in libraries if library["section_type"] == "show")
 
             # Get library user stats for each TV library
             top_users = {}
@@ -286,9 +248,7 @@ class PlexStats(commands.Cog):
                         top_users[username]["libraries"].append(library_name)
 
             # Sort users by total time watched and get top 10
-            top_users = sorted(top_users.items(), key=lambda x: x[1]["time"], reverse=True)[
-                :10
-            ]
+            top_users = sorted(top_users.items(), key=lambda x: x[1]["time"], reverse=True)[:10]
 
             # Create embed
             embed = nextcord.Embed(
@@ -339,11 +299,7 @@ class PlexStats(commands.Cog):
         if member:
             # Find Plex username by Discord member ID
             plex_user = next(
-                (
-                    item
-                    for item in user_data
-                    if str(item.get("discord_id")) == str(member.id)
-                ),
+                (item for item in user_data if str(item.get("discord_id")) == str(member.id)),
                 None,
             )
 
@@ -373,13 +329,11 @@ class PlexStats(commands.Cog):
                 name="Recent watch history",
                 icon_url=self.bot.user.display_avatar.url,  # Use bot's avatar for universal history
             )
-            embed.set_thumbnail(url=self.bot.user.display_avatar.url)  # Use bot's avatar for universal history
+            embed.set_thumbnail(
+                url=self.bot.user.display_avatar.url
+            )  # Use bot's avatar for universal history
 
-        embed.description = (
-            "\n".join(last_watched_list)
-            if last_watched_list
-            else "No history found."
-        )
+        embed.description = "\n".join(last_watched_list) if last_watched_list else "No history found."
 
         await ctx.send(embed=embed)
 

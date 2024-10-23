@@ -48,9 +48,7 @@ def main():
     intents.members = True
 
     # Initialize bot with the prefix `plex ` and intents
-    bot = commands.Bot(
-        command_prefix=["plex ", "Plex "], intents=intents, help_command=None
-    )
+    bot = commands.Bot(command_prefix=["plex ", "Plex "], intents=intents, help_command=None)
 
     # Initialize shared resources
     tautulli = Tautulli(api_key=config["tautulli_apikey"], tautulli_ip=config["tautulli_ip"])
@@ -59,8 +57,8 @@ def main():
 
     # Pass shared resources to cogs upon initialization
     bot.shared_resources = {
-        'tautulli': tautulli,
-        'tmdb': tmdb,
+        "tautulli": tautulli,
+        "tmdb": tmdb,
     }
 
     @bot.event
@@ -77,9 +75,7 @@ def main():
             await ctx.send(f"*{error}*\nTry `{ctx.prefix}help {ctx.command}`")
             logger.warning(f"Missing required argument: {error}")
         elif isinstance(error, commands.MissingPermissions):
-            await ctx.send(
-                "You do not have the appropriate permissions to run this command."
-            )
+            await ctx.send("You do not have the appropriate permissions to run this command.")
             logger.warning(f"Missing permissions: {error}")
         elif isinstance(error, commands.BotMissingPermissions):
             await ctx.send("I don't have sufficient permissions!")

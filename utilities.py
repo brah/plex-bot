@@ -13,8 +13,9 @@ import nextcord
 from nextcord.ext import menus
 from nextcord import File
 
-logger = logging.getLogger('plexbot.utilities')
+logger = logging.getLogger("plexbot.utilities")
 logger.setLevel(logging.INFO)
+
 
 class Config:
     _config_data = None
@@ -54,6 +55,7 @@ class Config:
         """Reload the configuration data from the JSON file."""
         cls._config_data = None
         return cls.load_config(filename)
+
 
 class UserMappings:
     _mappings = None
@@ -124,11 +126,7 @@ def days_hours_minutes(seconds: int) -> str:
 def get_git_revision_short_hash() -> str:
     """Get the current git commit short hash."""
     try:
-        return (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-            .decode("ascii")
-            .strip()
-        )
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("ascii").strip()
     except Exception as e:
         logger.error(f"Failed to get git revision: {e}")
         return "unknown"
@@ -139,9 +137,7 @@ def get_git_revision_short_hash_latest() -> str:
     try:
         subprocess.check_call(["git", "fetch"])
         return (
-            subprocess.check_output(["git", "rev-parse", "--short", "origin/HEAD"])
-            .decode("ascii")
-            .strip()
+            subprocess.check_output(["git", "rev-parse", "--short", "origin/HEAD"]).decode("ascii").strip()
         )
     except Exception as e:
         logger.error(f"Failed to get latest git revision: {e}")

@@ -24,19 +24,17 @@ from utilities import (
 from tautulli_wrapper import Tautulli, TMDB
 
 # Configure logging for this module
-logger = logging.getLogger('plexbot.media_commands')
+logger = logging.getLogger("plexbot.media_commands")
 logger.setLevel(logging.INFO)
 
 
 class MediaCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.tautulli: Tautulli = bot.shared_resources.get('tautulli')
-        self.tmdb: TMDB = bot.shared_resources.get('tmdb')
+        self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
+        self.tmdb: TMDB = bot.shared_resources.get("tmdb")
         self.plex_embed_color = 0xE5A00D
-        self.plex_image = (
-            "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
-        )
+        self.plex_image = "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
         self.media_cache = []
         self.cache_lock = asyncio.Lock()
         self.cache_file_path = Path("cache/media_cache.json")
@@ -83,24 +81,18 @@ class MediaCommands(commands.Cog):
                 response = await self.tautulli.get_library_media_info(
                     section_id=library["section_id"],
                     length=10000,  # Adjust as needed
-                    include_metadata=0  # Since it doesn't include genres
+                    include_metadata=0,  # Since it doesn't include genres
                 )
                 if response.get("response", {}).get("result") != "success":
-                    logger.error(
-                        f"Failed to fetch media info for library {library['section_id']}"
-                    )
+                    logger.error(f"Failed to fetch media info for library {library['section_id']}")
                     continue
 
                 media_items = response.get("response", {}).get("data", {}).get("data", [])
                 if not media_items:
-                    logger.info(
-                        f"No media items found in library {library['section_name']}"
-                    )
+                    logger.info(f"No media items found in library {library['section_name']}")
                     continue
 
-                logger.info(
-                    f"Processing {len(media_items)} items from library '{library['section_name']}'"
-                )
+                logger.info(f"Processing {len(media_items)} items from library '{library['section_name']}'")
 
                 # Collect the rating keys
                 rating_keys = [item["rating_key"] for item in media_items]
@@ -114,7 +106,10 @@ class MediaCommands(commands.Cog):
                         logger.debug(f"Fetching metadata for rating_key: {rating_key}")
                         try:
                             metadata_response = await self.tautulli.get_metadata(rating_key=rating_key)
-                            if metadata_response and metadata_response.get("response", {}).get("result") == "success":
+                            if (
+                                metadata_response
+                                and metadata_response.get("response", {}).get("result") == "success"
+                            ):
                                 metadata = metadata_response.get("response", {}).get("data", {})
                                 genres = [genre.lower() for genre in metadata.get("genres", [])]
 
@@ -250,7 +245,7 @@ class MediaCommands(commands.Cog):
             # Lowercase all arguments for case-insensitive comparison
             args_lower = [arg.lower() for arg in args]
             # Possible media types
-            media_types = ['movie', 'tv', 'any']
+            media_types = ["movie", "tv", "any"]
             # Check for media type in args
             media_type_in_args = set(args_lower) & set(media_types)
             if media_type_in_args:
@@ -259,7 +254,7 @@ class MediaCommands(commands.Cog):
                 args_lower.remove(media_type)
             # The remaining args are genre
             if args_lower:
-                genre = ' '.join(args_lower).lower()
+                genre = " ".join(args_lower).lower()
         logger.info(f"Searching for {genre} of mediatype {media_type}")
 
         # Use the cached media items
@@ -271,23 +266,23 @@ class MediaCommands(commands.Cog):
             return
 
         # Filter media items by media type
-        if media_type and media_type != 'any':
-            if media_type == 'tv':
-                valid_media_types = ['show', 'episode']
-            elif media_type == 'movie':
-                valid_media_types = ['movie']
+        if media_type and media_type != "any":
+            if media_type == "tv":
+                valid_media_types = ["show", "episode"]
+            elif media_type == "movie":
+                valid_media_types = ["movie"]
             else:
                 valid_media_types = [media_type]
             media_items = [
-                item for item in media_items
+                item
+                for item in media_items
                 if item.get("media_type", "unknown").lower() in valid_media_types
             ]
 
         # Filter media items by genre
         if genre:
             media_items = [
-                item for item in media_items
-                if genre.lower() in [g.lower() for g in item.get("genres", [])]
+                item for item in media_items if genre.lower() in [g.lower() for g in item.get("genres", [])]
             ]
 
         if not media_items:
@@ -303,10 +298,7 @@ class MediaCommands(commands.Cog):
         """Send an embed with the media item's details."""
         try:
             # Construct the embed using item data
-            embed = nextcord.Embed(
-                title=f"{item['title']} ({item['year']})",
-                color=nextcord.Color.random()
-            )
+            embed = nextcord.Embed(title=f"{item['title']} ({item['year']})", color=nextcord.Color.random())
 
             # Add summary
             if item.get("summary"):
@@ -318,7 +310,7 @@ class MediaCommands(commands.Cog):
 
             # Add genres
             if item.get("genres"):
-                genres_formatted = ', '.join([g.title() for g in item["genres"]])
+                genres_formatted = ", ".join([g.title() for g in item["genres"]])
                 embed.add_field(name="Genres", value=genres_formatted, inline=True)
 
             # Add play count
@@ -368,7 +360,9 @@ class MediaCommands(commands.Cog):
         """Construct the full image URL for thumbnails."""
         if thumb_key:
             tautulli_ip = self.tautulli.tautulli_ip
-            return f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
+            return (
+                f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
+            )
         return ""
 
     async def get_libraries(self, media_type=None):
@@ -384,13 +378,19 @@ class MediaCommands(commands.Cog):
         if response.get("response", {}).get("result") == "success":
             libraries = response.get("response", {}).get("data", [])
             # Filter to include only libraries of the specified media_type
-            if media_type == 'movie':
+            if media_type == "movie":
                 filtered_libraries = [lib for lib in libraries if lib["section_type"] == "movie"]
-            elif media_type == 'tv':
-                filtered_libraries = [lib for lib in libraries if lib["section_type"] in ("show", "episode")]
+            elif media_type == "tv":
+                filtered_libraries = [
+                    lib for lib in libraries if lib["section_type"] in ("show", "episode")
+                ]
             else:
-                filtered_libraries = [lib for lib in libraries if lib["section_type"] in ("movie", "show", "episode")]
-            logger.debug(f"Filtered libraries based on media_type '{media_type}': {[lib['section_name'] for lib in filtered_libraries]}")
+                filtered_libraries = [
+                    lib for lib in libraries if lib["section_type"] in ("movie", "show", "episode")
+                ]
+            logger.debug(
+                f"Filtered libraries based on media_type '{media_type}': {[lib['section_name'] for lib in filtered_libraries]}"
+            )
             return filtered_libraries
         logger.error("Failed to fetch libraries from Tautulli.")
         return []
@@ -407,9 +407,7 @@ class MediaCommands(commands.Cog):
 
             # Load ignored users list
             user_data = UserMappings.load_user_mappings()
-            ignored_users = {
-                user["plex_username"] for user in user_data if user.get("ignore", False)
-            }
+            ignored_users = {user["plex_username"] for user in user_data if user.get("ignore", False)}
 
             total_watchers = 0
             embed = nextcord.Embed(title="Plex Watchers", color=self.plex_embed_color)
@@ -472,14 +470,12 @@ class MediaCommands(commands.Cog):
             )
             qbt_client.auth_log_in()
         except Exception as err:
-            logger.error(
-                f"Couldn't open connection to qbittorrent, check qBit related JSON values: {err}"
-            )
+            logger.error(f"Couldn't open connection to qbittorrent, check qBit related JSON values: {err}")
             await ctx.send("Failed to connect to qBittorrent. Check configuration.")
             return
 
         try:
-            torrents = qbt_client.torrents_info(status_filter='downloading')
+            torrents = qbt_client.torrents_info(status_filter="downloading")
             num_downloads = 0
             downloads_embed = nextcord.Embed(
                 title="qBittorrent Live Downloads",
@@ -516,6 +512,7 @@ class MediaCommands(commands.Cog):
             await self.save_cache_to_disk()
         await ctx.send("Media cache has been refreshed.")
         logger.info("Media cache has been manually refreshed.")
+
 
 def setup(bot):
     bot.add_cog(MediaCommands(bot))
