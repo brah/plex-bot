@@ -450,14 +450,14 @@ class MediaCommands(commands.Cog):
     async def downloading(self, ctx):
         ### Display the current downloading torrents in qBittorrent.
         # Try to instantiate the qBittorrent client
-        
+
         try:
             config_data = Config.load_config()
             logger.debug(
                 "Creating qbittorrent Client with IP=%s, Port=%s, Username=%s",
-                host=f"{config_data['qbit_ip']}",
-                port=f"{config_data['qbit_port']}",
-                username=f"{config_data['qbit_username']}",
+                config_data["qbit_ip"],
+                config_data["qbit_port"],
+                config_data["qbit_username"],
             )
             qbt_client = qbittorrentapi.Client(
                 host=f"{config_data['qbit_ip']}",
@@ -489,7 +489,11 @@ class MediaCommands(commands.Cog):
 
         try:
             # Get all downloading torrents
-            torrents_downloading = qbt_client.torrents.info.downloading()
+            torrents_downloading = [
+                t
+                for t in qbt_client.torrents.info.downloading()
+                if t.state not in ["pausedDL", "pausedUP", "stopped"] and not t.state_enum.is_paused
+            ]
             logger.debug("Fetched %d torrents in downloading status.", len(torrents_downloading))
         except Exception as e:
             logger.exception("Error retrieving downloading torrents.")
