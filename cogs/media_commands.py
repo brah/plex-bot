@@ -13,6 +13,7 @@ import aiohttp
 import nextcord
 from nextcord import File
 from nextcord.ext import commands, tasks
+import qbittorrentapi
 
 from utilities import (
     Config,
@@ -447,60 +448,73 @@ class MediaCommands(commands.Cog):
 
     @commands.command()
     async def downloading(self, ctx):
-        """Display current live downloads from qBittorrent."""
-        config_data = Config.load_config()
-        if not config_data.get("qbit_ip"):
-            await ctx.send("qBittorrent is not configured.")
-            logger.error("qBittorrent configuration missing.")
-            return
-
+        ### Display the current downloading torrents in qBittorrent.
+        # Try to instantiate the qBittorrent client
         try:
-            import qbittorrentapi
-        except ImportError as err:
-            logger.error(f"Error importing qbittorrentapi: {err}")
-            await ctx.send("qbittorrentapi module is not installed.")
-            return
-
-        try:
+            logger.debug(
+                "Creating qbittorrent Client with IP=%s, Port=%s, Username=%s",
+                self.CONFIG_DATA["qbit_ip"],
+                self.CONFIG_DATA["qbit_port"],
+                self.CONFIG_DATA["qbit_username"],
+            )
             qbt_client = qbittorrentapi.Client(
-                host=f"{config_data['qbit_ip']}",
-                port=f"{config_data['qbit_port']}",
-                username=f"{config_data['qbit_username']}",
-                password=f"{config_data['qbit_password']}",
+                host=self.CONFIG_DATA["qbit_ip"],
+                port=self.CONFIG_DATA["qbit_port"],
+                username=self.CONFIG_DATA["qbit_username"],
+                password=self.CONFIG_DATA["qbit_password"],
             )
+
+            # (Only if your version needs an explicit login)
             qbt_client.auth_log_in()
+            logger.debug("Successfully logged into qBittorrent? %s", qbt_client.is_logged_in)
+
         except Exception as err:
-            logger.error(f"Couldn't open connection to qbittorrent, check qBit related JSON values: {err}")
-            await ctx.send("Failed to connect to qBittorrent. Check configuration.")
+            logger.exception(
+                "Couldn't open connection to qbittorrent. Check qBit JSON values or network accessibility."
+            )
+            await ctx.send("I'm having trouble connecting to qBittorrent right now.")
             return
 
+        # Pull downloading torrents
+        num_downloads = 0
+        downloads_embed = nextcord.Embed(
+            title="qBittorrent Live Downloads",
+            color=0x6C81DF,
+        )
+        downloads_embed.set_thumbnail(
+            url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png"
+        )
+
         try:
-            torrents = qbt_client.torrents_info(status_filter="downloading")
-            num_downloads = 0
-            downloads_embed = nextcord.Embed(
-                title="qBittorrent Live Downloads",
-                color=0x6C81DF,
-            )
-            downloads_embed.set_thumbnail(
-                url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png"
-            )
-            for torrent in torrents:
-                downloads_embed.add_field(
-                    name=f"⏳ {torrent.name}",
-                    value=f"**Progress**: {torrent.progress * 100:.2f}%, **Size:** {torrent.size * 1e-9:.2f} GB, **ETA:** {torrent.eta / 60:.0f} minutes, **DL:** {torrent.dlspeed * 1.0e-6:.2f} MB/s",
-                    inline=False,
-                )
-                num_downloads += 1
-            if num_downloads < 1:
-                downloads_embed.add_field(
-                    name="\u200b",
-                    value="There is no movie currently downloading!",
-                    inline=False,
-                )
-            await ctx.send(embed=downloads_embed)
+            # Get all downloading torrents
+            torrents_downloading = qbt_client.torrents.info.downloading()
+            logger.debug("Fetched %d torrents in downloading status.", len(torrents_downloading))
         except Exception as e:
-            logger.error(f"Failed to retrieve downloads from qBittorrent: {e}")
-            await ctx.send("Failed to retrieve downloads from qBittorrent.")
+            logger.exception("Error retrieving downloading torrents.")
+            await ctx.send("I'm having trouble retrieving the downloading torrents.")
+            return
+
+        for download in torrents_downloading:
+            downloads_embed.add_field(
+                name=f"⏳ {download.name}",
+                value=(
+                    f"**Progress**: {download.progress * 100:.2f}%, "
+                    f"**Size:** {download.size * 1e-9:.2f} GB, "
+                    f"**ETA:** {download.eta / 60:.0f} minutes, "
+                    f"**DL:** {download.dlspeed * 1.0e-6:.2f} MB/s"
+                ),
+                inline=False,
+            )
+            num_downloads += 1
+
+        if num_downloads < 1:
+            downloads_embed.add_field(
+                name="\u200b",
+                value="There is no movie currently downloading!",
+                inline=False,
+            )
+
+        await ctx.send(embed=downloads_embed)
 
     @commands.command()
     @commands.has_permissions(administrator=True)
