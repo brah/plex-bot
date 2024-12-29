@@ -450,18 +450,20 @@ class MediaCommands(commands.Cog):
     async def downloading(self, ctx):
         ### Display the current downloading torrents in qBittorrent.
         # Try to instantiate the qBittorrent client
+        
         try:
+            config_data = Config.load_config()
             logger.debug(
                 "Creating qbittorrent Client with IP=%s, Port=%s, Username=%s",
-                self.CONFIG_DATA["qbit_ip"],
-                self.CONFIG_DATA["qbit_port"],
-                self.CONFIG_DATA["qbit_username"],
+                host=f"{config_data['qbit_ip']}",
+                port=f"{config_data['qbit_port']}",
+                username=f"{config_data['qbit_username']}",
             )
             qbt_client = qbittorrentapi.Client(
-                host=self.CONFIG_DATA["qbit_ip"],
-                port=self.CONFIG_DATA["qbit_port"],
-                username=self.CONFIG_DATA["qbit_username"],
-                password=self.CONFIG_DATA["qbit_password"],
+                host=f"{config_data['qbit_ip']}",
+                port=f"{config_data['qbit_port']}",
+                username=f"{config_data['qbit_username']}",
+                password=f"{config_data['qbit_password']}",
             )
 
             # (Only if your version needs an explicit login)
