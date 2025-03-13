@@ -6,7 +6,7 @@ import logging
 import subprocess
 from functools import lru_cache
 from io import BytesIO
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 import aiohttp
 import nextcord
@@ -144,6 +144,70 @@ def get_git_revision_short_hash_latest() -> str:
         return "unknown"
 
 
+async def fetch_plex_image(
+    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450
+) -> Optional[BytesIO]:
+    """
+    Fetch an image from the Plex/Tautulli server.
+
+    Args:
+        tautulli_ip: The IP address of the Tautulli server
+        thumb_key: The thumbnail key from Plex
+        width: The desired width of the image
+        height: The desired height of the image
+
+    Returns:
+        BytesIO object containing the image data, or None if the fetch failed
+    """
+    if not thumb_key or not thumb_key.strip():
+        logger.warning("Empty thumb_key provided to fetch_plex_image")
+        return None
+
+    try:
+        import urllib.parse
+
+        encoded_thumb_key = urllib.parse.quote(thumb_key.strip())
+        url = f"http://{tautulli_ip}/pms_image_proxy?img={encoded_thumb_key}&width={width}&height={height}&fallback=poster"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    logger.debug(f"Successfully fetched image from {url}")
+                    return BytesIO(await response.read())
+                else:
+                    logger.warning(f"Failed to fetch image with status {response.status}: {url}")
+                    return None
+    except Exception as e:
+        logger.error(f"Error fetching image: {e}", exc_info=True)
+        return None
+
+
+async def prepare_thumbnail_for_embed(
+    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450
+) -> Tuple[Optional[File], Optional[str]]:
+    """
+    Prepares a thumbnail for inclusion in a Discord embed.
+
+    Args:
+        tautulli_ip: The IP address of the Tautulli server
+        thumb_key: The thumbnail key from Plex
+        width: The desired width of the image
+        height: The desired height of the image
+
+    Returns:
+        A tuple containing (File, attachment_url) or (None, None) if preparation failed
+    """
+    if not thumb_key:
+        return None, None
+
+    image_data = await fetch_plex_image(tautulli_ip, thumb_key, width, height)
+    if image_data:
+        file = File(fp=image_data, filename="image.jpg")
+        attachment_url = "attachment://image.jpg"
+        return file, attachment_url
+    return None, None
+
+
 class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     def __init__(self, source, timeout=60) -> None:
         super().__init__(source, timeout=timeout)
@@ -159,14 +223,6 @@ class MyEmbedDescriptionPageSource(menus.ListPageSource):
         super().__init__(data, per_page=2)
         self.tautulli_ip = tautulli_ip
 
-    async def fetch_image(self, url: str) -> BytesIO:
-        """Fetch image from a URL."""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    return BytesIO(await response.read())
-                return None
-
     async def format_page(self, menu, entries):
         embed = nextcord.Embed(title="Recently Added", color=0xE5A00D)
         embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
@@ -174,12 +230,13 @@ class MyEmbedDescriptionPageSource(menus.ListPageSource):
         for entry in entries:
             embed.add_field(name="\u200b", value=entry["description"], inline=False)
             thumb_key = entry.get("thumb_key", "")
+
             if thumb_key:
-                thumb_url = f"http://{self.tautulli_ip}/pms_image_proxy?img={thumb_key}&width=200&height=400&fallback=poster"
-                image_data = await self.fetch_image(thumb_url)
-                if image_data:
-                    file = File(fp=image_data, filename="image.jpg")
-                    embed.set_image(url="attachment://image.jpg")
+                file, attachment_url = await prepare_thumbnail_for_embed(
+                    self.tautulli_ip, thumb_key, 200, 400
+                )
+                if file and attachment_url:
+                    embed.set_image(url=attachment_url)
                     return {"embed": embed, "file": file}
 
         return embed

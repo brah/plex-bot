@@ -17,6 +17,8 @@ from utilities import (
     UserMappings,
     NoStopButtonMenuPages,
     MyEmbedDescriptionPageSource,
+    fetch_plex_image,
+    prepare_thumbnail_for_embed,
 )
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
@@ -184,23 +186,13 @@ class MediaCommands(commands.Cog):
 
             # Add thumbnail if available
             if item.get("thumb"):
-                thumb_url = self.construct_image_url(item["thumb"])
-                if thumb_url:
-                    try:
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(thumb_url) as response:
-                                if response.status == 200:
-                                    image_data = BytesIO(await response.read())
-                                    file = File(fp=image_data, filename="image.jpg")
-                                    embed.set_image(url="attachment://image.jpg")
-                                    await ctx.send(file=file, embed=embed)
-                                    return
-                                else:
-                                    logger.warning(
-                                        f"Failed to retrieve thumbnail image with status {response.status}"
-                                    )
-                    except Exception as e:
-                        logger.error(f"Failed to retrieve thumbnail image: {e}")
+                file, attachment_url = await prepare_thumbnail_for_embed(
+                    self.tautulli.tautulli_ip, item["thumb"]
+                )
+                if file and attachment_url:
+                    embed.set_image(url=attachment_url)
+                    await ctx.send(file=file, embed=embed)
+                    return
 
             # If we got here, either there's no thumbnail or we failed to retrieve it
             await ctx.send(embed=embed)
@@ -208,14 +200,7 @@ class MediaCommands(commands.Cog):
             logger.error(f"Failed to send movie embed: {e}")
             await ctx.send("Failed to display the media item.")
 
-    def construct_image_url(self, thumb_key):
-        """Construct the full image URL for thumbnails."""
-        if thumb_key:
-            tautulli_ip = self.tautulli.tautulli_ip
-            return (
-                f"http://{tautulli_ip}/pms_image_proxy?img={thumb_key}&width=300&height=450&fallback=poster"
-            )
-        return ""
+    # The construct_image_url method has been replaced by the utility functions in utilities.py
 
     @commands.command()
     async def watchers(self, ctx):
