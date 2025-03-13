@@ -3,12 +3,14 @@
 import logging
 import random
 import asyncio
+from collections import Counter
 
 import nextcord
 from nextcord.ext import commands
 
 from utilities import UserMappings
 from tautulli_wrapper import Tautulli
+from media_cache import MediaCache
 
 import aiohttp
 from io import BytesIO
@@ -23,6 +25,7 @@ class Recommendations(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
+        self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
         self.plex_embed_color = 0xE5A00D
 
         # Mapping from number emoji to integer
@@ -41,21 +44,6 @@ class Recommendations(commands.Cog):
 
         If no member is specified, recommends based on the invoking user's history.
         """
-        # Access the media cache and lock from the MediaCommands cog
-        media_commands_cog = self.bot.get_cog("MediaCommands")
-        if media_commands_cog:
-            media_cache = media_commands_cog.media_cache
-            cache_lock = media_commands_cog.cache_lock
-        else:
-            await ctx.send("Media cache is not available. Please try again later.")
-            logger.warning("Media cache is not available.")
-            return
-
-        if not media_cache:
-            await ctx.send("Media cache is currently empty. Please try again later.")
-            logger.warning("Media cache is empty.")
-            return
-
         member = member or ctx.author
         user_mapping = UserMappings.get_mapping_by_discord_id(str(member.id))
 
@@ -95,31 +83,15 @@ class Recommendations(commands.Cog):
 
         logger.debug(f"Watched rating keys: {watched_rating_keys}")
 
-        # Collect genres from watch history using media cache
-        watched_genres = []
-        async with cache_lock:
-            for item in media_cache:
-                item_keys = [
-                    str(item.get("rating_key")),
-                    str(item.get("parent_rating_key")),
-                    str(item.get("grandparent_rating_key")),
-                ]
-                if any(key in watched_rating_keys for key in item_keys) and item.get("genres"):
-                    watched_genres.extend(item["genres"])
-
-        logger.debug(f"Watched genres: {watched_genres}")
+        # Analyze watched genres
+        watched_genres = await self.analyze_watched_genres(watched_rating_keys)
 
         if not watched_genres:
             await ctx.send(f"Could not determine watched genres for {member.display_name}.")
             return
 
-        # Identify top genres
-        genre_counts = {}
-        for genre in watched_genres:
-            genre_counts[genre] = genre_counts.get(genre, 0) + 1
-
-        sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)
-        top_genres = [genre.title() for genre, count in sorted_genres[:3]]  # Capitalize genres
+        # Get the top genres
+        top_genres = [genre.title() for genre, _ in watched_genres[:3]]  # Capitalize genres
 
         if not top_genres:
             await ctx.send("No genres found in your watch history.")
@@ -129,20 +101,8 @@ class Recommendations(commands.Cog):
         genres_formatted = ", ".join(top_genres)
         await ctx.send(f"Based on your favorite genres: **{genres_formatted}**")
 
-        # Find media items in the top genres that the user hasn't watched yet
-        recommendations = []
-        async with cache_lock:
-            for item in media_cache:
-                item_keys = [
-                    str(item.get("rating_key")),
-                    str(item.get("parent_rating_key")),
-                    str(item.get("grandparent_rating_key")),
-                ]
-                item_genres = [genre.title() for genre in item.get("genres", [])]
-                if any(genre in top_genres for genre in item_genres) and not any(
-                    key in watched_rating_keys for key in item_keys
-                ):
-                    recommendations.append(item)
+        # Find recommendations based on top genres and unwatched items
+        recommendations = await self.get_recommendations(top_genres, watched_rating_keys)
 
         if not recommendations:
             await ctx.send("No recommendations available at this time.")
@@ -274,6 +234,52 @@ class Recommendations(commands.Cog):
                         # Do not send any message when the timeout/expires
             except asyncio.TimeoutError:
                 break
+
+    async def analyze_watched_genres(self, watched_rating_keys):
+        """Analyze the genres from user's watch history.
+
+        Args:
+            watched_rating_keys: Set of rating keys the user has watched
+
+        Returns:
+            List of (genre, count) tuples, sorted by count in descending order
+        """
+        # Get all media items with rating keys that match the watched keys
+        genre_counter = Counter()
+
+        # Process each rating key and fetch corresponding item from cache
+        for rating_key in watched_rating_keys:
+            item = await self.media_cache.get_item(rating_key)
+            if item and item.get("genres"):
+                # Count each genre
+                for genre in item.get("genres", []):
+                    genre_counter[genre.lower()] += 1
+
+        # Return the genres sorted by frequency
+        return genre_counter.most_common()
+
+    async def get_recommendations(self, top_genres, watched_rating_keys):
+        """Get recommendations based on top genres and unwatched items.
+
+        Args:
+            top_genres: List of top genres
+            watched_rating_keys: Set of rating keys the user has watched
+
+        Returns:
+            List of recommended media items
+        """
+        # Convert genres to lowercase for case-insensitive matching
+        top_genres_lower = [genre.lower() for genre in top_genres]
+
+        # Get media items that match any of the top genres and haven't been watched
+        recommendations = await self.media_cache.get_items(
+            genres=top_genres_lower,
+            exclude_rating_keys=watched_rating_keys,
+            limit=50,  # Get a good selection to choose from
+            random_sort=True,
+        )
+
+        return recommendations
 
     async def show_detailed_info(self, ctx, item, plex_username, detailed_message=None):
         """Shows detailed information for the selected media item."""

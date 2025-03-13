@@ -1,26 +1,30 @@
 # Plex-Bot
 
-A for-fun Discord bot that talks to your Plex server through Tautulli's API, showing off cool commands like who's been watching the most Plex, suggests random movies/TV, shows off what's currently downloading from qBittorrent, and more soon™
+A Discord bot that interfaces with your Plex server through Tautulli's API, offering rich features like user statistics, media recommendations, live download tracking from qBittorrent, and more!
 
 ## Features
 
-- **Top Plex Users**: Get a list of the most active Plex viewers.
-- **qBittorrent Downloads**: See current torrent downloads (optional).
-- **Random Library Suggestions**: Choose genre, TV and/or Movies, and get a random movie picked.
-- **More to Come**: I am consistently coding in what I think is a fun goof:)
-- **NOTE** this is *currently* not designed to be a *utility* bot, don't expect admin features or extreme polish on anything provided.
+- **Top Plex Users**: Track and display the most active viewers with automatic Discord role assignments
+- **Media Recommendations**: Get personalized recommendations based on watch history and genre preferences
+- **Random Media Suggestions**: Discover content from your library with filtering by genre and media type
+- **Live Activity**: See who's currently watching what on your Plex server
+- **Download Tracking**: Monitor qBittorrent downloads in real time (optional)
+- **Media Statistics**: Generate detailed viewing statistics with visual charts
+- **Efficient Media Cache**: Optimized caching system for fast responses even with large libraries
 
 ## Setup
 
-### What You'll Need
+### Requirements
 
 - **Python 3.8+**
 - A working **Tautulli** setup ([Tautulli GitHub](https://github.com/Tautulli/Tautulli))
-- Optional but fun: **qBittorrent** for download tracking
+- **Discord Bot Token** ([Discord Developer Portal](https://discord.com/developers/applications))
+- Optional: **qBittorrent** for download tracking
+- Optional: **TMDB API Key** for enhanced metadata
 
-### Install and Configure
+### Installation
 
-1. Clone the repo:
+1. Clone the repository:
 
    ```bash
    git clone https://github.com/brah/plex-bot.git
@@ -33,7 +37,7 @@ A for-fun Discord bot that talks to your Plex server through Tautulli's API, sho
    pip install -r requirements.txt
    ```
 
-3. Create a `config.json` in the same directory as `plexbot.py`. Here's a basic template:
+3. Create a `config.json` file in the root directory:
 
    ```json
    {
@@ -47,24 +51,28 @@ A for-fun Discord bot that talks to your Plex server through Tautulli's API, sho
        "qbit_ip": "localhost",
        "qbit_port": "8080",
        "qbit_username": "qbit_username",
-       "qbit_password": "qbit_pass"
+       "qbit_password": "qbit_pass",
+       "tmdb_apikey": "<Your TMDB API Key>"
    }
    ```
 
-    where `plex_top`, `plex_two`, `plex_three` are [role IDs](https://www.pythondiscord.com/pages/guides/pydis-guides/contributing/obtaining-discord-ids/#role-id) which you created to feature the top 3 media watchers of your server.
-4. Fire it up:
+   *Note: `plex_top`, `plex_two`, and `plex_three` are [role IDs](https://www.pythondiscord.com/pages/guides/pydis-guides/contributing/obtaining-discord-ids/#role-id) which you've created to highlight the top 3 media watchers on your server.*
+
+      *Note:  bot_config.py also has config options you can change, however they are mostly optional/personal preference.*
+
+4. Run the bot:
 
    ```bash
-   python3 plexbot.py
+   python plexbot.py
    ```
 
-## Keeping It Running
+### Running as a Service
 
-Since this is a Discord bot, you'll probably want it to run 24/7. You’ve got a few options, up to preference (I use systemd, personally)
+For 24/7 operation, consider one of these methods:
 
-### Option 1: `systemd` (If you want it to run on boot)
+#### Option 1: systemd (Linux)
 
-Here’s a sample systemd service file. Save it as `/etc/systemd/system/plexbot.service`:
+Create a file at `/etc/systemd/system/plexbot.service`:
 
 ```ini
 [Unit]
@@ -81,7 +89,7 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-To get it rolling:
+Then enable and start the service:
 
 ```bash
 sudo systemctl daemon-reload
@@ -89,65 +97,49 @@ sudo systemctl start plexbot
 sudo systemctl enable plexbot  # to start on boot
 ```
 
-### Option 2: Use `screen` or `tmux`
+#### Option 2: Screen or tmux
 
-These are super handy tools to keep the bot running in the background, even after you disconnect from SSH.
+For temporary background operation:
 
-For **screen**:
-
+**Screen:**
 ```bash
 screen -S plexbot
-python3 plexbot.py
+python plexbot.py
+# Press Ctrl+A, then D to detach
+# Resume with: screen -r plexbot
 ```
 
-To detach, press `Ctrl+A`, then `D`. You can resume with:
-
-```bash
-screen -r plexbot
-```
-
-For **tmux**:
-
+**Tmux:**
 ```bash
 tmux new -s plexbot
-python3 plexbot.py
+python plexbot.py
+# Press Ctrl+B, then D to detach
+# Resume with: tmux attach -t plexbot
 ```
 
-Detach with `Ctrl+B`, then `D`, and resume with:
+#### Option 3: PM2
 
-```bash
-tmux attach -t plexbot
-```
-
-### Option 3: `pm2` (Great for node.js, works for Python too)
-
-Install `pm2` globally if you don't have it:
+If you're familiar with Node.js ecosystem:
 
 ```bash
 npm install -g pm2
-```
-
-Then run:
-
-```bash
 pm2 start plexbot.py --name plexbot --interpreter=python3
-```
-
-You can also set it to start on reboot:
-
-```bash
 pm2 startup
 pm2 save
 ```
 
 ## Commands
 
-Once you’ve got the bot running, you can use the following commands in Discord:
-
-- `plex top` - Shows the top Plex users.
-- `plex downloading` - Shows current qBittorrent downloads.
-- For a full list, type `plex help` in your Discord.
-
-## Contributing
-
-If you want to contribute, feel free to open a pull request or submit an issue. Keep in mind, though, I tend to break stuff from time to time, and I generally develop what *I* believe to be fun/useful as this is just a fun project - you are however welcome and invited to suggest/request with an open issue!
+| Command | Description |
+|---------|-------------|
+| `plex top` | Shows the top Plex users and assigns roles |
+| `plex random [media_type] [genre]` | Shows a random item from your library with optional filtering |
+| `plex recommend [@user]` | Recommends media based on watch history |
+| `plex watchers` | Shows who's currently watching Plex |
+| `plex downloading` | Shows current qBittorrent downloads |
+| `plex recent [amount]` | Shows recently added media |
+| `plex stats [days]` | Shows server statistics for the specified time period |
+| `plex most_watched_hours` | Shows viewing activity by hour of day |
+| `plex most_watched_days` | Shows viewing activity by day of week |
+| `plex media_type_by_day` | Shows viewing trends by media type |
+| `plex help` | Shows all available commands |

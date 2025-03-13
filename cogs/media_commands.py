@@ -1,18 +1,15 @@
 # cogs/media_commands.py
 
 import asyncio
-import json
 import logging
 import random
 from datetime import timedelta
 from io import BytesIO
-from pathlib import Path
 
-import aiofiles
 import aiohttp
 import nextcord
 from nextcord import File
-from nextcord.ext import commands, tasks
+from nextcord.ext import commands
 import qbittorrentapi
 
 from utilities import (
@@ -20,9 +17,10 @@ from utilities import (
     UserMappings,
     NoStopButtonMenuPages,
     MyEmbedDescriptionPageSource,
-    days_hours_minutes,
 )
 from tautulli_wrapper import Tautulli, TMDB
+from media_cache import MediaCache
+from bot_config import BotConfig
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.media_commands")
@@ -34,164 +32,28 @@ class MediaCommands(commands.Cog):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.tmdb: TMDB = bot.shared_resources.get("tmdb")
-        self.plex_embed_color = 0xE5A00D
-        self.plex_image = "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
-        self.media_cache = []
-        self.cache_lock = asyncio.Lock()
-        self.cache_file_path = Path("cache/media_cache.json")
-        self.bot.loop.create_task(self.initialize())
-
+        self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
+        self.plex_embed_color = BotConfig.PLEX_EMBED_COLOR
+        self.plex_image = BotConfig.PLEX_IMAGE
         logger.info("MediaCommands cog initialized.")
 
-    async def initialize(self):
-        """Asynchronous initializer for the cog."""
-        await self.bot.wait_until_ready()
-        await self.tautulli.initialize()
-        if self.tmdb:
-            await self.tmdb.initialize()
-        await self.load_cache_from_disk()
-        self.update_media_cache.start()
-
     def cog_unload(self):
-        self.update_media_cache.cancel()
-        self.bot.loop.create_task(self.save_cache_to_disk())
+        """Clean up resources when the cog is unloaded."""
         self.bot.loop.create_task(self.tautulli.close())
         if self.tmdb:
             self.bot.loop.create_task(self.tmdb.close())
 
-    @tasks.loop(hours=1)
-    async def update_media_cache(self):
-        """Background task to update the media cache every hour."""
-        async with self.cache_lock:
-            logger.info("Updating media cache...")
-            self.media_cache = await self.fetch_all_media_items()
-            await self.save_cache_to_disk()
-            logger.info("Media cache updated and saved to disk.")
-
-    async def fetch_all_media_items(self):
-        """Fetch all media items and their metadata, and store them in the cache."""
-        all_media_items = []
-        libraries = await self.get_libraries()
-        logger.info(f"Starting to fetch media items from {len(libraries)} libraries.")
-
-        for library in libraries:
-            try:
-                logger.info(
-                    f"Fetching media items for library: {library['section_name']} (ID: {library['section_id']})"
-                )
-                response = await self.tautulli.get_library_media_info(
-                    section_id=library["section_id"],
-                    length=10000,  # Adjust as needed
-                    include_metadata=0,  # Since it doesn't include genres
-                )
-                if response.get("response", {}).get("result") != "success":
-                    logger.error(f"Failed to fetch media info for library {library['section_id']}")
-                    continue
-
-                media_items = response.get("response", {}).get("data", {}).get("data", [])
-                if not media_items:
-                    logger.info(f"No media items found in library {library['section_name']}")
-                    continue
-
-                logger.info(f"Processing {len(media_items)} items from library '{library['section_name']}'")
-
-                # Collect the rating keys
-                rating_keys = [item["rating_key"] for item in media_items]
-
-                # Limit the number of concurrent requests
-                semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent requests
-
-                # Define an async function to fetch metadata for an item
-                async def fetch_item_metadata(rating_key):
-                    async with semaphore:
-                        logger.debug(f"Fetching metadata for rating_key: {rating_key}")
-                        try:
-                            metadata_response = await self.tautulli.get_metadata(rating_key=rating_key)
-                            if (
-                                metadata_response
-                                and metadata_response.get("response", {}).get("result") == "success"
-                            ):
-                                metadata = metadata_response.get("response", {}).get("data", {})
-                                genres = [genre.lower() for genre in metadata.get("genres", [])]
-
-                                item_data = {
-                                    "rating_key": rating_key,
-                                    "title": metadata.get("title") or "Unknown Title",
-                                    "media_type": (metadata.get("media_type") or "unknown").lower(),
-                                    "genres": genres,
-                                    "thumb": metadata.get("thumb"),
-                                    "year": metadata.get("year"),
-                                    "play_count": metadata.get("play_count", 0),
-                                    "last_played": metadata.get("last_played"),
-                                    "summary": metadata.get("summary", ""),
-                                    "rating": metadata.get("rating", ""),
-                                }
-                                logger.debug(f"Metadata fetched for rating_key: {rating_key}")
-                                return item_data
-                            else:
-                                logger.error(f"Failed to fetch metadata for rating_key {rating_key}")
-                                return None
-                        except Exception as e:
-                            logger.error(f"Exception while fetching metadata for {rating_key}: {e}")
-                            return None
-
-                # Use asyncio.gather to fetch metadata concurrently with exception handling
-                tasks_list = [fetch_item_metadata(rating_key) for rating_key in rating_keys]
-                results = await asyncio.gather(*tasks_list, return_exceptions=True)
-
-                # Handle exceptions and filter out None results
-                for idx, result in enumerate(results):
-                    if isinstance(result, Exception):
-                        logger.error(
-                            f"Exception occurred while fetching metadata for rating_key {rating_keys[idx]}: {result}"
-                        )
-                    elif result:
-                        all_media_items.append(result)
-
-                # Yield control to the event loop
-                await asyncio.sleep(0)
-
-            except Exception as e:
-                logger.exception(f"Error processing library {library['section_name']}: {e}")
-
-        logger.info(f"Fetched total {len(all_media_items)} media items.")
-        return all_media_items
-
-    async def save_cache_to_disk(self):
-        """Save the media cache to disk asynchronously."""
-        cache_dir = self.cache_file_path.parent
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            logger.info(f"Saving media cache to {self.cache_file_path}")
-            async with aiofiles.open(self.cache_file_path, "w", encoding="utf-8") as f:
-                data_to_write = json.dumps(self.media_cache, ensure_ascii=False, indent=4)
-                await f.write(data_to_write)
-                logger.debug(f"Data to write: {data_to_write[:100]}...")  # Log first 100 chars
-            logger.info(f"Media cache saved to {self.cache_file_path}")
-        except Exception as e:
-            logger.exception("Failed to save media cache to disk.")
-
-    async def load_cache_from_disk(self):
-        """Load the media cache from disk asynchronously."""
-        if self.cache_file_path.exists():
-            async with self.cache_lock:
-                try:
-                    async with aiofiles.open(self.cache_file_path, "r", encoding="utf-8") as f:
-                        contents = await f.read()
-                        self.media_cache = json.loads(contents)
-                    logger.info(f"Media cache loaded from {self.cache_file_path}")
-                except Exception as e:
-                    logger.exception("Failed to load media cache from disk.")
-                    self.media_cache = []
-        else:
-            logger.info("No media cache file found. Starting with an empty cache.")
-            self.media_cache = []
-            # Optionally, trigger an immediate cache update
-            self.bot.loop.create_task(self.update_media_cache())
-
     @commands.command()
-    async def recent(self, ctx, amount: int = 10):
-        """Displays recently added media items."""
+    async def recent(self, ctx, amount: int = BotConfig.DEFAULT_RECENT_COUNT):
+        """Displays recently added media items.
+
+        Usage:
+        plex recent [amount]
+
+        Examples:
+        plex recent
+        plex recent 20
+        """
         fields = []
         try:
             response = await self.tautulli.get_recently_added(count=amount)
@@ -225,20 +87,51 @@ class MediaCommands(commands.Cog):
 
     @commands.command()
     async def random(self, ctx, *args):
-        """Displays a random media item from the Plex libraries, optionally filtered by media type and genre.
-
-        Usage:
-        plex random [media_type] [genre]
-        plex random [genre] [media_type]
-
-        Examples:
-        plex random
-        plex random movie
-        plex random tv comedy
-        plex random movie horror
-        plex random horror movie
-        """
+        """Displays a random media item from the Plex libraries."""
         # Parse arguments
+        media_type, genre = self.parse_random_args(args)
+        logger.info(f"Searching for {genre} of mediatype {media_type}")
+
+        try:
+            # Check if the cache is empty
+            cache_count = len(await self.media_cache.get_items(limit=1))
+            if cache_count == 0:
+                # Cache is empty, try refreshing it
+                logger.warning("Media cache is empty, attempting to refresh...")
+                await ctx.send("The media cache appears to be empty. I'll try to refresh it now...")
+
+                await self.media_cache.update_cache()
+
+                # Check again after refresh
+                cache_count = len(await self.media_cache.get_items(limit=1))
+                if cache_count == 0:
+                    await ctx.send(
+                        "I couldn't find any media items. Please check the Tautulli connection and try again later."
+                    )
+                    return
+                else:
+                    await ctx.send(f"Cache has been refreshed with {cache_count} items.")
+
+            # Get filtered media items from cache
+            items = await self.media_cache.get_items(
+                media_type=media_type, genres=[genre] if genre else None, random_sort=True, limit=100
+            )
+
+            logger.debug(f"Found {len(items)} items matching the criteria")
+
+            if not items:
+                await ctx.send("No media items found matching the criteria.")
+                return
+
+            # Select a random item
+            random_item = random.choice(items)
+            await self.send_movie_embed(ctx, random_item)
+        except Exception as e:
+            logger.error(f"Error in random command: {e}", exc_info=True)
+            await ctx.send(f"An error occurred while looking for a random item: {type(e).__name__}")
+
+    def parse_random_args(self, args):
+        """Parse the arguments for the random command."""
         media_type = None
         genre = None
 
@@ -256,58 +149,21 @@ class MediaCommands(commands.Cog):
             # The remaining args are genre
             if args_lower:
                 genre = " ".join(args_lower).lower()
-        logger.info(f"Searching for {genre} of mediatype {media_type}")
-
-        # Use the cached media items
-        async with self.cache_lock:
-            media_items = self.media_cache.copy()
-
-        if not media_items:
-            await ctx.send("Media cache is empty. Please try again later.")
-            return
-
-        # Filter media items by media type
-        if media_type and media_type != "any":
-            if media_type == "tv":
-                valid_media_types = ["show", "episode"]
-            elif media_type == "movie":
-                valid_media_types = ["movie"]
-            else:
-                valid_media_types = [media_type]
-            media_items = [
-                item
-                for item in media_items
-                if item.get("media_type", "unknown").lower() in valid_media_types
-            ]
-
-        # Filter media items by genre
-        if genre:
-            media_items = [
-                item for item in media_items if genre.lower() in [g.lower() for g in item.get("genres", [])]
-            ]
-
-        if not media_items:
-            await ctx.send("No media items found matching the criteria.")
-            return
-
-        # Select a random media item
-        random_item = random.choice(media_items)
-
-        await self.send_movie_embed(ctx, random_item)
+        return media_type, genre
 
     async def send_movie_embed(self, ctx, item):
         """Send an embed with the media item's details."""
         try:
             # Construct the embed using item data
-            embed = nextcord.Embed(title=f"{item['title']} ({item['year']})", color=nextcord.Color.random())
-
-            # Add summary
-            if item.get("summary"):
-                embed.add_field(name="Summary", value=item["summary"], inline=False)
+            embed = nextcord.Embed(
+                title=f"{item['title']} ({item['year']})",
+                color=nextcord.Color.random(),
+                description=item.get("summary", "No summary available."),
+            )
 
             # Add rating
             if item.get("rating"):
-                embed.add_field(name="Rating", value=item["rating"], inline=True)
+                embed.add_field(name="Rating", value=f"{item['rating']}/10", inline=True)
 
             # Add genres
             if item.get("genres"):
@@ -316,8 +172,10 @@ class MediaCommands(commands.Cog):
 
             # Add play count
             play_count = item.get("play_count", 0)
-            play_count = "Never" if play_count == 0 else str(play_count)
-            embed.add_field(name="Play Count", value=play_count, inline=True)
+            play_count_text = (
+                "Never watched" if play_count == 0 else f"{play_count} time{'s' if play_count != 1 else ''}"
+            )
+            embed.add_field(name="Play Count", value=play_count_text, inline=True)
 
             # Add last played
             if item.get("last_played"):
@@ -338,20 +196,13 @@ class MediaCommands(commands.Cog):
                                     await ctx.send(file=file, embed=embed)
                                     return
                                 else:
-                                    embed.add_field(
-                                        name="Image",
-                                        value="Failed to retrieve image.",
-                                        inline=False,
+                                    logger.warning(
+                                        f"Failed to retrieve thumbnail image with status {response.status}"
                                     )
                     except Exception as e:
                         logger.error(f"Failed to retrieve thumbnail image: {e}")
-                        embed.add_field(
-                            name="Image",
-                            value="Failed to retrieve image.",
-                            inline=False,
-                        )
 
-            # If no image was sent
+            # If we got here, either there's no thumbnail or we failed to retrieve it
             await ctx.send(embed=embed)
         except Exception as e:
             logger.error(f"Failed to send movie embed: {e}")
@@ -366,41 +217,16 @@ class MediaCommands(commands.Cog):
             )
         return ""
 
-    async def get_libraries(self, media_type=None):
-        """Fetch all libraries from Tautulli and filter them by media type.
-
-        Args:
-            media_type (str, optional): 'movie', 'tv', or None
-
-        Returns:
-            list: A list of library dictionaries
-        """
-        response = await self.tautulli.get_libraries()
-        if response.get("response", {}).get("result") == "success":
-            libraries = response.get("response", {}).get("data", [])
-            # Filter to include only libraries of the specified media_type
-            if media_type == "movie":
-                filtered_libraries = [lib for lib in libraries if lib["section_type"] == "movie"]
-            elif media_type == "tv":
-                filtered_libraries = [
-                    lib for lib in libraries if lib["section_type"] in ("show", "episode")
-                ]
-            else:
-                filtered_libraries = [
-                    lib for lib in libraries if lib["section_type"] in ("movie", "show", "episode")
-                ]
-            logger.debug(
-                f"Filtered libraries based on media_type '{media_type}': {[lib['section_name'] for lib in filtered_libraries]}"
-            )
-            return filtered_libraries
-        logger.error("Failed to fetch libraries from Tautulli.")
-        return []
-
     @commands.command()
     async def watchers(self, ctx):
         """Display current Plex watchers with details about their activity."""
         try:
             response = await self.tautulli.get_activity()
+            if not response or response.get("response", {}).get("result") != "success":
+                await ctx.send("Failed to retrieve current Plex activity.")
+                logger.error("Failed to retrieve activity from Tautulli.")
+                return
+
             sessions = response["response"]["data"]["sessions"]
             if not sessions:
                 await ctx.send("No one is currently watching Plex.")
@@ -423,14 +249,26 @@ class MediaCommands(commands.Cog):
                 state_symbol = {
                     "Playing": "▶️",
                     "Paused": "⏸️",
+                    "Buffering": "⏳",
                 }.get(state, state)
 
                 view_offset = int(user.get("view_offset", 0))
                 elapsed_time = str(timedelta(milliseconds=view_offset))
 
+                # Get progress percentage if duration is available
+                progress = ""
+                if user.get("duration", 0) > 0:
+                    percentage = min(100, (view_offset / user.get("duration", 1)) * 100)
+                    progress = f" ({percentage:.1f}%)"
+
                 embed.add_field(
                     name=user["friendly_name"],
-                    value=f"Watching **{user['full_title']}**\nQuality: **{user['quality_profile']}**\nState: **{state_symbol}**\nElapsed Time: **{elapsed_time}**",
+                    value=(
+                        f"Watching **{user['full_title']}**\n"
+                        f"Quality: **{user['quality_profile']}**\n"
+                        f"State: **{state_symbol}**\n"
+                        f"Elapsed Time: **{elapsed_time}**{progress}"
+                    ),
                     inline=False,
                 )
 
@@ -448,17 +286,24 @@ class MediaCommands(commands.Cog):
 
     @commands.command()
     async def downloading(self, ctx):
-        ### Display the current downloading torrents in qBittorrent.
+        """Display the current downloading torrents in qBittorrent."""
         # Try to instantiate the qBittorrent client
-
         try:
             config_data = Config.load_config()
+            qb_config_keys = ["qbit_ip", "qbit_port", "qbit_username", "qbit_password"]
+
+            # Check if all required keys exist
+            if not all(key in config_data for key in qb_config_keys):
+                await ctx.send("qBittorrent is not properly configured. Check your config file.")
+                return
+
             logger.debug(
                 "Creating qbittorrent Client with IP=%s, Port=%s, Username=%s",
                 config_data["qbit_ip"],
                 config_data["qbit_port"],
                 config_data["qbit_username"],
             )
+
             qbt_client = qbittorrentapi.Client(
                 host=f"{config_data['qbit_ip']}",
                 port=f"{config_data['qbit_port']}",
@@ -466,26 +311,29 @@ class MediaCommands(commands.Cog):
                 password=f"{config_data['qbit_password']}",
             )
 
-            # (Only if your version needs an explicit login)
+            # Login to qBittorrent
             qbt_client.auth_log_in()
             logger.debug("Successfully logged into qBittorrent? %s", qbt_client.is_logged_in)
 
+        except qbittorrentapi.LoginFailed:
+            logger.exception("Login to qBittorrent failed. Check username and password.")
+            await ctx.send("Failed to log in to qBittorrent. Check your credentials.")
+            return
+        except qbittorrentapi.APIConnectionError:
+            logger.exception("Connection to qBittorrent failed. Check network and host settings.")
+            await ctx.send("Failed to connect to qBittorrent. Check your network settings.")
+            return
         except Exception as err:
-            logger.exception(
-                "Couldn't open connection to qbittorrent. Check qBit JSON values or network accessibility."
-            )
+            logger.exception("Unexpected error connecting to qBittorrent.")
             await ctx.send("I'm having trouble connecting to qBittorrent right now.")
             return
 
         # Pull downloading torrents
-        num_downloads = 0
         downloads_embed = nextcord.Embed(
             title="qBittorrent Live Downloads",
-            color=0x6C81DF,
+            color=BotConfig.QBIT_EMBED_COLOR,
         )
-        downloads_embed.set_thumbnail(
-            url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png"
-        )
+        downloads_embed.set_thumbnail(url=BotConfig.QBIT_IMAGE)
 
         try:
             # Get all downloading torrents
@@ -500,23 +348,41 @@ class MediaCommands(commands.Cog):
             await ctx.send("I'm having trouble retrieving the downloading torrents.")
             return
 
+        if not torrents_downloading:
+            downloads_embed.description = "There are no torrents currently downloading."
+            await ctx.send(embed=downloads_embed)
+            return
+
+        # Sort torrents by progress (descending)
+        torrents_downloading.sort(key=lambda x: x.progress, reverse=True)
+
         for download in torrents_downloading:
+            # Format download speed with appropriate units
+            dl_speed = download.dlspeed
+            if dl_speed > 1_000_000:  # If more than 1 MB/s
+                dl_speed_str = f"{dl_speed * 1.0e-6:.2f} MB/s"
+            else:
+                dl_speed_str = f"{dl_speed * 1.0e-3:.0f} KB/s"
+
+            # Format ETA
+            eta = download.eta
+            if eta == 8640000:  # qBittorrent uses this value for unknown ETA
+                eta_str = "unknown"
+            elif eta > 86400:  # More than a day
+                eta_str = f"{eta / 86400:.1f} days"
+            elif eta > 3600:  # More than an hour
+                eta_str = f"{eta / 3600:.1f} hours"
+            else:
+                eta_str = f"{eta / 60:.0f} minutes"
+
             downloads_embed.add_field(
                 name=f"⏳ {download.name}",
                 value=(
                     f"**Progress**: {download.progress * 100:.2f}%, "
                     f"**Size:** {download.size * 1e-9:.2f} GB, "
-                    f"**ETA:** {download.eta / 60:.0f} minutes, "
-                    f"**DL:** {download.dlspeed * 1.0e-6:.2f} MB/s"
+                    f"**ETA:** {eta_str}, "
+                    f"**DL:** {dl_speed_str}"
                 ),
-                inline=False,
-            )
-            num_downloads += 1
-
-        if num_downloads < 1:
-            downloads_embed.add_field(
-                name="\u200b",
-                value="There is no movie currently downloading!",
                 inline=False,
             )
 
@@ -526,12 +392,15 @@ class MediaCommands(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def refresh_cache(self, ctx):
         """Manually refresh the media cache."""
-        await ctx.send("Refreshing media cache...")
-        async with self.cache_lock:
-            self.media_cache = await self.fetch_all_media_items()
-            await self.save_cache_to_disk()
-        await ctx.send("Media cache has been refreshed.")
-        logger.info("Media cache has been manually refreshed.")
+        refresh_message = await ctx.send("Refreshing media cache...")
+        try:
+            # Use our MediaCache class to update the cache
+            await self.media_cache.update_cache()
+            await refresh_message.edit(content="Media cache has been refreshed successfully.")
+            logger.info("Media cache has been manually refreshed.")
+        except Exception as e:
+            logger.error(f"Failed to refresh media cache: {e}")
+            await refresh_message.edit(content="Failed to refresh media cache. Check logs for details.")
 
 
 def setup(bot):

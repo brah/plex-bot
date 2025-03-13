@@ -14,6 +14,7 @@ import tzlocal
 import datetime
 
 from tautulli_wrapper import Tautulli
+from media_cache import MediaCache
 from utilities import UserMappings
 
 # Configure logging for this module
@@ -25,6 +26,7 @@ class Data(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
+        self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
         self.plex_orange = "#E5A00D"  # Plex orange color
         self.plex_grey_dark = "#1B1B1B"  # Dark grey background
         self.timezone = None  # Timezone will be fetched from Tautulli or local timezone
@@ -224,15 +226,8 @@ class Data(commands.Cog):
         if self.timezone is None:
             self.timezone = await self.get_tautulli_timezone()
 
-        # Access the media cache and lock from the MediaCommands cog
-        media_commands_cog = self.bot.get_cog("MediaCommands")
-        if media_commands_cog:
-            media_cache = media_commands_cog.media_cache
-            cache_lock = media_commands_cog.cache_lock
-        else:
-            logger.warning("Media cache is not available.")
-            await ctx.send("Media cache is not available. Please try again later.")
-            return None
+        # Ensure media cache is valid
+        await self.media_cache.ensure_cache_valid()
 
         # Fetch watch history
         params = {
@@ -265,59 +260,58 @@ class Data(commands.Cog):
 
         # Pair history entries with genres from media cache
         data = []
-        async with cache_lock:
-            for entry in history_entries:
-                # Get the timestamp and localize it
-                timestamp = entry.get("started")
-                if timestamp:
-                    entry_time = (
-                        pd.to_datetime(timestamp, unit="s").tz_localize(pytz.utc).astimezone(self.timezone)
-                    )
-                    if entry_time < cutoff_timestamp:
-                        continue  # Skip entries older than the cutoff
-                else:
-                    continue  # Skip entries without a timestamp
-
-                # Filter by user if specified
-                if plex_username and entry.get("user") != plex_username:
-                    continue  # Skip entries not matching the specified user
-
-                # Determine media type from the entry
-                media_type_raw = entry.get("media_type", "unknown").lower()
-                if media_type_raw == "movie":
-                    media_type = "Movie"
-                elif media_type_raw == "episode":
-                    media_type = "TV"
-                else:
-                    media_type = "Other"
-
-                # Try to get genres from the cache
-                # For episodes, use grandparent_rating_key to get the show's genres
-                rating_keys = [
-                    str(entry.get("rating_key")),
-                    str(entry.get("parent_rating_key")),
-                    str(entry.get("grandparent_rating_key")),
-                ]
-                genres = []
-                media_item = None
-                for key in rating_keys:
-                    if key:
-                        media_item = next(
-                            (item for item in media_cache if str(item.get("rating_key")) == key), None
-                        )
-                        if media_item:
-                            genres = media_item.get("genres", [])
-                            break
-
-                data.append(
-                    {
-                        "title": entry.get("full_title") or entry.get("title"),
-                        "started": entry_time,  # Localized datetime
-                        "user": entry.get("user"),
-                        "genres": genres,
-                        "media_type": media_type,
-                    }
+        for entry in history_entries:
+            # Get the timestamp and localize it
+            timestamp = entry.get("started")
+            if timestamp:
+                entry_time = (
+                    pd.to_datetime(timestamp, unit="s").tz_localize(pytz.utc).astimezone(self.timezone)
                 )
+                if entry_time < cutoff_timestamp:
+                    continue  # Skip entries older than the cutoff
+            else:
+                continue  # Skip entries without a timestamp
+
+            # Filter by user if specified
+            if plex_username and entry.get("user") != plex_username:
+                continue  # Skip entries not matching the specified user
+
+            # Determine media type from the entry
+            media_type_raw = entry.get("media_type", "unknown").lower()
+            if media_type_raw == "movie":
+                media_type = "Movie"
+            elif media_type_raw == "episode":
+                media_type = "TV"
+            else:
+                media_type = "Other"
+
+            # Try to get genres from the cache
+            # For episodes, use grandparent_rating_key to get the show's genres
+            rating_keys = [
+                str(entry.get("rating_key")),
+                str(entry.get("parent_rating_key")),
+                str(entry.get("grandparent_rating_key")),
+            ]
+            genres = []
+            media_item = None
+
+            # Try each rating key until we find a matching item in the cache
+            for key in rating_keys:
+                if key != "None":  # Skip None values that were converted to strings
+                    media_item = await self.media_cache.get_item(key)
+                    if media_item:
+                        genres = media_item.get("genres", [])
+                        break
+
+            data.append(
+                {
+                    "title": entry.get("full_title") or entry.get("title"),
+                    "started": entry_time,  # Localized datetime
+                    "user": entry.get("user"),
+                    "genres": genres,
+                    "media_type": media_type,
+                }
+            )
         return data
 
     def calculate_hour_counts(self, data):
