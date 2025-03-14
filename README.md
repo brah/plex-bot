@@ -139,7 +139,5 @@ pm2 save
 | `plex downloading` | Shows current qBittorrent downloads |
 | `plex recent [amount]` | Shows recently added media |
 | `plex stats [days]` | Shows server statistics for the specified time period |
-| `plex most_watched_hours` | Shows viewing activity by hour of day |
-| `plex most_watched_days` | Shows viewing activity by day of week |
-| `plex media_type_by_day` | Shows viewing trends by media type |
+| `plex chart` | Shows options for visualized data/charts |
 | `plex help` | Shows all available commands |

@@ -6,6 +6,6 @@ aiofiles==24.1.0
 pandas==2.2.3
 numpy==2.1.2
 seaborn==0.13.2
-pytz==2024.2
-tzlocal==5.3
+pytz==2025.1
+tzlocal==5.3.1
 datetime==5.5
