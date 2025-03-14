@@ -29,7 +29,7 @@ class Config:
                     cls._config_data = json.load(f)
                 logger.info("Configuration loaded successfully.")
             except Exception as e:
-                logger.exception("Failed to load configuration.")
+                logger.exception(f"Failed to load configuration: {e}")
                 cls._config_data = {}
         return cls._config_data
 
@@ -48,7 +48,7 @@ class Config:
             cls._config_data = data
             logger.info("Configuration saved successfully.")
         except Exception as e:
-            logger.exception("Failed to save configuration.")
+            logger.exception(f"Failed to save configuration: {e}")
 
     @classmethod
     def reload_config(cls, filename: str = "config.json") -> Dict[str, Any]:

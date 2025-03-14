@@ -206,7 +206,7 @@ class Recommendations(commands.Cog):
                         "reaction_add", timeout=30.0, check=check_reaction
                     )
 
-                    reaction, user = reaction_event
+                    reaction, _ = reaction_event
                     emoji = str(reaction.emoji)
                     selected_index = self.number_emojis[emoji]
                     selected_item = selected_recommendations[selected_index]
@@ -263,11 +263,11 @@ class Recommendations(commands.Cog):
             rating_key = item.get("rating_key")
             watched_users = await self.get_watched_users(rating_key, exclude_user=plex_username)
 
-            field_value = f"**Summary**: {overview}\n" f"**Genres**: {genres}\n" f"**Rating**: {rating}\n"
+            field_value = f"**Summary**: {overview}\n**Genres**: {genres}\n**Rating**: {rating}\n"
             if watched_users:
                 field_value += f"**Watched by**: {', '.join(watched_users)}\n"
             else:
-                field_value += f"**Watched by**: No one yet!\n"
+                field_value += "**Watched by**: No one yet!\n"
 
             embed.description = field_value
 

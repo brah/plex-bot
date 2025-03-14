@@ -72,12 +72,33 @@ async def initialize_resources(config):
 
 
 async def load_cogs(bot):
-    """Load all cogs from the cogs directory."""
+    """Load all cogs from the cogs directory with proper dependency ordering."""
+    logger.info("Starting to load cogs with prioritized ordering")
+
+    # Priority loading order - these cogs must be loaded first
+    priority_cogs = [
+        "cogs.plex_data",  # Load this first as it's a dependency
+    ]
+
+    # Load priority cogs first
+    for cog_name in priority_cogs:
+        try:
+            bot.load_extension(cog_name)
+            logger.info(f"Loaded priority cog: {cog_name}")
+        except Exception as e:
+            logger.exception(f"Failed to load priority cog {cog_name}: {e}")
+
+    # Then load all remaining cogs
     cog_directory = Path("cogs")
     for cog_file in cog_directory.glob("*.py"):
         if cog_file.name.startswith("_"):
             continue  # Skip any files that start with an underscore
+
         cog_name = f"cogs.{cog_file.stem}"
+        # Skip cogs that were already loaded in priority list
+        if cog_name in priority_cogs:
+            continue
+
         try:
             bot.load_extension(cog_name)
             logger.info(f"Loaded cog: {cog_name}")
