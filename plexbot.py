@@ -4,21 +4,23 @@
 Entry point for the PlexBot Discord bot.
 
 Initializes the bot, loads configurations, sets up logging, and starts the bot.
+This version uses the new unified configuration and error handling systems.
 """
 
 import asyncio
 import logging
 import sys
-import traceback
 from pathlib import Path
 
 import nextcord
 from nextcord.ext import commands
 
-from utilities import Config
+# Import our new configuration and error handling systems
+from config import config
+from errors import ErrorHandler, PlexBotError
+
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
-from bot_config import BotConfig
 
 # Configure logging
 logging.basicConfig(
@@ -33,13 +35,15 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
-async def initialize_resources(config):
+async def initialize_resources():
     """Initialize shared resources that require async initialization."""
     resources = {}
 
     # Initialize Tautulli client
     logger.info("Initializing Tautulli client...")
-    tautulli = Tautulli(api_key=config["tautulli_apikey"], tautulli_ip=config["tautulli_ip"])
+    tautulli_ip = config.get("tautulli", "ip")
+    tautulli_apikey = config.get("tautulli", "apikey")
+    tautulli = Tautulli(api_key=tautulli_apikey, tautulli_ip=tautulli_ip)
     await tautulli.initialize()
     resources["tautulli"] = tautulli
 
@@ -52,7 +56,7 @@ async def initialize_resources(config):
         logger.error("Tautulli connection test failed. Please check your API key and host settings.")
 
     # Initialize TMDB client if API key is provided
-    tmdb_api_key = config.get("tmdb_apikey")
+    tmdb_api_key = config.get("tmdb", "apikey")
     if tmdb_api_key:
         logger.info("Initializing TMDB client...")
         tmdb = TMDB(api_key=tmdb_api_key)
@@ -64,7 +68,9 @@ async def initialize_resources(config):
 
     # Initialize media cache
     logger.info("Initializing media cache...")
-    media_cache = MediaCache(tautulli, cache_file_path=BotConfig.MEDIA_CACHE_PATH)
+    media_cache_path = config.get("cache", "media_cache_path")
+    cache_update_interval = config.get("cache", "update_interval")
+    media_cache = MediaCache(tautulli, cache_file_path=media_cache_path, update_interval=cache_update_interval)
     await media_cache.initialize()
     resources["media_cache"] = media_cache
 
@@ -109,18 +115,16 @@ async def load_cogs(bot):
 def main():
     """Main entry point for the bot."""
     logger.info("Starting PlexBot...")
-
-    # Load configuration
-    config = Config.load_config()
-    if not config:
-        logger.error("Failed to load configuration.")
+    
+    # Initialize configuration system
+    if not config.initialize():
+        logger.error("Failed to initialize configuration system. Run migrate_config.py first if needed.")
         return
 
-    # Validate required configuration keys
-    required_keys = ["token", "tautulli_ip", "tautulli_apikey"]
-    missing_keys = [key for key in required_keys if key not in config]
-    if missing_keys:
-        logger.error(f"Missing required configuration keys: {', '.join(missing_keys)}")
+    # Get core configuration
+    token = config.get("core", "token")
+    if not token:
+        logger.error("Discord bot token is missing. Check your configuration.")
         return
 
     # Create the bot and configure intents
@@ -128,16 +132,24 @@ def main():
     intents.message_content = True
     intents.members = True
 
-    # Initialize bot with the prefix `plex ` and intents
-    bot = commands.Bot(command_prefix=["plex ", "Plex "], intents=intents, help_command=None)
+    # Initialize bot with the prefix from configuration
+    bot_prefix = config.get("core", "prefix")
+    bot = commands.Bot(command_prefix=[bot_prefix, bot_prefix.title()], intents=intents, help_command=None)
+
+    # Create the error handler
+    error_handler = ErrorHandler(bot)
 
     @bot.event
     async def on_ready():
         """Event triggered when the bot is ready to start."""
         logger.info(f"Logged in as {bot.user} (ID: {bot.user.id})")
 
+        # Initialize the error handler
+        error_handler.setup()
+        logger.info("Error handler initialized.")
+
         # Initialize shared resources asynchronously after bot is ready
-        bot.shared_resources = await initialize_resources(config)
+        bot.shared_resources = await initialize_resources()
         logger.info("Shared resources initialized")
 
         # Dynamically load all cogs from the 'cogs' directory
@@ -145,30 +157,9 @@ def main():
 
         logger.info(f"PlexBot is now ready to serve {len(bot.guilds)} servers")
 
-    @bot.event
-    async def on_command_error(ctx, error):
-        """Event triggered when a command raises an error."""
-        if isinstance(error, commands.CommandNotFound):
-            return
-        elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"*{error}*\nTry `{ctx.prefix}help {ctx.command}`")
-            logger.warning(f"Missing required argument: {error}")
-        elif isinstance(error, commands.MissingPermissions):
-            await ctx.send("You do not have the appropriate permissions to run this command.")
-            logger.warning(f"Missing permissions: {error}")
-        elif isinstance(error, commands.BotMissingPermissions):
-            await ctx.send("I don't have sufficient permissions!")
-            logger.warning(f"Bot missing permissions: {error}")
-        else:
-            logger.error(f"Unhandled exception in command {ctx.command}: {error}")
-            traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
-            await ctx.send(
-                "An error occurred while processing this command. Please check the logs for details."
-            )
-
     # Run the bot
     try:
-        bot.run(config["token"])
+        bot.run(token)
     except KeyboardInterrupt:
         logger.info("Bot shutdown requested by user.")
     except Exception as e:
