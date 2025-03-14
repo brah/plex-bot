@@ -1,52 +1,145 @@
-# plex-bot
+# Plex-Bot
 
-Hobby project to interact with Plex through the Tautulli API for fun commands on your Discord server
+A Discord bot that interfaces with your Plex server through Tautulli's API, offering rich features like user statistics, media recommendations, live download tracking from qBittorrent, and more!
 
-If you intend to use it, please do note I can and will break stuff at any and every moment (+ development will likely come in bursts, just one of those things :-))
+## Features
+
+- **Top Plex Users**: Track and display the most active viewers with automatic Discord role assignments
+- **Media Recommendations**: Get personalized recommendations based on watch history and genre preferences
+- **Random Media Suggestions**: Discover content from your library with filtering by genre and media type
+- **Live Activity**: See who's currently watching what on your Plex server
+- **Download Tracking**: Monitor qBittorrent downloads in real time (optional)
+- **Media Statistics**: Generate detailed viewing statistics with visual charts
+- **Efficient Media Cache**: Optimized caching system for fast responses even with large libraries
 
 ## Setup
 
-Preferably on the same machine where Plex and Tautulli reside (not strictly, external requests *should* work OK, but you know)
+### Requirements
 
-Note this will install in the directory you are currently sitting in, doesn't matter where it goes. Personally, I created a `/home/app` folder where I run it from.
+- **Python 3.8+**
+- A working **Tautulli** setup ([Tautulli GitHub](https://github.com/Tautulli/Tautulli))
+- **Discord Bot Token** ([Discord Developer Portal](https://discord.com/developers/applications))
+- Optional: **qBittorrent** for download tracking
+- Optional: **TMDB API Key** for enhanced metadata
 
-1. `git clone https://github.com/brah/plex-bot.git`
-2. `pip install -r requirements.txt`
-3. Create a `config.json` file in the same directory as `plexbot.py`, add the sample values below and fill as necessary - Should be mostly self explanatory, however there is explanations below:
+### Installation
 
-```json
-{
-"tautulli_ip": "192.168.0.50:8181",
-"tautulli_apikey": "",
-"token": "Discord bot token",
-"server_id": 0,
-"plex_top": 1,
-"plex_two": 2,
-"plex_three": 3,
-"qbit_ip": "192.qbit.ip",
-"qbit_port": "8080",
-"qbit_username": "qbit_username",
-"qbit_password": "qbit_pass"
-}
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/brah/plex-bot.git
+   cd plex-bot
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Create a `config.json` file in the root directory:
+
+   ```json
+   {
+       "tautulli_ip": "localhost:8181",
+       "tautulli_apikey": "<Your Tautulli API Key>",
+       "token": "<Your Discord Bot Token>",
+       "server_id": "<Your Discord Server ID>",
+       "plex_top": role_id1,
+       "plex_two": role_id2,
+       "plex_three": role_id3,
+       "qbit_ip": "localhost",
+       "qbit_port": "8080",
+       "qbit_username": "qbit_username",
+       "qbit_password": "qbit_pass",
+       "tmdb_apikey": "<Your TMDB API Key>"
+   }
+   ```
+
+   *Note: `plex_top`, `plex_two`, and `plex_three` are [role IDs](https://www.pythondiscord.com/pages/guides/pydis-guides/contributing/obtaining-discord-ids/#role-id) which you've created to highlight the top 3 media watchers on your server.*
+
+      *Note:  bot_config.py also has config options you can change, however they are mostly optional/personal preference.*
+
+4. Run the bot:
+
+   ```bash
+   python plexbot.py
+   ```
+
+### Running as a Service
+
+For 24/7 operation, consider one of these methods:
+
+#### Option 1: systemd (Linux)
+
+Create a file at `/etc/systemd/system/plexbot.service`:
+
+```ini
+[Unit]
+Description=Plex Discord Bot Service
+After=network.target
+
+[Service]
+User=<your-username>
+WorkingDirectory=/path/to/plex-bot
+ExecStart=/usr/bin/python3 /path/to/plex-bot/plexbot.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-- **tautulli_ip** - Local DNS records should work fine (i.e. media.server:8181), else `localhost:8181` or `IP:PORT`
-- **tautulli_apikey** - Go to your respective page: `TAUTULLI_IP:PORT/settings#tabs_tabs-web_interface` and you can find your API key at the bottom
-- **token** - [Guide](https://www.writebots.com/discord-bot-token/)
-- **tmdb_apikey** - [Create one here](https://www.themoviedb.org/settings/api) note: this is optional, it is (going to be...) used for images in `plex recent` for recent additions to library - WIP integration
-- **server_id** - The bot (currently) is designed to operate on **one** server, right click the server, copy ID and paste it here.
-- **plex_top**
-- **plex_two**
-- **plex_three** - these should all be role IDs (i.e. plex 1st, plex 2nd, plex 3rd) for top 3 plex users to get special roles. Create the roles (permissions of the roles/name/etc. doesn't matter - as long as the roles don't rank above **THIS** bot's role). Note these ARE optional, however most of the bot's functionality comes down to the `plex top` command.
-- **qbit_ip** - qBittorrent config is OPTIONAL! Adds `plex downloading` functionality so users can see current downloads. There is no filtering! All non-100% torrents are posted‼️
-- **qbit_port** - typically `8080`, you can find it in qBittorrent settings->webUI->port
-- **qbit_username** - default is admin, blank should work if you do not have any auth (or have it disabled for localhost)
-- **qbit_password** - default on qBittorrent is adminadmin
+Then enable and start the service:
 
-## Running the script
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start plexbot
+sudo systemctl enable plexbot  # to start on boot
+```
 
-Once your `config.json` is prepared, you can run `python3 plexbot.py` - do note if you close the terminal the script will stop also. How you run it infinitely is up to you, some valid options are [screen](https://linuxize.com/post/how-to-use-linux-screen/), cron, [forever](https://stackoverflow.com/a/19571283) or even as a [systemd-service](https://medium.com/codex/setup-a-python-script-as-a-service-through-systemctl-systemd-f0cc55a42267)
+#### Option 2: Screen or tmux
+
+For temporary background operation:
+
+**Screen:**
+```bash
+screen -S plexbot
+python plexbot.py
+# Press Ctrl+A, then D to detach
+# Resume with: screen -r plexbot
+```
+
+**Tmux:**
+```bash
+tmux new -s plexbot
+python plexbot.py
+# Press Ctrl+B, then D to detach
+# Resume with: tmux attach -t plexbot
+```
+
+#### Option 3: PM2
+
+If you're familiar with Node.js ecosystem:
+
+```bash
+npm install -g pm2
+pm2 start plexbot.py --name plexbot --interpreter=python3
+pm2 startup
+pm2 save
+```
 
 ## Commands
 
-![Plex help command with current commands](https://i.imgur.com/aQ4BBf4.png)
+| Command | Description |
+|---------|-------------|
+| `plex top` | Shows the top Plex users and assigns roles |
+| `plex random [media_type] [genre]` | Shows a random item from your library with optional filtering |
+| `plex recommend [@user]` | Recommends media based on watch history |
+| `plex watchers` | Shows who's currently watching Plex |
+| `plex downloading` | Shows current qBittorrent downloads |
+| `plex recent [amount]` | Shows recently added media |
+| `plex stats [days]` | Shows server statistics for the specified time period |
+| `plex most_watched_hours` | Shows viewing activity by hour of day |
+| `plex most_watched_days` | Shows viewing activity by day of week |
+| `plex media_type_by_day` | Shows viewing trends by media type |
+| `plex help` | Shows all available commands |
