@@ -16,6 +16,8 @@ logger.setLevel(logging.INFO)
 
 
 class PlexStats(commands.Cog):
+    """Commands for displaying Plex server statistics and user activity."""
+
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
@@ -23,7 +25,15 @@ class PlexStats(commands.Cog):
 
     @commands.command()
     async def top(self, ctx, set_default: int = None):
-        """Displays top Plex users or sets the default duration for displaying stats."""
+        """
+        Displays top Plex users or sets the default duration for displaying stats.
+        
+        Usage:
+        plex top [days]
+        
+        If days is provided, sets that as the default duration.
+        Otherwise, shows the top users based on watch time.
+        """
         if set_default is not None:
             config_data = Config.load_config()
             config_data["default_duration"] = set_default
@@ -149,7 +159,14 @@ class PlexStats(commands.Cog):
 
     @commands.command()
     async def stats(self, ctx, time: int = 30):
-        """Displays Plex server statistics for a given time range."""
+        """
+        Displays Plex server statistics for a given time range.
+        
+        Usage:
+        plex stats [days]
+        
+        Shows statistics like most watched movies and shows for the specified time period.
+        """
         if not time:
             time = 30
         else:
@@ -219,7 +236,12 @@ class PlexStats(commands.Cog):
 
     @commands.command()
     async def shows(self, ctx):
-        """Displays the top users by total watch time across all TV libraries."""
+        """
+        Displays the top users by total watch time across all TV libraries.
+        
+        Usage:
+        plex shows
+        """
         try:
             # Get all TV libraries
             response = await self.tautulli.get_libraries()
@@ -276,7 +298,15 @@ class PlexStats(commands.Cog):
 
     @commands.command()
     async def history(self, ctx, *, identifier: str = None):
-        """Prints a user's previously watched media. Usable with plex history <@user> or <plex_username>."""
+        """
+        Displays a user's previously watched media.
+        
+        Usage:
+        plex history [@user]
+        plex history [plex_username]
+        
+        Shows the watch history for the specified user or all users if none is specified.
+        """
         member = None
         plex_username = None
 
