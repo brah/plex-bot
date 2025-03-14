@@ -27,10 +27,10 @@ class PlexStats(commands.Cog):
     async def top(self, ctx, set_default: int = None):
         """
         Displays top Plex users or sets the default duration for displaying stats.
-        
+
         Usage:
         plex top [days]
-        
+
         If days is provided, sets that as the default duration.
         Otherwise, shows the top users based on watch time.
         """
@@ -161,10 +161,10 @@ class PlexStats(commands.Cog):
     async def stats(self, ctx, time: int = 30):
         """
         Displays Plex server statistics for a given time range.
-        
+
         Usage:
         plex stats [days]
-        
+
         Shows statistics like most watched movies and shows for the specified time period.
         """
         if not time:
@@ -238,7 +238,7 @@ class PlexStats(commands.Cog):
     async def shows(self, ctx):
         """
         Displays the top users by total watch time across all TV libraries.
-        
+
         Usage:
         plex shows
         """
@@ -300,11 +300,11 @@ class PlexStats(commands.Cog):
     async def history(self, ctx, *, identifier: str = None):
         """
         Displays a user's previously watched media.
-        
+
         Usage:
         plex history [@user]
         plex history [plex_username]
-        
+
         Shows the watch history for the specified user or all users if none is specified.
         """
         member = None

@@ -29,7 +29,7 @@ class PlexData(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
         self.timezone = None  # Timezone will be fetched from Tautulli or local timezone
-    
+
     async def get_tautulli_timezone(self) -> pytz.timezone:
         """Retrieve the timezone from Tautulli settings."""
         response = await self.tautulli.api_call("get_settings")
@@ -80,19 +80,16 @@ class PlexData(commands.Cog):
         return member, days
 
     async def fetch_watch_history_with_genres(
-        self, 
-        ctx, 
-        member: Optional[nextcord.Member] = None, 
-        days: int = 30
+        self, ctx, member: Optional[nextcord.Member] = None, days: int = 30
     ) -> List[Dict[str, Any]]:
         """
         Fetches the watch history and pairs it with genre data from the media cache.
-        
+
         Args:
             ctx: Command context
             member: Discord member to filter by (optional)
             days: Number of days to look back
-            
+
         Returns:
             List of watch history entries with genre data
         """
@@ -209,8 +206,7 @@ class PlexData(commands.Cog):
             df["day"]
             .value_counts()
             .reindex(
-                ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], 
-                fill_value=0
+                ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], fill_value=0
             )
         )
         return day_counts

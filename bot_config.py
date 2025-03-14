@@ -25,7 +25,7 @@ class BotConfig:
     DEFAULT_STATS_DURATION = 7
     DEFAULT_HISTORY_LENGTH = 10000
     DEFAULT_TIME_RANGE = 30  # Default time range in days
-    
+
     # Chart and visualization settings
     CHART_WIDTH = 14
     CHART_HEIGHT = 6
@@ -47,13 +47,13 @@ class BotConfig:
         "tv": ["show", "episode"],
         "any": ["movie", "show", "episode"],
     }
-    
+
     # Visualization colors
     PLEX_ORANGE = "#E5A00D"  # Plex orange color
     PLEX_GREY_DARK = "#1B1B1B"  # Dark grey background
     PLEX_COLORS = {
         "Movie": "#E5A00D",  # Plex orange
-        "TV": "#F6E0B6",     # Light cream
+        "TV": "#F6E0B6",  # Light cream
         "Other": "#F3D38A",  # Pale yellow
-        "Unknown": "#F0C75E" # Gold
+        "Unknown": "#F0C75E",  # Gold
     }
