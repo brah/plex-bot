@@ -174,9 +174,10 @@ class MediaCommands(commands.Cog):
 
             # Add play count
             play_count = item.get("play_count", 0)
-            play_count_text = (
-                "Never watched" if play_count == 0 else f"{play_count} time{'s' if play_count != 1 else ''}"
-            )
+            if play_count == 0:
+                play_count_text = "Never watched"
+            else:
+                play_count_text = f"{play_count} time{'s' if play_count != 1 else ''}"
             embed.add_field(name="Play Count", value=play_count_text, inline=True)
 
             # Add last played
@@ -221,52 +222,67 @@ class MediaCommands(commands.Cog):
             user_data = UserMappings.load_user_mappings()
             ignored_users = {user["plex_username"] for user in user_data if user.get("ignore", False)}
 
-            total_watchers = 0
             embed = nextcord.Embed(title="Plex Watchers", color=self.plex_embed_color)
             embed.set_thumbnail(url=self.plex_image)
+
+            active_users = 0
 
             for user in sessions:
                 if user["username"] in ignored_users:
                     continue  # Skip ignored users
 
-                total_watchers += 1
-                state = user.get("state", "unknown").capitalize()
-                state_symbol = {
-                    "Playing": "▶️",
-                    "Paused": "⏸️",
-                    "Buffering": "⏳",
-                }.get(state, state)
+                active_users += 1
+                try:
+                    # Process user state
+                    state = user.get("state", "unknown").capitalize()
+                    state_symbol = {
+                        "Playing": "▶️",
+                        "Paused": "⏸️",
+                        "Buffering": "⏳",
+                    }.get(state, state)
 
-                view_offset = int(user.get("view_offset", 0))
-                elapsed_time = str(timedelta(milliseconds=view_offset))
+                    try:
+                        view_offset_ms = int(user.get("view_offset", 0))
+                        duration_ms = int(user.get("duration", 0))
+                        elapsed_time = str(timedelta(milliseconds=view_offset_ms))
 
-                # Get progress percentage if duration is available
-                progress = ""
-                if user.get("duration", 0) > 0:
-                    percentage = min(100, (view_offset / user.get("duration", 1)) * 100)
-                    progress = f" ({percentage:.1f}%)"
+                        # Calculate progress percentage only if we have valid duration
+                        progress_text = ""
+                        if duration_ms > 0:
+                            percentage = min(100, (view_offset_ms / duration_ms) * 100)
+                            progress_text = f" ({percentage:.1f}%)"
+                    except (ValueError, TypeError):
+                        elapsed_time = "Unknown"
+                        progress_text = ""
+                        logger.warning(f"Invalid time data for user {user['friendly_name']}")
 
-                embed.add_field(
-                    name=user["friendly_name"],
-                    value=(
+                    # Build user field with detailed information
+                    user_field = (
                         f"Watching **{user['full_title']}**\n"
-                        f"Quality: **{user['quality_profile']}**\n"
+                        f"Quality: **{user.get('quality_profile', 'Unknown')}**\n"
                         f"State: **{state_symbol}**\n"
-                        f"Elapsed Time: **{elapsed_time}**{progress}"
-                    ),
-                    inline=False,
-                )
+                        f"Elapsed Time: **{elapsed_time}**{progress_text}"
+                    )
 
-            embed.description = (
-                f"**{total_watchers}** users are currently watching Plex 🐒"
-                if total_watchers > 0
-                else "No one is active on Plex at the moment. 😔✊"
-            )
+                    embed.add_field(
+                        name=user["friendly_name"],
+                        value=user_field,
+                        inline=False,
+                    )
+                except Exception as e:
+                    logger.error(f"Error processing user {user.get('friendly_name', 'unknown')}: {e}")
+                    continue
+
+            # Set appropriate description based on number of active watchers
+            if active_users > 0:
+                embed.description = f"**{active_users}** users are currently watching Plex 🐒"
+            else:
+                embed.description = "No one is active on Plex at the moment. 😔✊"
 
             await ctx.send(embed=embed)
 
         except Exception as e:
-            logger.error(f"Failed to retrieve watchers: {e}")
+            logger.error(f"Failed to retrieve watchers: {e}", exc_info=True)
             await ctx.send("Failed to retrieve watchers.")
 
     @commands.command()

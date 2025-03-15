@@ -70,7 +70,9 @@ async def initialize_resources():
     logger.info("Initializing media cache...")
     media_cache_path = config.get("cache", "media_cache_path")
     cache_update_interval = config.get("cache", "update_interval")
-    media_cache = MediaCache(tautulli, cache_file_path=media_cache_path, update_interval=cache_update_interval)
+    media_cache = MediaCache(
+        tautulli, cache_file_path=media_cache_path, update_interval=cache_update_interval
+    )
     await media_cache.initialize()
     resources["media_cache"] = media_cache
 
@@ -115,7 +117,7 @@ async def load_cogs(bot):
 def main():
     """Main entry point for the bot."""
     logger.info("Starting PlexBot...")
-    
+
     # Initialize configuration system
     if not config.initialize():
         logger.error("Failed to initialize configuration system. Run migrate_config.py first if needed.")
