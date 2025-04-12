@@ -5,6 +5,7 @@ import logging
 import random
 from datetime import timedelta
 from io import BytesIO
+from config import config
 
 import aiohttp
 import nextcord
@@ -290,26 +291,41 @@ class MediaCommands(commands.Cog):
         """Display the current downloading torrents in qBittorrent."""
         # Try to instantiate the qBittorrent client
         try:
-            config_data = Config.load_config()
-            qb_config_keys = ["qbit_ip", "qbit_port", "qbit_username", "qbit_password"]
+            qbit_ip = config.get("qbittorrent", "ip")
+            qbit_port = config.get("qbittorrent", "port")
+            qbit_username = config.get("qbittorrent", "username")
+            qbit_password = config.get("qbittorrent", "password")
 
-            # Check if all required keys exist
-            if not all(key in config_data for key in qb_config_keys):
-                await ctx.send("qBittorrent is not properly configured. Check your config file.")
+            # Check if all required configurations are present
+            if not all([qbit_ip, qbit_port, qbit_username, qbit_password]):
+                missing_config = []
+                if not qbit_ip:
+                    missing_config.append("IP")
+                if not qbit_port:
+                    missing_config.append("Port")
+                if not qbit_username:
+                    missing_config.append("Username")
+                if not qbit_password:
+                    missing_config.append("Password")
+
+                await ctx.send(
+                    f"qBittorrent is not properly configured. Missing: {', '.join(missing_config)}"
+                )
+                logger.error(f"Missing qBittorrent configuration: {', '.join(missing_config)}")
                 return
 
             logger.debug(
                 "Creating qbittorrent Client with IP=%s, Port=%s, Username=%s",
-                config_data["qbit_ip"],
-                config_data["qbit_port"],
-                config_data["qbit_username"],
+                qbit_ip,
+                qbit_port,
+                qbit_username,
             )
 
             qbt_client = qbittorrentapi.Client(
-                host=f"{config_data['qbit_ip']}",
-                port=f"{config_data['qbit_port']}",
-                username=f"{config_data['qbit_username']}",
-                password=f"{config_data['qbit_password']}",
+                host=qbit_ip,
+                port=qbit_port,
+                username=qbit_username,
+                password=qbit_password,
             )
 
             # Login to qBittorrent
