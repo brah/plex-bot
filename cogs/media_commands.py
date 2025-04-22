@@ -286,6 +286,248 @@ class MediaCommands(commands.Cog):
             logger.error(f"Failed to retrieve watchers: {e}", exc_info=True)
             await ctx.send("Failed to retrieve watchers.")
 
+    @commands.command(name="tv")
+    async def lookup_tv(self, ctx, *, show_name: str):
+        """
+        Lookup information about a TV show in your Plex library.
+
+        Usage:
+        plex tv <show name>
+
+        Example:
+        plex tv Game of Thrones
+        """
+        await self.lookup_media(ctx, show_name, media_type="tv")
+
+    @commands.command(name="movie")
+    async def lookup_movie(self, ctx, *, movie_name: str):
+        """
+        Lookup information about a movie in your Plex library.
+
+        Usage:
+        plex movie <movie name>
+
+        Example:
+        plex movie The Godfather
+        """
+        await self.lookup_media(ctx, movie_name, media_type="movie")
+
+    async def lookup_media(self, ctx, title: str, media_type: str = None):
+        """
+        Common implementation for looking up TV shows and movies.
+
+        Args:
+            ctx: Command context
+            title: Title to search for
+            media_type: "tv" or "movie" to filter results
+        """
+        if not title:
+            await ctx.send("Please provide a title to search for.")
+            return
+
+        # Set media type for filtering
+        search_media_type = None
+        if media_type == "tv":
+            search_media_type = "show"
+            media_type_str = "TV Show"
+        elif media_type == "movie":
+            search_media_type = "movie"
+            media_type_str = "Movie"
+
+        # Let the user know we're searching
+        search_msg = await ctx.send(
+            f"🔍 Searching for {media_type_str if media_type else 'content'}: **{title}**..."
+        )
+
+        try:
+            # First, search the media cache
+            await self.media_cache.ensure_cache_valid()
+
+            # Search items matching the title and media type
+            items = await self.media_cache.search(title, limit=20)
+
+            # Filter by media type if specified
+            if search_media_type:
+                items = [item for item in items if item.get("media_type") == search_media_type]
+
+            if not items:
+                await search_msg.edit(
+                    content=f"No {media_type_str.lower() if media_type else 'content'} found matching '**{title}**'."
+                )
+                return
+
+            # If we have multiple matches, try to find the best one
+            best_match = None
+
+            # Exact title match gets priority
+            for item in items:
+                if item.get("title", "").lower() == title.lower():
+                    best_match = item
+                    break
+
+            # If no exact match, use the first result
+            if not best_match:
+                best_match = items[0]
+
+            # Get detailed metadata for this item
+            rating_key = best_match.get("rating_key")
+            if not rating_key:
+                await search_msg.edit(
+                    content="Found a match but couldn't retrieve its details. Try a different search."
+                )
+                return
+
+            # Get full metadata
+            metadata_response = await self.tautulli.get_metadata(rating_key)
+            if metadata_response["response"]["result"] != "success":
+                await search_msg.edit(
+                    content="Found a match but couldn't retrieve its details. Try a different search."
+                )
+                return
+
+            metadata = metadata_response["response"]["data"]
+
+            # Get user watch statistics
+            user_stats_response = await self.tautulli.get_item_user_stats(rating_key)
+            watch_time_response = await self.tautulli.get_item_watch_time_stats(rating_key)
+
+            # Create the embed with all the gathered information
+            embed = nextcord.Embed(
+                title=metadata.get("title", "Unknown Title"),
+                description=metadata.get("summary", "No summary available."),
+                color=self.plex_embed_color,
+            )
+
+            # Add basic metadata
+            if metadata.get("year"):
+                embed.title += f" ({metadata.get('year')})"
+
+            if metadata.get("content_rating"):
+                embed.add_field(name="Rating", value=metadata.get("content_rating"), inline=True)
+
+            if metadata.get("duration"):
+                # Convert duration from milliseconds to minutes
+                duration_min = int(int(metadata.get("duration", 0)) / 60000)
+                embed.add_field(name="Duration", value=f"{duration_min} minutes", inline=True)
+
+            if metadata.get("genres"):
+                genres = ", ".join([g.title() for g in metadata.get("genres", [])])
+                embed.add_field(name="Genres", value=genres or "None listed", inline=True)
+
+            # Add TV show specific metadata
+            if metadata.get("media_type") == "show":
+                embed.add_field(
+                    name="Seasons", value=metadata.get("children_count", "Unknown"), inline=True
+                )
+
+                # Try to get total episodes too
+                if metadata.get("grandchildren_count"):
+                    embed.add_field(
+                        name="Episodes", value=metadata.get("grandchildren_count", "Unknown"), inline=True
+                    )
+
+                # Add air dates if available
+                if metadata.get("originally_available_at"):
+                    embed.add_field(
+                        name="First Aired", value=metadata.get("originally_available_at"), inline=True
+                    )
+
+                # Add status if available (Continuing or Ended)
+                if "status" in metadata:
+                    embed.add_field(name="Status", value=metadata.get("status", "Unknown"), inline=True)
+
+            # Add watch statistics from user_stats
+            if user_stats_response["response"]["result"] == "success":
+                user_stats = user_stats_response["response"]["data"]
+
+                if user_stats:
+                    # Total play count
+                    total_plays = sum(user.get("total_plays", 0) for user in user_stats)
+                    embed.add_field(name="Total Plays", value=str(total_plays), inline=True)
+
+                    # Get Discord usernames where possible
+                    user_list = []
+                    for user_stat in user_stats:
+                        plex_username = user_stat.get("username")
+                        play_count = user_stat.get("total_plays", 0)
+                        user_mapping = UserMappings.get_mapping_by_plex_username(plex_username)
+
+                        if user_mapping and not user_mapping.get("ignore", False):
+                            discord_id = user_mapping.get("discord_id")
+                            try:
+                                discord_user = self.bot.get_user(int(discord_id))
+                                if discord_user:
+                                    user_list.append(f"**{discord_user.display_name}**: {play_count} plays")
+                                else:
+                                    user_list.append(f"**{plex_username}**: {play_count} plays")
+                            except Exception:
+                                user_list.append(f"**{plex_username}**: {play_count} plays")
+                        else:
+                            user_list.append(f"**{plex_username}**: {play_count} plays")
+
+                    # Only show the top 5 users
+                    if user_list:
+                        embed.add_field(
+                            name="Watched By",
+                            value="\n".join(user_list[:5])
+                            + (f"\n...and {len(user_list) - 5} more" if len(user_list) > 5 else ""),
+                            inline=False,
+                        )
+
+            # Add watch time statistics
+            if watch_time_response["response"]["result"] == "success":
+                watch_time_stats = watch_time_response["response"]["data"]
+                if watch_time_stats and isinstance(watch_time_stats, list) and len(watch_time_stats) > 0:
+                    # It's a list, so use the first item (usually there's only one)
+                    stats_item = watch_time_stats[0]
+
+                    # Total watch time
+                    total_time = stats_item.get("total_time", 0)
+                    if total_time > 0:
+                        import datetime
+
+                        # Format total_time (seconds) into a readable format
+                        total_time_str = str(datetime.timedelta(seconds=total_time))
+                        embed.add_field(name="Total Watch Time", value=total_time_str, inline=True)
+
+                    # Add when it was last watched
+                    if stats_item.get("last_watch"):
+                        last_watch = int(stats_item.get("last_watch"))
+                        embed.add_field(name="Last Watched", value=f"<t:{last_watch}:R>", inline=True)
+
+            # Try to get the thumbnail
+            thumb = metadata.get("thumb")
+            file = None
+
+            if thumb:
+                file, attachment_url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb)
+                if file and attachment_url:
+                    embed.set_image(url=attachment_url)
+
+            # Send the result
+            if file:
+                await search_msg.edit(content=None, embed=embed, file=file)
+            else:
+                await search_msg.edit(content=None, embed=embed)
+
+            # If we had multiple matches, mention this
+            if len(items) > 1:
+                other_titles = [
+                    item.get("title") for item in items[:5] if item.get("rating_key") != rating_key
+                ]
+                if other_titles:
+                    other_matches = ", ".join([f"**{title}**" for title in other_titles])
+                    await ctx.send(
+                        f"📌 Other possible matches: {other_matches}"
+                        + (f" and {len(items) - 5} more..." if len(items) > 5 else "")
+                    )
+
+        except Exception as e:
+            logger.error(f"Error in lookup_media: {e}", exc_info=True)
+            await search_msg.edit(
+                content=f"An error occurred while looking up information: {type(e).__name__}"
+            )
+
     @commands.command()
     async def downloading(self, ctx):
         """Display the current downloading torrents in qBittorrent."""

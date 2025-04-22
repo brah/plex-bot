@@ -1,13 +1,14 @@
 # cogs/plex_stats.py
 
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 import nextcord
 from nextcord.ext import commands
 
 import utilities as utils
-from utilities import Config, UserMappings
+from utilities import UserMappings
+from config import config
 from tautulli_wrapper import Tautulli
 
 # Configure logging for this module
@@ -35,15 +36,17 @@ class PlexStats(commands.Cog):
         Otherwise, shows the top users based on watch time.
         """
         if set_default is not None:
-            config_data = Config.load_config()
-            config_data["default_duration"] = set_default
-            Config.save_config(config_data)
+            # Update with new config system
+            config.set("defaults", "stats_duration", set_default)
+            # Save the config
+            config.save()
             await ctx.send(f"Default duration set to: **{set_default}** days.")
             logger.info(f"Default duration set to {set_default} days.")
             return
 
-        config_data = Config.load_config()
-        duration = config_data.get("default_duration", 7)
+        # Use new config system to get duration
+        duration = config.get("defaults", "stats_duration", 7)
+
         response = await self.tautulli.get_home_stats(
             params={
                 "stats_type": "duration",
@@ -74,7 +77,9 @@ class PlexStats(commands.Cog):
                     None,
                 )
                 if discord_id:
-                    top_users[rank] = discord_id
+                    # Store discord_id as an integer to ensure proper comparison later
+                    top_users[rank] = int(discord_id)
+
             watch_time_seconds = entry["total_duration"]
             total_watchtime += watch_time_seconds
             watch_time = utils.days_hours_minutes(watch_time_seconds)
@@ -104,17 +109,28 @@ class PlexStats(commands.Cog):
         )
 
         await ctx.send(embed=embed)
+
+        # Log the top users for debugging
+        logger.info(f"Top users to assign roles: {top_users}")
+
         await self.clean_roles(ctx, top_users)
 
     async def clean_roles(self, ctx, top_users):
         """Remove roles based on new top users and reassign correctly."""
-        config_data = Config.load_config()
+        # Use the new config system to get role IDs
         role_ids = [
-            config_data.get("plex_top"),
-            config_data.get("plex_two"),
-            config_data.get("plex_three"),
+            config.get("discord", "top_role_id"),
+            config.get("discord", "second_role_id"),
+            config.get("discord", "third_role_id"),
         ]
+
+        # Add debug log
+        logger.info(f"Role IDs from config: {role_ids}")
+
         roles = [ctx.guild.get_role(role_id) for role_id in role_ids if role_id]
+
+        # Additional debug logs
+        logger.info(f"Retrieved roles: {[role.name if role else None for role in roles]}")
 
         if not all(role for role in roles):
             logger.warning("Some roles could not be found. Check configuration.")
@@ -129,18 +145,36 @@ class PlexStats(commands.Cog):
         for role in roles:
             if role:
                 members_with_roles.update(role.members)
+
+        # Log the found members for debugging
+        logger.info(f"Found {len(members_with_roles)} members with roles to manage")
+
+        # For debugging, convert top_users values to a list for easier inspection
+        top_user_ids = list(top_users.values())
+        logger.info(f"Top user IDs (int): {top_user_ids}")
+
         # Remove all roles from members who should no longer have them
         for member in members_with_roles:
-            if member.id not in top_users.values():
+            # Convert member.id to int explicitly for consistency
+            member_id = int(member.id)
+            logger.info(f"Checking member {member.display_name} (ID: {member_id})")
+
+            if member_id not in top_user_ids:
                 try:
+                    logger.info(f"Removing roles from {member.display_name} as they're not in top users")
                     await member.remove_roles(*roles, reason="Removing non-top user roles.")
-                    logger.info(f"Removed roles from {member.display_name}.")
+                    logger.info(f"Successfully removed roles from {member.display_name}.")
                 except Exception as e:
                     logger.error(f"Failed to remove roles from {member.display_name}: {e}")
 
         # Assign the correct roles to the new top users
         for rank, user_id in top_users.items():
-            member = ctx.guild.get_member(int(user_id))
+            # Ensure user_id is an integer
+            user_id = int(user_id)
+
+            logger.info(f"Processing top user rank {rank} with ID {user_id}")
+            member = ctx.guild.get_member(user_id)
+
             if not member:
                 logger.warning(f"Member with ID {user_id} not found in guild.")
                 continue
@@ -148,11 +182,17 @@ class PlexStats(commands.Cog):
             if rank <= len(roles):
                 correct_role = roles[rank - 1]
                 roles_to_remove = [role for role in roles if role != correct_role]
+
                 try:
+                    logger.info(f"Adding role {correct_role.name} to {member.display_name}")
                     await member.add_roles(correct_role, reason="Assigning new top user role.")
-                    await member.remove_roles(*roles_to_remove, reason="Cleaning up other top roles.")
+
+                    if roles_to_remove:
+                        logger.info(f"Removing other top roles from {member.display_name}")
+                        await member.remove_roles(*roles_to_remove, reason="Cleaning up other top roles.")
+
                     logger.info(
-                        f"Assigned role '{correct_role.name}' to {member.display_name} and removed other top roles."
+                        f"Successfully assigned role '{correct_role.name}' to {member.display_name} and removed other top roles."
                     )
                 except Exception as e:
                     logger.error(f"Failed to assign roles to {member.display_name}: {e}")
@@ -366,6 +406,275 @@ class PlexStats(commands.Cog):
         embed.description = "\n".join(last_watched_list) if last_watched_list else "No history found."
 
         await ctx.send(embed=embed)
+
+    @commands.command()
+    async def hot(self, ctx, time: int = 7):
+        """
+        Shows fun facts and trending content from the last few days on your Plex server.
+
+        Usage:
+        plex hot [days]
+
+        Finds insights like:
+        - Multiple users watching the same content
+        - Popular new releases
+        - Most active users and their favorites
+        - Unusual viewing patterns
+
+        Default is 7 days if not specified.
+        """
+        try:
+            # Let user know we're working on it
+            processing_msg = await ctx.send("📊 Analyzing Plex activity... This might take a moment!")
+
+            # Start with basic data we need for all insights
+            history_response = await self.tautulli.get_history(
+                params={
+                    "length": 1000,  # Get a good amount of history
+                    "order_column": "date",
+                    "order_dir": "desc",
+                }
+            )
+
+            if history_response["response"]["result"] != "success":
+                await ctx.send("Failed to retrieve watch history from Tautulli.")
+                logger.error("Failed to retrieve watch history for hot command.")
+                return
+
+            history_entries = history_response["response"]["data"]["data"]
+
+            # Process data for insights
+            user_mapping = UserMappings.load_user_mappings()
+            ignored_users = {user["plex_username"] for user in user_mapping if user.get("ignore", False)}
+
+            # Filter history to specified time period
+            cutoff_time = datetime.now() - timedelta(days=time)
+            cutoff_timestamp = cutoff_time.timestamp()
+            recent_history = [
+                entry
+                for entry in history_entries
+                if entry["date"] >= cutoff_timestamp and entry["user"] not in ignored_users
+            ]
+
+            if not recent_history:
+                await processing_msg.edit(content=f"No watch activity found in the last {time} days.")
+                return
+
+            # Create main embed
+            embed = nextcord.Embed(
+                title=f"🔥 What's Hot on Plex - Last {time} Days",
+                description=f"Insights and trends from {len(recent_history)} plays",
+                color=self.plex_embed_color,
+            )
+
+            # Get recently added content that was actually watched
+            recently_added_response = await self.tautulli.get_recently_added(count=50)
+            if recently_added_response["response"]["result"] == "success":
+                recent_items = recently_added_response["response"]["data"]["recently_added"]
+                # Filter to only items added in our time period
+                recent_items = [
+                    item for item in recent_items if float(item.get("added_at", 0)) >= cutoff_timestamp
+                ]
+
+                # Find which recent additions were actually watched
+                watched_new_content = []
+                for item in recent_items:
+                    item_rating_key = str(item.get("rating_key"))
+                    # Count plays for this item
+                    plays = sum(
+                        1 for entry in recent_history if str(entry.get("rating_key")) == item_rating_key
+                    )
+                    if plays > 0:
+                        watched_new_content.append(
+                            {
+                                "title": item.get("title"),
+                                "full_title": item.get("full_title", item.get("title")),
+                                "plays": plays,
+                                "media_type": item.get("media_type"),
+                            }
+                        )
+
+                # Sort by play count
+                watched_new_content.sort(key=lambda x: x["plays"], reverse=True)
+
+                if watched_new_content:
+                    hot_additions = "\n".join(
+                        [
+                            f"• **{item['full_title']}** - {item['plays']} play{'s' if item['plays'] != 1 else ''}"
+                            for item in watched_new_content[:3]  # Top 3
+                        ]
+                    )
+                    embed.add_field(
+                        name="🆕 Hot New Additions",
+                        value=hot_additions or "No recently added content was watched.",
+                        inline=False,
+                    )
+
+            # Find content watched by multiple users
+            content_by_users = {}
+            for entry in recent_history:
+                # Use grandparent_rating_key for TV shows to group by series
+                key = entry.get("grandparent_rating_key", entry.get("rating_key"))
+                title = entry.get("grandparent_title", entry.get("title"))
+
+                if not key or not title:
+                    continue
+
+                if key not in content_by_users:
+                    content_by_users[key] = {
+                        "title": title,
+                        "users": set(),
+                        "count": 0,
+                        "media_type": entry.get("media_type", "unknown"),
+                    }
+
+                content_by_users[key]["users"].add(entry["user"])
+                content_by_users[key]["count"] += 1
+
+            # Find items watched by multiple different users
+            multi_user_content = [item for key, item in content_by_users.items() if len(item["users"]) > 1]
+
+            # Sort by number of users then by play count
+            multi_user_content.sort(key=lambda x: (len(x["users"]), x["count"]), reverse=True)
+
+            if multi_user_content:
+                trending_text = "\n".join(
+                    [
+                        f"• **{item['title']}** - Watched by {len(item['users'])} users ({item['count']} plays)"
+                        for item in multi_user_content[:3]  # Top 3
+                    ]
+                )
+                embed.add_field(name="📈 Trending Content", value=trending_text, inline=False)
+
+            # Find users with unusual activity patterns
+            user_activity = {}
+            for entry in recent_history:
+                user = entry["user"]
+                if user not in user_activity:
+                    user_activity[user] = {"plays": 0, "titles": set(), "media_types": {}}
+
+                user_activity[user]["plays"] += 1
+                user_activity[user]["titles"].add(entry.get("title"))
+
+                media_type = entry.get("media_type", "unknown")
+                if media_type not in user_activity[user]["media_types"]:
+                    user_activity[user]["media_types"][media_type] = 0
+                user_activity[user]["media_types"][media_type] += 1
+
+            # Get interesting user stats
+            if user_activity:
+                # Most active users
+                sorted_users = sorted(user_activity.items(), key=lambda x: x[1]["plays"], reverse=True)
+
+                most_active_users = [
+                    f"• **{user}** - {stats['plays']} plays ({len(stats['titles'])} different titles)"
+                    for user, stats in sorted_users[:3]  # Top 3
+                ]
+
+                if most_active_users:
+                    embed.add_field(
+                        name="👥 Most Active Users", value="\n".join(most_active_users), inline=False
+                    )
+
+                # Find binge watchers (lots of episodes of same show)
+                binge_watchers = []
+                for user, stats in user_activity.items():
+                    # Only look at users with significant activity
+                    if stats["plays"] < 5:
+                        continue
+
+                    # Count consecutive plays of the same content
+                    consecutive_plays = {}
+                    for entry in recent_history:
+                        if entry["user"] != user:
+                            continue
+
+                        # For TV, group by show
+                        if entry.get("media_type") == "episode" and entry.get("grandparent_title"):
+                            show_title = entry.get("grandparent_title")
+                            if show_title not in consecutive_plays:
+                                consecutive_plays[show_title] = 0
+                            consecutive_plays[show_title] += 1
+
+                    # Find shows with most consecutive plays
+                    binge_shows = sorted(consecutive_plays.items(), key=lambda x: x[1], reverse=True)
+
+                    if binge_shows and binge_shows[0][1] >= 5:  # At least 5 episodes
+                        show, count = binge_shows[0]
+                        binge_watchers.append(f"• **{user}** binged **{show}** ({count} episodes)")
+
+                if binge_watchers:
+                    embed.add_field(
+                        name="🍿 Binge Watchers", value="\n".join(binge_watchers[:3]), inline=False  # Top 3
+                    )
+
+            # Try to find unique or "first time" watches
+            first_watches = []
+            for key, item in content_by_users.items():
+                # Check if this content was added recently and only watched once or twice
+                if 1 <= item["count"] <= 2 and len(item["users"]) == 1:
+                    # See if we can find when it was added
+                    for recent_item in recent_items:
+                        if str(recent_item.get("rating_key")) == str(key):
+                            # It was added recently and only watched once - likely a first watch
+                            user = next(iter(item["users"]))
+                            first_watches.append(f"• **{user}** checked out **{item['title']}**")
+                            break
+
+            if first_watches:
+                embed.add_field(
+                    name="🔍 Discovery Watch", value="\n".join(first_watches[:3]), inline=False  # Top 3
+                )
+
+            # Generate summary fun fact
+            total_plays = len(recent_history)
+            unique_titles = len(set(entry.get("title") for entry in recent_history if entry.get("title")))
+            unique_users = len(set(entry.get("user") for entry in recent_history if entry.get("user")))
+
+            # Count media types
+            media_types = {}
+            for entry in recent_history:
+                media_type = entry.get("media_type", "unknown")
+                if media_type not in media_types:
+                    media_types[media_type] = 0
+                media_types[media_type] += 1
+
+            # Create fun fact
+            fun_facts = []
+
+            # Fact about movies vs TV
+            if "movie" in media_types and "episode" in media_types:
+                movie_count = media_types.get("movie", 0)
+                episode_count = media_types.get("episode", 0)
+                if movie_count > episode_count:
+                    fun_facts.append(
+                        f"Your server is big on movies! {movie_count} movies vs {episode_count} TV episodes."
+                    )
+                else:
+                    fun_facts.append(
+                        f"Your server loves TV! {episode_count} episodes vs {movie_count} movies."
+                    )
+
+            # Add a random fun fact based on the data
+            if total_plays > 0:
+                facts = [
+                    f"On average, {total_plays/time:.1f} things were watched each day.",
+                    f"Users explored {unique_titles} different titles over just {time} days!",
+                    f"{unique_users} different users enjoyed content on your server.",
+                ]
+                import random
+
+                fun_facts.append(random.choice(facts))
+
+            if fun_facts:
+                embed.add_field(name="💡 Fun Fact", value=fun_facts[0], inline=False)
+
+            # Send the final result
+            await processing_msg.edit(content=None, embed=embed)
+
+        except Exception as e:
+            logger.error(f"Error in hot command: {e}", exc_info=True)
+            await ctx.send(f"An error occurred while analyzing hot content: {type(e).__name__}")
 
 
 def setup(bot):
