@@ -1,6 +1,6 @@
 nextcord==3.0.1
 nextcord-ext-menus==1.5.7
-qbittorrent-api==2025.2.0
+qbittorrent-api==2025.5.0
 requests==2.32.3
 aiofiles==24.1.0
 pandas==2.2.3
