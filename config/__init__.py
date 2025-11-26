@@ -192,6 +192,7 @@ class Config:
 # Create a singleton instance
 config = Config()
 
+
 # Define configuration sections and values
 def setup_default_config():
     """Set up the default configuration structure."""
