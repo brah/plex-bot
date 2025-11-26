@@ -1,9 +1,10 @@
 # tautulli_wrapper.py
 
-import aiohttp
 import asyncio
 import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+import aiohttp
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.tautulli_wrapper")
@@ -19,11 +20,17 @@ class Tautulli:
         self.session: Optional[aiohttp.ClientSession] = None
         logger.info(f"Tautulli API URL set to {self.tautulli_api_url}")
 
-    async def initialize(self) -> None:
-        """Asynchronous initializer to set up aiohttp ClientSession."""
+    async def _ensure_session(self) -> None:
+        """Create an HTTP session if one is not already available."""
+
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
             logger.info("aiohttp ClientSession initialized for Tautulli.")
+
+    async def initialize(self) -> None:
+        """Asynchronous initializer to set up aiohttp ClientSession."""
+
+        await self._ensure_session()
 
     async def close(self) -> None:
         """Close the aiohttp ClientSession."""
@@ -34,16 +41,23 @@ class Tautulli:
     async def api_call(self, cmd: str, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         if params is None:
             params = {}
+
+        await self._ensure_session()
+
         params["apikey"] = self.api_key
         params["cmd"] = cmd
         try:
             async with self.session.get(self.tautulli_api_url, params=params, timeout=30) as response:
+                response.raise_for_status()
                 response_json = await response.json()
                 return response_json
         except asyncio.TimeoutError:
             logger.error(f"API call '{cmd}' timed out.")
-        except Exception as e:
-            logger.error(f"API call '{cmd}' failed: {e}")
+        except aiohttp.ClientError as exc:
+            logger.error(f"API call '{cmd}' failed: {exc}")
+        except ValueError:
+            logger.error(f"API call '{cmd}' returned invalid JSON.")
+
         return None
 
     async def get_activity(self, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
@@ -213,11 +227,17 @@ class TMDB:
         self.session: Optional[aiohttp.ClientSession] = None
         logger.info("TMDB API URL set.")
 
-    async def initialize(self) -> None:
-        """Asynchronous initializer to set up aiohttp ClientSession."""
+    async def _ensure_session(self) -> None:
+        """Create an HTTP session if one is not already available."""
+
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
             logger.info("aiohttp ClientSession initialized for TMDB.")
+
+    async def initialize(self) -> None:
+        """Asynchronous initializer to set up aiohttp ClientSession."""
+
+        await self._ensure_session()
 
     async def close(self) -> None:
         """Close the aiohttp ClientSession."""
@@ -231,6 +251,8 @@ class TMDB:
             error_msg = "Query string is required for search."
             logger.error(error_msg)
             raise ValueError(error_msg)
+
+        await self._ensure_session()
 
         params = {
             "api_key": self.api_key,
@@ -266,6 +288,7 @@ class TMDB:
             error_msg = "movie_id is required; see TMDB API Reference."
             logger.error(error_msg)
             return None
+        await self._ensure_session()
         url = self.tmdb_api_url + f"movie/{movie_id}"
         params = {"api_key": self.api_key}
         async with self.session.get(url=url, params=params) as response:
@@ -278,6 +301,7 @@ class TMDB:
 
     async def get_genre_id(self, genre_name: str) -> Optional[int]:
         """Get the TMDB genre ID for a given genre name."""
+        await self._ensure_session()
         url = self.tmdb_api_url + "genre/movie/list"
         params = {"api_key": self.api_key, "language": "en-US"}
         async with self.session.get(url=url, params=params) as response:
@@ -293,6 +317,7 @@ class TMDB:
 
     async def get_popular_items(self, genre_id: int) -> Optional[list]:
         """Get popular movies or shows for a given genre ID."""
+        await self._ensure_session()
         recommendations = []
         for media_type in ["movie", "tv"]:
             url = self.tmdb_api_url + f"discover/{media_type}"

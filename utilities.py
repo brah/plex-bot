@@ -227,16 +227,20 @@ class MyEmbedDescriptionPageSource(menus.ListPageSource):
         embed = nextcord.Embed(title="Recently Added", color=0xE5A00D)
         embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
 
+        file = None
+        attachment_url = None
+
         for entry in entries:
             embed.add_field(name="\u200b", value=entry["description"], inline=False)
             thumb_key = entry.get("thumb_key", "")
 
-            if thumb_key:
+            if thumb_key and not attachment_url:
                 file, attachment_url = await prepare_thumbnail_for_embed(
                     self.tautulli_ip, thumb_key, 200, 400
                 )
-                if file and attachment_url:
-                    embed.set_image(url=attachment_url)
-                    return {"embed": embed, "file": file}
+
+        if attachment_url:
+            embed.set_image(url=attachment_url)
+            return {"embed": embed, "file": file}
 
         return embed
