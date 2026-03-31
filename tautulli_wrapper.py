@@ -201,6 +201,7 @@ class Tautulli:
         media_info=0,
         length=50,
         include_metadata=0,
+        search=None,
     ) -> Optional[Dict[str, Any]]:
         """Get media information for a library or specific item."""
         if section_id is None and rating_key is None:
@@ -216,6 +217,8 @@ class Tautulli:
             params["section_id"] = section_id
         else:
             params["rating_key"] = rating_key
+        if search is not None:
+            params["search"] = search
         return await self.api_call("get_library_media_info", params)
 
     async def get_most_watched_movies(self, time_range: int) -> Optional[Dict[str, Any]]:
