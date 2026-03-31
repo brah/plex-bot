@@ -184,7 +184,7 @@ async def fetch_plex_image(
 
 
 async def prepare_thumbnail_for_embed(
-    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450
+    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450, use_https: bool = False
 ) -> Tuple[Optional[File], Optional[str]]:
     """
     Prepares a thumbnail for inclusion in a Discord embed.
@@ -194,6 +194,7 @@ async def prepare_thumbnail_for_embed(
         thumb_key: The thumbnail key from Plex
         width: The desired width of the image
         height: The desired height of the image
+        use_https: Whether to use HTTPS for the image request
 
     Returns:
         A tuple containing (File, attachment_url) or (None, None) if preparation failed
@@ -201,7 +202,7 @@ async def prepare_thumbnail_for_embed(
     if not thumb_key:
         return None, None
 
-    image_data = await fetch_plex_image(tautulli_ip, thumb_key, width, height)
+    image_data = await fetch_plex_image(tautulli_ip, thumb_key, width, height, use_https=use_https)
     if image_data:
         file = File(fp=image_data, filename="image.jpg")
         attachment_url = "attachment://image.jpg"

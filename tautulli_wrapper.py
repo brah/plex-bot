@@ -237,10 +237,6 @@ class Tautulli:
         }
         return await self.api_call("get_home_stats", params)
 
-    def pms_image_proxy(self, img: str) -> str:
-        """Construct the PMS image proxy URL."""
-        return f"{self.protocol}://{self.tautulli_ip}/pms_image_proxy?img={img}&width=300&height=450&fallback=poster"
-
 
 class TMDB:
     def __init__(self, api_key: str) -> None:
