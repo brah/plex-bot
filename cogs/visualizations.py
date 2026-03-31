@@ -12,7 +12,7 @@ import seaborn as sns
 import pandas as pd
 import pytz
 
-from bot_config import BotConfig
+from config import config
 from media_cache import MediaCache
 from tautulli_wrapper import Tautulli
 from utilities import UserMappings
@@ -20,6 +20,11 @@ from utilities import UserMappings
 # Configure logging for this module
 logger = logging.getLogger("plexbot.visualizations")
 logger.setLevel(logging.INFO)
+
+
+_MSG_NO_PLEX_DATA = "The PlexData cog is not loaded. Please contact the administrator."
+_MSG_NO_DATA = "No data available for the specified criteria."
+_MSG_CHART_FAILED = "Failed to generate chart."
 
 
 class Visualizations(commands.Cog):
@@ -33,10 +38,25 @@ class Visualizations(commands.Cog):
         self.plex_data = self.bot.get_cog("PlexData")
         # Defer timezone handling to PlexData cog
 
-        # Theme colors
-        self.plex_orange = BotConfig.PLEX_ORANGE
-        self.plex_grey_dark = BotConfig.PLEX_GREY_DARK
-        self.plex_colors = BotConfig.PLEX_COLORS
+        # Theme colors from config
+        self.plex_orange = config.get("colors", "plex_orange", "#E5A00D")
+        self.plex_embed_color = int(self.plex_orange.lstrip("#"), 16)
+        self.plex_grey_dark = config.get("colors", "plex_grey_dark", "#1B1B1B")
+        self.plex_colors = config.get("colors", "media_types", {
+            "Movie": "#E5A00D", "TV": "#F6E0B6", "Other": "#F3D38A", "Unknown": "#F0C75E"
+        })
+
+        # Chart dimensions from config
+        self.chart_width = config.get("charts", "width", 14)
+        self.chart_height = config.get("charts", "height", 6)
+        self.chart_dpi = config.get("charts", "dpi", 100)
+        self.chart_month_format = config.get("charts", "month_format", "%b %Y")
+
+    def _ensure_plex_data(self):
+        """Ensure PlexData cog is available, fetching lazily if needed."""
+        if not self.plex_data:
+            self.plex_data = self.bot.get_cog("PlexData")
+        return self.plex_data is not None
 
     @commands.group(invoke_without_command=True)
     async def chart(self, ctx):
@@ -60,7 +80,7 @@ class Visualizations(commands.Cog):
         embed = nextcord.Embed(
             title="📊 Plex Chart Commands",
             description="Generate visual charts from your Plex data",
-            color=0xE5A00D,
+            color=self.plex_embed_color,
         )
 
         embed.add_field(
@@ -113,8 +133,8 @@ class Visualizations(commands.Cog):
         """
         await ctx.trigger_typing()
 
-        if not self.plex_data:
-            await ctx.send("The PlexData cog is not loaded. Please contact the administrator.")
+        if not self._ensure_plex_data():
+            await ctx.send(_MSG_NO_PLEX_DATA)
             return
 
         member, days = await self.plex_data.parse_member_and_days(ctx, args)
@@ -123,7 +143,7 @@ class Visualizations(commands.Cog):
 
         data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
         if not data:
-            await ctx.send("No data available for the specified criteria.")
+            await ctx.send(_MSG_NO_DATA)
             return
 
         # Process data
@@ -144,7 +164,7 @@ class Visualizations(commands.Cog):
             filename = f"hours_{member.display_name if member else 'server'}.png"
             await ctx.send(file=nextcord.File(fp=image, filename=filename))
         else:
-            await ctx.send("Failed to generate chart.")
+            await ctx.send(_MSG_CHART_FAILED)
 
     @chart.command(name="days")
     async def chart_days(self, ctx, *args):
@@ -161,8 +181,8 @@ class Visualizations(commands.Cog):
         """
         await ctx.trigger_typing()
 
-        if not self.plex_data:
-            await ctx.send("The PlexData cog is not loaded. Please contact the administrator.")
+        if not self._ensure_plex_data():
+            await ctx.send(_MSG_NO_PLEX_DATA)
             return
 
         member, days = await self.plex_data.parse_member_and_days(ctx, args)
@@ -171,7 +191,7 @@ class Visualizations(commands.Cog):
 
         data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
         if not data:
-            await ctx.send("No data available for the specified criteria.")
+            await ctx.send(_MSG_NO_DATA)
             return
 
         # Process data
@@ -191,7 +211,7 @@ class Visualizations(commands.Cog):
             filename = f"days_{member.display_name if member else 'server'}.png"
             await ctx.send(file=nextcord.File(fp=image, filename=filename))
         else:
-            await ctx.send("Failed to generate chart.")
+            await ctx.send(_MSG_CHART_FAILED)
 
     @chart.command(name="users")
     async def chart_users(self, ctx, *args):
@@ -207,8 +227,8 @@ class Visualizations(commands.Cog):
         """
         await ctx.trigger_typing()
 
-        if not self.plex_data:
-            await ctx.send("The PlexData cog is not loaded. Please contact the administrator.")
+        if not self._ensure_plex_data():
+            await ctx.send(_MSG_NO_PLEX_DATA)
             return
 
         member, days = await self.plex_data.parse_member_and_days(ctx, args)
@@ -220,7 +240,7 @@ class Visualizations(commands.Cog):
 
         data = await self.plex_data.fetch_watch_history_with_genres(ctx, None, days)
         if not data:
-            await ctx.send("No data available for the specified criteria.")
+            await ctx.send(_MSG_NO_DATA)
             return
 
         # Process data
@@ -236,7 +256,7 @@ class Visualizations(commands.Cog):
         if image:
             await ctx.send(file=nextcord.File(fp=image, filename="active_users.png"))
         else:
-            await ctx.send("Failed to generate chart.")
+            await ctx.send(_MSG_CHART_FAILED)
 
     @chart.command(name="media")
     async def chart_media(self, ctx, *args):
@@ -253,8 +273,8 @@ class Visualizations(commands.Cog):
         """
         await ctx.trigger_typing()
 
-        if not self.plex_data:
-            await ctx.send("The PlexData cog is not loaded. Please contact the administrator.")
+        if not self._ensure_plex_data():
+            await ctx.send(_MSG_NO_PLEX_DATA)
             return
 
         member, days = await self.plex_data.parse_member_and_days(ctx, args)
@@ -263,7 +283,7 @@ class Visualizations(commands.Cog):
 
         data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
         if not data:
-            await ctx.send("No data available for the specified criteria.")
+            await ctx.send(_MSG_NO_DATA)
             return
 
         # Process data
@@ -283,7 +303,7 @@ class Visualizations(commands.Cog):
             filename = f"media_{member.display_name if member else 'server'}.png"
             await ctx.send(file=nextcord.File(fp=image, filename=filename))
         else:
-            await ctx.send("Failed to generate chart.")
+            await ctx.send(_MSG_CHART_FAILED)
 
     @chart.command(name="months")
     async def chart_months(self, ctx, *args):
@@ -300,8 +320,8 @@ class Visualizations(commands.Cog):
         """
         await ctx.trigger_typing()
 
-        if not self.plex_data:
-            await ctx.send("The PlexData cog is not loaded. Please contact the administrator.")
+        if not self._ensure_plex_data():
+            await ctx.send(_MSG_NO_PLEX_DATA)
             return
 
         member, days = await self.plex_data.parse_member_and_days(ctx, args)
@@ -312,7 +332,7 @@ class Visualizations(commands.Cog):
 
         data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
         if not data:
-            await ctx.send("No data available for the specified criteria.")
+            await ctx.send(_MSG_NO_DATA)
             return
 
         # Process data
@@ -332,167 +352,90 @@ class Visualizations(commands.Cog):
             filename = f"months_{member.display_name if member else 'server'}.png"
             await ctx.send(file=nextcord.File(fp=image, filename=filename))
         else:
-            await ctx.send("Failed to generate chart.")
+            await ctx.send(_MSG_CHART_FAILED)
 
-    # Legacy command support - redirect to new command format
-    @commands.command()
-    async def most_watched_hours(self, ctx, *args):
-        """Legacy command - redirects to 'plex chart hours'"""
-        await ctx.send("ℹ️ This command is being moved to the new format. Try `plex chart hours` instead!")
-        await self.chart_hours(ctx, *args)
+    def _render_bar_chart(self, title: str, xlabel: str, ylabel: str,
+                          x_data, y_data, horizontal: bool = False,
+                          extra_xticks=None, xtick_rotation=None) -> Optional[BytesIO]:
+        """Shared bar chart renderer — handles style, save, and cleanup."""
+        self.set_custom_style()
+        plt.figure(figsize=(self.chart_width, self.chart_height))
+        try:
+            if horizontal:
+                sns.barplot(x=y_data, y=x_data, color=self.plex_orange)
+            else:
+                sns.barplot(x=x_data, y=y_data, color=self.plex_orange)
 
-    @commands.command()
-    async def most_watched_days(self, ctx, *args):
-        """Legacy command - redirects to 'plex chart days'"""
-        await ctx.send("ℹ️ This command is being moved to the new format. Try `plex chart days` instead!")
-        await self.chart_days(ctx, *args)
+            plt.title(title, color="white")
+            plt.xlabel(xlabel, color="white")
+            plt.ylabel(ylabel, color="white")
+            if extra_xticks is not None:
+                plt.xticks(extra_xticks)
+            if xtick_rotation is not None:
+                plt.xticks(rotation=xtick_rotation, ha="right")
+            plt.tight_layout()
 
-    @commands.command()
-    async def most_active_users(self, ctx, *args):
-        """Legacy command - redirects to 'plex chart users'"""
-        await ctx.send("ℹ️ This command is being moved to the new format. Try `plex chart users` instead!")
-        await self.chart_users(ctx, *args)
+            image_stream = BytesIO()
+            plt.savefig(
+                image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=self.chart_dpi
+            )
+            image_stream.seek(0)
+            return image_stream
+        except Exception as e:
+            logger.error(f"Error generating chart: {e}")
+            return None
+        finally:
+            plt.close()
 
-    @commands.command()
-    async def media_type_by_day(self, ctx, *args):
-        """Legacy command - redirects to 'plex chart media'"""
-        await ctx.send("ℹ️ This command is being moved to the new format. Try `plex chart media` instead!")
-        await self.chart_media(ctx, *args)
-
-    @commands.command()
-    async def play_count_by_month(self, ctx, *args):
-        """Legacy command - redirects to 'plex chart months'"""
-        await ctx.send("ℹ️ This command is being moved to the new format. Try `plex chart months` instead!")
-        await self.chart_months(ctx, *args)
+    def _user_title_suffix(self, user_name: str = None, days: int = 0,
+                           include_tz: bool = False) -> str:
+        """Build a common title suffix like ' for UserName (UTC+10) (past 30d)'."""
+        parts = ""
+        if user_name:
+            parts += f" for {user_name}"
+        if include_tz and self.plex_data and self.plex_data.timezone:
+            parts += f" {self.plex_data.get_utc_offset_str()}"
+        parts += f" (past {days}d)"
+        return parts
 
     async def generate_hour_chart(
         self, hour_counts: pd.Series, days: int, user_name: str = None
     ) -> Optional[BytesIO]:
-        """
-        Generates a bar chart for hour counts using Seaborn.
-
-        Args:
-            hour_counts: Series containing hour counts
-            days: Number of days the data covers
-            user_name: Optional name of the user for personalized title
-
-        Returns:
-            BytesIO object containing the chart image
-        """
-        self.set_custom_style()
-        plt.figure(figsize=(BotConfig.CHART_WIDTH, BotConfig.CHART_HEIGHT))
-
-        # Create the bar plot
-        sns.barplot(x=hour_counts.index, y=hour_counts.values, color=self.plex_orange)
-
-        # Get UTC offset string from PlexData cog if available
-        utc_offset_str = ""
-        if self.plex_data and self.plex_data.timezone:
-            utc_offset_str = self.plex_data.get_utc_offset_str()
-
-        # Personalize title if user is specified
-        user_str = f" for {user_name}" if user_name else ""
-
-        plt.title(
-            f"Most Watched Hours of the Day{user_str} {utc_offset_str} (past {days}d)",
-            color="white",
+        """Generates a bar chart for hour counts."""
+        suffix = self._user_title_suffix(user_name, days, include_tz=True)
+        return self._render_bar_chart(
+            title=f"Most Watched Hours of the Day{suffix}",
+            xlabel="Hour of Day", ylabel="Watch Count",
+            x_data=hour_counts.index, y_data=hour_counts.values,
+            extra_xticks=range(0, 24),
         )
-        plt.xlabel("Hour of Day", color="white")
-        plt.ylabel("Watch Count", color="white")
-        plt.xticks(range(0, 24))
-        plt.tight_layout()
-
-        image_stream = BytesIO()
-        plt.savefig(
-            image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=BotConfig.CHART_DPI
-        )
-        plt.close()
-        image_stream.seek(0)
-        return image_stream
 
     async def generate_day_chart(
         self, day_counts: pd.Series, days: int, user_name: str = None
     ) -> Optional[BytesIO]:
-        """
-        Generates a bar chart for day counts using Seaborn.
-
-        Args:
-            day_counts: Series containing day counts
-            days: Number of days the data covers
-            user_name: Optional name of the user for personalized title
-
-        Returns:
-            BytesIO object containing the chart image
-        """
-        self.set_custom_style()
-        plt.figure(figsize=(BotConfig.CHART_WIDTH, BotConfig.CHART_HEIGHT))
-
-        # Create the bar plot
-        sns.barplot(x=day_counts.index, y=day_counts.values, color=self.plex_orange)
-
-        # Personalize title if user is specified
-        user_str = f" for {user_name}" if user_name else ""
-
-        plt.title(f"Most Watched Days of the Week{user_str} (past {days}d)", color="white")
-        plt.xlabel("Days", color="white")
-        plt.ylabel("Watch Count", color="white")
-        plt.tight_layout()
-
-        image_stream = BytesIO()
-        plt.savefig(
-            image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=BotConfig.CHART_DPI
+        """Generates a bar chart for day counts."""
+        suffix = self._user_title_suffix(user_name, days)
+        return self._render_bar_chart(
+            title=f"Most Watched Days of the Week{suffix}",
+            xlabel="Days", ylabel="Watch Count",
+            x_data=day_counts.index, y_data=day_counts.values,
         )
-        plt.close()
-        image_stream.seek(0)
-        return image_stream
 
     async def generate_user_chart(self, user_counts: pd.Series, days: int) -> Optional[BytesIO]:
-        """
-        Generates a bar chart for user counts using Seaborn.
-
-        Args:
-            user_counts: Series containing user counts
-            days: Number of days the data covers
-
-        Returns:
-            BytesIO object containing the chart image
-        """
-        self.set_custom_style()
-        plt.figure(figsize=(BotConfig.CHART_WIDTH, BotConfig.CHART_HEIGHT))
-
-        # Create the horizontal bar plot for users
-        sns.barplot(x=user_counts.values, y=user_counts.index, color=self.plex_orange)
-        plt.title(f"Top {len(user_counts)} Most Active Users (past {days}d)", color="white")
-        plt.xlabel("Watch Count", color="white")
-        plt.ylabel("Users", color="white")
-        plt.tight_layout()
-
-        image_stream = BytesIO()
-        plt.savefig(
-            image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=BotConfig.CHART_DPI
+        """Generates a horizontal bar chart for user counts."""
+        return self._render_bar_chart(
+            title=f"Top {len(user_counts)} Most Active Users (past {days}d)",
+            xlabel="Watch Count", ylabel="Users",
+            x_data=user_counts.index, y_data=user_counts.values,
+            horizontal=True,
         )
-        plt.close()
-        image_stream.seek(0)
-        return image_stream
 
     async def generate_media_type_by_day_chart(
         self, media_type_data: pd.DataFrame, days: int, user_name: str = None
     ) -> Optional[BytesIO]:
-        """
-        Generates a line graph for media types per day using Seaborn.
-
-        Args:
-            media_type_data: DataFrame containing media type counts by day
-            days: Number of days the data covers
-            user_name: Optional name of the user for personalized title
-
-        Returns:
-            BytesIO object containing the chart image
-        """
+        """Generates a line graph for media types per day."""
         self.set_custom_style()
-        plt.figure(figsize=(BotConfig.CHART_WIDTH, BotConfig.CHART_HEIGHT))
-
-        # Create the pivot table for the line chart
+        plt.figure(figsize=(self.chart_width, self.chart_height))
         try:
             media_type_pivot = media_type_data.pivot(
                 index="date", columns="media_type", values="count"
@@ -500,26 +443,15 @@ class Visualizations(commands.Cog):
             media_type_pivot.index = pd.to_datetime(media_type_pivot.index)
             media_type_pivot = media_type_pivot.sort_index()
 
-            # Create line plot with markers
-            ax = media_type_pivot.plot(
+            media_type_pivot.plot(
                 kind="line",
                 marker="o",
                 color=[self.plex_colors.get(col, "#FFFFFF") for col in media_type_pivot.columns],
-                figsize=(BotConfig.CHART_WIDTH, BotConfig.CHART_HEIGHT),
+                figsize=(self.chart_width, self.chart_height),
             )
 
-            # Get UTC offset string from PlexData cog if available
-            utc_offset_str = ""
-            if self.plex_data and self.plex_data.timezone:
-                utc_offset_str = self.plex_data.get_utc_offset_str()
-
-            # Personalize title if user is specified
-            user_str = f" for {user_name}" if user_name else ""
-
-            plt.title(
-                f"Media Types Watched Per Day{user_str} {utc_offset_str} (past {days}d)",
-                color="white",
-            )
+            suffix = self._user_title_suffix(user_name, days, include_tz=True)
+            plt.title(f"Media Types Watched Per Day{suffix}", color="white")
             plt.xlabel("Date", color="white")
             plt.ylabel("Watch Count", color="white")
             plt.legend(title="Media Type")
@@ -527,64 +459,29 @@ class Visualizations(commands.Cog):
 
             image_stream = BytesIO()
             plt.savefig(
-                image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=BotConfig.CHART_DPI
+                image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=self.chart_dpi
             )
-            plt.close()
             image_stream.seek(0)
             return image_stream
         except Exception as e:
             logger.error(f"Error generating media type chart: {e}")
-            plt.close()
             return None
+        finally:
+            plt.close()
 
     async def generate_play_count_by_month_chart(
         self, month_counts: pd.Series, days: int, user_name: str = None
     ) -> Optional[BytesIO]:
-        """
-        Generates a bar chart for play counts by month using Seaborn.
-
-        Args:
-            month_counts: Series containing month counts
-            days: Number of days the data covers
-            user_name: Optional name of the user for personalized title
-
-        Returns:
-            BytesIO object containing the chart image
-        """
-        self.set_custom_style()
-        plt.figure(figsize=(BotConfig.CHART_WIDTH, BotConfig.CHART_HEIGHT))
-
-        try:
-            # Convert month_counts.index to datetime for proper ordering
-            months = pd.to_datetime(month_counts.index, format="%Y-%m")
-            month_labels = months.strftime(BotConfig.CHART_MONTH_FORMAT)
-
-            # Create the bar plot
-            bar_plot = sns.barplot(x=month_labels, y=month_counts.values, color=self.plex_orange)
-
-            # Adjust x-axis labels if there are many months
-            if len(month_labels) > 6:
-                plt.xticks(rotation=45, ha="right")
-
-            # Personalize title if user is specified
-            user_str = f" for {user_name}" if user_name else ""
-
-            plt.title(f"Total Play Count by Month{user_str} (past {days}d)", color="white")
-            plt.xlabel("Month", color="white")
-            plt.ylabel("Play Count", color="white")
-            plt.tight_layout()
-
-            image_stream = BytesIO()
-            plt.savefig(
-                image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=BotConfig.CHART_DPI
-            )
-            plt.close()
-            image_stream.seek(0)
-            return image_stream
-        except Exception as e:
-            logger.error(f"Error generating month chart: {e}")
-            plt.close()
-            return None
+        """Generates a bar chart for play counts by month."""
+        months = pd.to_datetime(month_counts.index, format="%Y-%m")
+        month_labels = months.strftime(self.chart_month_format)
+        suffix = self._user_title_suffix(user_name, days)
+        return self._render_bar_chart(
+            title=f"Total Play Count by Month{suffix}",
+            xlabel="Month", ylabel="Play Count",
+            x_data=month_labels, y_data=month_counts.values,
+            xtick_rotation=45 if len(month_labels) > 6 else None,
+        )
 
     def set_custom_style(self) -> None:
         """Sets a custom Seaborn style to match the Plex theme."""

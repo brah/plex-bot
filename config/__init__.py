@@ -206,6 +206,7 @@ def setup_default_config():
     tautulli = config.add_section("tautulli", "Tautulli API settings")
     tautulli.add("ip", "localhost:8181", "Tautulli server IP and port", required=True)
     tautulli.add("apikey", "", "Tautulli API key", required=True)
+    tautulli.add("use_https", False, "Use HTTPS for Tautulli API connections")
 
     # Discord server settings
     discord = config.add_section("discord", "Discord server settings")

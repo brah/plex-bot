@@ -17,6 +17,7 @@ class UserManagement(commands.Cog):
         self.bot = bot
 
     @commands.command()
+    @commands.has_permissions(administrator=True)
     async def mapdiscord(self, ctx, plex_username: str, discord_user: nextcord.User = None):
         """Map a Discord user to a Plex username."""
         if not plex_username.strip():
@@ -47,6 +48,7 @@ class UserManagement(commands.Cog):
         logger.info(f"Mapped {discord_user.display_name} to {plex_username}.")
 
     @commands.command()
+    @commands.has_permissions(administrator=True)
     async def ignore(self, ctx, plex_username: str):
         """Toggle ignoring a user's Plex username from appearing in top lists."""
         if not plex_username.strip():

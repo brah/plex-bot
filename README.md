@@ -60,7 +60,8 @@ A Discord bot that interfaces with your Plex server through Tautulli's API, offe
        },
        "tautulli": {
            "ip": "localhost:8181",
-           "apikey": "<Your Tautulli API Key>"
+           "apikey": "<Your Tautulli API Key>",
+           "use_https": false
        },
        "discord": {
            "server_id": "<Your Discord Server ID>",
@@ -209,9 +210,9 @@ pm2 save
 | `plex chart media [@user] [days]` | Shows media types watched per day |
 | `plex chart months [@user] [days]` | Shows activity by month |
 | `plex status` | Shows server status information |
-| `plex killstream [session_key] [message]` | Terminates a user's stream |
-| `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username |
-| `plex ignore [plex_username]` | Toggles ignoring a user in stats |
+| `plex killstream [session_key] [message]` | Terminates a user's stream (admin only) |
+| `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
+| `plex ignore [plex_username]` | Toggles ignoring a user in stats (admin only) |
 | `plex refresh_cache` | Manually refreshes the media cache |
 | `plex help [command]` | Shows help information |
 

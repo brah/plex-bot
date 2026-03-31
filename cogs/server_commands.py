@@ -8,8 +8,8 @@ import aiohttp
 import nextcord
 from nextcord.ext import commands
 
+from config import config
 from utilities import (
-    Config,
     get_git_revision_short_hash,
     get_git_revision_short_hash_latest,
 )
@@ -24,13 +24,13 @@ class ServerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
-        self.plex_embed_color = 0xE5A00D
-        self.plex_image = "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
+        self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
+        self.plex_image = config.get("ui", "plex_image")
         self.bot.loop.create_task(self.initialize())
 
     async def initialize(self):
         await self.bot.wait_until_ready()
-        await self.tautulli.initialize()
+        self.tautulli.initialize()
         self.bot.loop.create_task(self.status_task())
 
     def cog_unload(self):
@@ -42,12 +42,13 @@ class ServerCommands(commands.Cog):
         while not self.bot.is_closed():
             try:
                 response = await self.tautulli.get_activity()
-                if response.get("response", {}).get("result") != "success":
+                if not Tautulli.check_response(response):
                     logger.error("Failed to retrieve activity from Tautulli.")
                     await asyncio.sleep(15)
                     continue
-                stream_count = response["response"]["data"]["stream_count"]
-                wan_bandwidth_mbps = round((response["response"]["data"]["wan_bandwidth"] / 1000), 1)
+                data = Tautulli.get_response_data(response, {})
+                stream_count = data.get("stream_count", 0)
+                wan_bandwidth_mbps = round(data.get("wan_bandwidth", 0) / 1000, 1)
 
                 if display_streams:
                     activity_text = f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
@@ -69,7 +70,7 @@ class ServerCommands(commands.Cog):
     async def on_ready(self):
         try:
             r = await self.tautulli.get_home_stats()
-            status = r["response"]["result"]
+            status = r.get("response", {}).get("result") if r else None
 
             local_commit = get_git_revision_short_hash()
             latest_commit = get_git_revision_short_hash_latest()
@@ -96,37 +97,36 @@ class ServerCommands(commands.Cog):
         try:
             # Getting Tautulli server info
             server_info_response = await self.tautulli.get_server_info()
-            if server_info_response.get("response", {}).get("result") != "success":
+            if not Tautulli.check_response(server_info_response):
                 await ctx.send("Failed to retrieve server info from Tautulli.")
                 logger.error("Failed to retrieve server info from Tautulli.")
                 return
-            server_info = server_info_response["response"]
+            server_data = Tautulli.get_response_data(server_info_response, {})
 
             # Fetching Plex status from Plex API asynchronously
             async with aiohttp.ClientSession() as session:
                 async with session.get("https://status.plex.tv/api/v2/status.json") as response:
                     if response.status == 200:
                         json_response = await response.json()
-                        plex_status = json_response["status"]["description"]
+                        plex_status = json_response.get("status", {}).get("description", "Unknown")
                     else:
                         plex_status = "Plex status unavailable"
 
             # Setting up the embed message with server information and Plex status
             embed = nextcord.Embed(title="Plex Server Details", colour=self.plex_embed_color)
             embed.set_thumbnail(url=self.plex_image)
-            embed.add_field(name="Response", value=server_info["result"], inline=True)
-            embed.add_field(name="Server Name", value=server_info["data"]["pms_name"], inline=True)
+            embed.add_field(name="Server Name", value=server_data.get("pms_name", "Unknown"), inline=True)
             embed.add_field(
                 name="Server Version",
-                value=server_info["data"]["pms_version"],
+                value=server_data.get("pms_version", "Unknown"),
                 inline=True,
             )
             embed.add_field(
                 name="Server IP",
-                value=f"{server_info['data']['pms_ip']}:{server_info['data']['pms_port']}",
+                value=f"{server_data.get('pms_ip', '?')}:{server_data.get('pms_port', '?')}",
             )
-            embed.add_field(name="Platform", value=server_info["data"]["pms_platform"])
-            embed.add_field(name="Plex Pass", value=server_info["data"]["pms_plexpass"])
+            embed.add_field(name="Platform", value=server_data.get("pms_platform", "Unknown"))
+            embed.add_field(name="Plex Pass", value=server_data.get("pms_plexpass", "Unknown"))
             embed.add_field(name="Plex API Status", value=plex_status)
 
             await ctx.send(embed=embed)
@@ -136,12 +136,16 @@ class ServerCommands(commands.Cog):
             await ctx.send("Failed to retrieve server status.")
 
     @commands.command()
+    @commands.has_permissions(administrator=True)
     async def killstream(self, ctx, session_key: str = None, *, message: str = None):
         """Terminates a Plex stream based on the session key."""
         session_keys = []
         if session_key is None:
             activity = await self.tautulli.get_activity()
-            sessions = activity["response"]["data"]["sessions"]
+            if not Tautulli.check_response(activity):
+                await ctx.send("Failed to retrieve current activity from Tautulli.")
+                return
+            sessions = Tautulli.get_response_data(activity, {}).get("sessions", [])
             for users in sessions:
                 session_keys.append(f"\n**Session key:** {users['session_key']} is: **{users['user']}**,")
             await ctx.send(

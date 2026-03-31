@@ -4,6 +4,8 @@ import logging
 import nextcord
 from nextcord.ext import commands
 
+from config import config
+
 logger = logging.getLogger("plexbot.utility_commands")
 logger.setLevel(logging.INFO)
 
@@ -11,13 +13,13 @@ logger.setLevel(logging.INFO)
 class UtilityCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.plex_embed_color = 0xE5A00D
-        self.plex_image = "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
+        self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
+        self.plex_image = config.get("ui", "plex_image")
 
     @commands.command()
     async def help(self, ctx, *commands: str):
         """Shows all commands available or detailed information about a specific command."""
-        prefix = "plex "
+        prefix = config.get("core", "prefix", "plex ")
         if not commands:
             embed = nextcord.Embed(
                 title="Command List",

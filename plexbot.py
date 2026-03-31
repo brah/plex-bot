@@ -43,8 +43,9 @@ async def initialize_resources():
     logger.info("Initializing Tautulli client...")
     tautulli_ip = config.get("tautulli", "ip")
     tautulli_apikey = config.get("tautulli", "apikey")
-    tautulli = Tautulli(api_key=tautulli_apikey, tautulli_ip=tautulli_ip)
-    await tautulli.initialize()
+    tautulli_https = config.get("tautulli", "use_https", False)
+    tautulli = Tautulli(api_key=tautulli_apikey, tautulli_ip=tautulli_ip, use_https=tautulli_https)
+    tautulli.initialize()
     resources["tautulli"] = tautulli
 
     # Test Tautulli connection
@@ -60,7 +61,7 @@ async def initialize_resources():
     if tmdb_api_key:
         logger.info("Initializing TMDB client...")
         tmdb = TMDB(api_key=tmdb_api_key)
-        await tmdb.initialize()
+        tmdb.initialize()
         resources["tmdb"] = tmdb
     else:
         resources["tmdb"] = None

@@ -3,6 +3,8 @@
 import asyncio
 import json
 import logging
+import os
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Set
@@ -156,8 +158,6 @@ class MediaCache:
         Returns:
             List of media items matching the filters
         """
-        import random
-
         await self.ensure_cache_valid()
 
         # Create a copy of all items as a list
@@ -185,7 +185,7 @@ class MediaCache:
 
         # Exclude rating keys
         if exclude_rating_keys:
-            exclude_keys = set(str(key) for key in exclude_rating_keys)
+            exclude_keys = {str(key) for key in exclude_rating_keys}
             items = [item for item in items if str(item.get("rating_key")) not in exclude_keys]
 
         # Sort the results
@@ -337,11 +337,9 @@ class MediaCache:
                 # Write closing bracket
                 await f.write("]\n")
 
-            # Rename temp file to final file
+            # Atomically replace the cache file (os.replace is atomic on most platforms)
             if temp_file.exists():
-                if self.cache_file_path.exists():
-                    self.cache_file_path.unlink()
-                temp_file.rename(self.cache_file_path)
+                os.replace(str(temp_file), str(self.cache_file_path))
 
             logger.info(f"Media cache saved to {self.cache_file_path}")
         except Exception as e:

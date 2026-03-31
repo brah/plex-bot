@@ -6,10 +6,10 @@ from collections import Counter
 import nextcord
 from nextcord.ext import commands
 
+from config import config
 from utilities import UserMappings, fetch_plex_image, prepare_thumbnail_for_embed
 from tautulli_wrapper import Tautulli
 from media_cache import MediaCache
-from bot_config import BotConfig
 
 import aiohttp
 from io import BytesIO
@@ -25,7 +25,7 @@ class Recommendations(commands.Cog):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
-        self.plex_embed_color = BotConfig.PLEX_EMBED_COLOR
+        self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
 
         # Mapping from number emoji to integer
         self.number_emojis = {
@@ -188,7 +188,7 @@ class Recommendations(commands.Cog):
                 except Exception as e:
                     logger.error(f"Failed to add reaction {emoji}: {e}")
 
-            interaction_timeout = BotConfig.RECOMMENDATION_TIMEOUT  # 3 minutes
+            interaction_timeout = config.get("commands", "recommendation_timeout", 180)
             detailed_message = None
 
             # Set up the event handlers for reactions

@@ -145,7 +145,7 @@ def get_git_revision_short_hash_latest() -> str:
 
 
 async def fetch_plex_image(
-    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450
+    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450, use_https: bool = False
 ) -> Optional[BytesIO]:
     """
     Fetch an image from the Plex/Tautulli server.
@@ -167,7 +167,8 @@ async def fetch_plex_image(
         import urllib.parse
 
         encoded_thumb_key = urllib.parse.quote(thumb_key.strip())
-        url = f"http://{tautulli_ip}/pms_image_proxy?img={encoded_thumb_key}&width={width}&height={height}&fallback=poster"
+        protocol = "https" if use_https else "http"
+        url = f"{protocol}://{tautulli_ip}/pms_image_proxy?img={encoded_thumb_key}&width={width}&height={height}&fallback=poster"
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
@@ -224,7 +225,8 @@ class MyEmbedDescriptionPageSource(menus.ListPageSource):
         self.tautulli_ip = tautulli_ip
 
     async def format_page(self, menu, entries):
-        embed = nextcord.Embed(title="Recently Added", color=0xE5A00D)
+        from config import config
+        embed = nextcord.Embed(title="Recently Added", color=config.get("ui", "plex_embed_color", 0xE5A00D))
         embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
 
         file = None

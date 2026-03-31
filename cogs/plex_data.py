@@ -11,10 +11,10 @@ from typing import Optional, Dict, List, Any, Tuple
 import nextcord
 from nextcord.ext import commands
 
+from config import config
 from tautulli_wrapper import Tautulli
 from media_cache import MediaCache
 from utilities import UserMappings
-from bot_config import BotConfig
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.data")
@@ -102,7 +102,7 @@ class PlexData(commands.Cog):
 
         # Fetch watch history
         params = {
-            "length": BotConfig.DEFAULT_HISTORY_LENGTH,
+            "length": config.get("defaults", "history_length", 10000),
             "order_column": "date",
             "order_dir": "desc",
         }

@@ -1,9 +1,10 @@
 # cogs/media_commands.py
 
 import asyncio
+import difflib
 import logging
 import random
-from datetime import timedelta
+from datetime import timedelta, datetime
 from io import BytesIO
 from config import config
 
@@ -14,7 +15,6 @@ from nextcord.ext import commands
 import qbittorrentapi
 
 from utilities import (
-    Config,
     UserMappings,
     NoStopButtonMenuPages,
     MyEmbedDescriptionPageSource,
@@ -23,7 +23,6 @@ from utilities import (
 )
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
-from bot_config import BotConfig
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.media_commands")
@@ -36,8 +35,8 @@ class MediaCommands(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.tmdb: TMDB = bot.shared_resources.get("tmdb")
         self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
-        self.plex_embed_color = BotConfig.PLEX_EMBED_COLOR
-        self.plex_image = BotConfig.PLEX_IMAGE
+        self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
+        self.plex_image = config.get("ui", "plex_image")
         logger.info("MediaCommands cog initialized.")
 
     def cog_unload(self):
@@ -47,7 +46,7 @@ class MediaCommands(commands.Cog):
             self.bot.loop.create_task(self.tmdb.close())
 
     @commands.command()
-    async def recent(self, ctx, amount: int = BotConfig.DEFAULT_RECENT_COUNT):
+    async def recent(self, ctx, amount: int = None):
         """Displays recently added media items.
 
         Usage:
@@ -57,6 +56,8 @@ class MediaCommands(commands.Cog):
         plex recent
         plex recent 20
         """
+        if amount is None:
+            amount = config.get("defaults", "recent_count", 10)
         fields = []
         try:
             response = await self.tautulli.get_recently_added(count=amount)
@@ -286,6 +287,15 @@ class MediaCommands(commands.Cog):
             logger.error(f"Failed to retrieve watchers: {e}", exc_info=True)
             await ctx.send("Failed to retrieve watchers.")
 
+    async def _lookup_command(self, ctx, query: str, media_type: str, label: str):
+        """Shared implementation for tv/movie lookup commands."""
+        logger.info(f"{label} lookup invoked by {ctx.author.name} with query: '{query}'")
+        if not query:
+            await ctx.send(f"Please provide a {label.lower()} name to search for.")
+            logger.warning(f"{label} lookup used without a name")
+            return
+        await self.lookup_media(ctx, query, media_type=media_type)
+
     @commands.command(name="tv")
     async def lookup_tv(self, ctx, *, show_name: str = None):
         """
@@ -297,14 +307,7 @@ class MediaCommands(commands.Cog):
         Example:
         plex tv Game of Thrones
         """
-        logger.info(f"TV lookup command invoked by {ctx.author.name} with query: '{show_name}'")
-        
-        if not show_name:
-            await ctx.send("Please provide a TV show name to search for.")
-            logger.warning("TV lookup command used without a show name")
-            return
-        
-        await self.lookup_media(ctx, show_name, media_type="tv")
+        await self._lookup_command(ctx, show_name, "tv", "TV show")
 
     @commands.command(name="movie")
     async def lookup_movie(self, ctx, *, movie_name: str = None):
@@ -317,14 +320,7 @@ class MediaCommands(commands.Cog):
         Example:
         plex movie The Godfather
         """
-        logger.info(f"Movie lookup command invoked by {ctx.author.name} with query: '{movie_name}'")
-        
-        if not movie_name:
-            await ctx.send("Please provide a movie name to search for.")
-            logger.warning("Movie lookup command used without a movie name")
-            return
-        
-        await self.lookup_media(ctx, movie_name, media_type="movie")
+        await self._lookup_command(ctx, movie_name, "movie", "Movie")
 
 
     async def lookup_media(self, ctx, title: str, media_type: str = None):
@@ -410,8 +406,6 @@ class MediaCommands(commands.Cog):
                 # If no exact match but we have results, use the first one
                 if not best_direct_match and direct_results:
                     # Try to find closest match
-                    import difflib
-                    
                     # Sort by similarity score
                     direct_results.sort(
                         key=lambda x: difflib.SequenceMatcher(None, x.get("title", "").lower(), title.lower()).ratio(),
@@ -662,10 +656,7 @@ class MediaCommands(commands.Cog):
                     # Total watch time
                     total_time = stats_item.get("total_time", 0)
                     if total_time > 0:
-                        import datetime
-
-                        # Format total_time (seconds) into a readable format
-                        total_time_str = str(datetime.timedelta(seconds=total_time))
+                        total_time_str = str(timedelta(seconds=total_time))
                         embed.add_field(name="Total Watch Time", value=total_time_str, inline=True)
 
                     # Add when it was last watched
@@ -758,7 +749,7 @@ class MediaCommands(commands.Cog):
             logger.exception("Connection to qBittorrent failed. Check network and host settings.")
             await ctx.send("Failed to connect to qBittorrent. Check your network settings.")
             return
-        except Exception as err:
+        except Exception:
             logger.exception("Unexpected error connecting to qBittorrent.")
             await ctx.send("I'm having trouble connecting to qBittorrent right now.")
             return
@@ -766,9 +757,9 @@ class MediaCommands(commands.Cog):
         # Pull downloading torrents
         downloads_embed = nextcord.Embed(
             title="qBittorrent Live Downloads",
-            color=BotConfig.QBIT_EMBED_COLOR,
+            color=config.get("ui", "qbit_embed_color", 0x6C81DF),
         )
-        downloads_embed.set_thumbnail(url=BotConfig.QBIT_IMAGE)
+        downloads_embed.set_thumbnail(url=config.get("ui", "qbit_image"))
 
         try:
             # Get all downloading torrents
@@ -778,7 +769,7 @@ class MediaCommands(commands.Cog):
                 if t.state not in ["pausedDL", "pausedUP", "stopped"] and not t.state_enum.is_paused
             ]
             logger.debug("Fetched %d torrents in downloading status.", len(torrents_downloading))
-        except Exception as e:
+        except Exception:
             logger.exception("Error retrieving downloading torrents.")
             await ctx.send("I'm having trouble retrieving the downloading torrents.")
             return
