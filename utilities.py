@@ -166,16 +166,20 @@ async def fetch_plex_image(
         return None
 
     try:
-        import urllib.parse
-
-        encoded_thumb_key = urllib.parse.quote(thumb_key.strip())
         protocol = "https" if use_https else "http"
-        url = f"{protocol}://{tautulli_ip}/pms_image_proxy?img={encoded_thumb_key}&width={width}&height={height}&fallback=poster"
+        url = f"{protocol}://{tautulli_ip}/api/v2"
+        params = {
+            "cmd": "pms_image_proxy",
+            "img": thumb_key.strip(),
+            "width": width,
+            "height": height,
+            "fallback": "poster",
+        }
         if api_key:
-            url += f"&apikey={api_key}"
+            params["apikey"] = api_key
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
+            async with session.get(url, params=params) as response:
                 if response.status == 200 and "image" in (response.content_type or ""):
                     return BytesIO(await response.read())
                 else:
