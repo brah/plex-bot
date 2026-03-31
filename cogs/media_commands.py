@@ -222,6 +222,7 @@ class RandomMediaView(nextcord.ui.View):
         embed = self._build_embed(item)
 
         thumb = item.get("thumb")
+        logger.info(f"THUMB_DEBUG: RandomMediaView.send_initial — thumb={thumb!r}, title={item.get('title')}")
         if thumb:
             file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https)
             if file and url:

@@ -160,7 +160,7 @@ async def fetch_plex_image(
         BytesIO object containing the image data, or None if the fetch failed
     """
     if not thumb_key or not thumb_key.strip():
-        logger.warning("Empty thumb_key provided to fetch_plex_image")
+        logger.info("THUMB_DEBUG: empty thumb_key, skipping")
         return None
 
     try:
@@ -169,17 +169,21 @@ async def fetch_plex_image(
         encoded_thumb_key = urllib.parse.quote(thumb_key.strip())
         protocol = "https" if use_https else "http"
         url = f"{protocol}://{tautulli_ip}/pms_image_proxy?img={encoded_thumb_key}&width={width}&height={height}&fallback=poster"
+        logger.info(f"THUMB_DEBUG: fetching url={url}")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
+                logger.info(f"THUMB_DEBUG: status={response.status}, content_type={response.content_type}, content_length={response.content_length}")
                 if response.status == 200:
-                    logger.debug(f"Successfully fetched image from {url}")
-                    return BytesIO(await response.read())
+                    data = await response.read()
+                    logger.info(f"THUMB_DEBUG: got {len(data)} bytes")
+                    return BytesIO(data)
                 else:
-                    logger.warning(f"Failed to fetch image with status {response.status}: {url}")
+                    body_preview = (await response.read())[:200]
+                    logger.warning(f"THUMB_DEBUG: failed status={response.status}, body={body_preview}")
                     return None
     except Exception as e:
-        logger.error(f"Error fetching image: {e}", exc_info=True)
+        logger.error(f"THUMB_DEBUG: exception: {e}", exc_info=True)
         return None
 
 
@@ -200,8 +204,10 @@ async def prepare_thumbnail_for_embed(
         A tuple containing (File, attachment_url) or (None, None) if preparation failed
     """
     if not thumb_key:
+        logger.info("THUMB_DEBUG: prepare_thumbnail called with empty thumb_key")
         return None, None
 
+    logger.info(f"THUMB_DEBUG: prepare_thumbnail called — key={thumb_key[:50]}, ip={tautulli_ip}, https={use_https}")
     image_data = await fetch_plex_image(tautulli_ip, thumb_key, width, height, use_https=use_https)
     if image_data:
         file = File(fp=image_data, filename="image.jpg")
