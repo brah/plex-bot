@@ -140,7 +140,7 @@ class Recommendations(commands.Cog):
                 thumb = rec_item.get("thumb")
                 if thumb and thumb.strip():
                     file, attachment_url = await prepare_thumbnail_for_embed(
-                        self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https
+                        self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key
                     )
                     if file and attachment_url:
                         embed.set_thumbnail(url=attachment_url)
@@ -276,7 +276,7 @@ class Recommendations(commands.Cog):
 
             if thumb and thumb.strip():
                 logger.info(f"Processing thumbnail for {title}: {thumb}")
-                file, attachment_url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https)
+                file, attachment_url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key)
 
                 if file and attachment_url:
                     embed.set_image(url=attachment_url)

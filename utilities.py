@@ -145,7 +145,8 @@ def get_git_revision_short_hash_latest() -> str:
 
 
 async def fetch_plex_image(
-    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450, use_https: bool = False
+    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450,
+    use_https: bool = False, api_key: str = ""
 ) -> Optional[BytesIO]:
     """
     Fetch an image from the Plex/Tautulli server.
@@ -155,12 +156,13 @@ async def fetch_plex_image(
         thumb_key: The thumbnail key from Plex
         width: The desired width of the image
         height: The desired height of the image
+        use_https: Whether to use HTTPS
+        api_key: Tautulli API key (required for authenticated image proxy)
 
     Returns:
         BytesIO object containing the image data, or None if the fetch failed
     """
     if not thumb_key or not thumb_key.strip():
-        logger.info("THUMB_DEBUG: empty thumb_key, skipping")
         return None
 
     try:
@@ -169,26 +171,24 @@ async def fetch_plex_image(
         encoded_thumb_key = urllib.parse.quote(thumb_key.strip())
         protocol = "https" if use_https else "http"
         url = f"{protocol}://{tautulli_ip}/pms_image_proxy?img={encoded_thumb_key}&width={width}&height={height}&fallback=poster"
-        logger.info(f"THUMB_DEBUG: fetching url={url}")
+        if api_key:
+            url += f"&apikey={api_key}"
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
-                logger.info(f"THUMB_DEBUG: status={response.status}, content_type={response.content_type}, content_length={response.content_length}")
-                if response.status == 200:
-                    data = await response.read()
-                    logger.info(f"THUMB_DEBUG: got {len(data)} bytes")
-                    return BytesIO(data)
+                if response.status == 200 and "image" in (response.content_type or ""):
+                    return BytesIO(await response.read())
                 else:
-                    body_preview = (await response.read())[:200]
-                    logger.warning(f"THUMB_DEBUG: failed status={response.status}, body={body_preview}")
+                    logger.warning(f"Failed to fetch image: status={response.status}, content_type={response.content_type}")
                     return None
     except Exception as e:
-        logger.error(f"THUMB_DEBUG: exception: {e}", exc_info=True)
+        logger.error(f"Error fetching image: {e}", exc_info=True)
         return None
 
 
 async def prepare_thumbnail_for_embed(
-    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450, use_https: bool = False
+    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450,
+    use_https: bool = False, api_key: str = ""
 ) -> Tuple[Optional[File], Optional[str]]:
     """
     Prepares a thumbnail for inclusion in a Discord embed.
@@ -199,16 +199,15 @@ async def prepare_thumbnail_for_embed(
         width: The desired width of the image
         height: The desired height of the image
         use_https: Whether to use HTTPS for the image request
+        api_key: Tautulli API key for authenticated access
 
     Returns:
         A tuple containing (File, attachment_url) or (None, None) if preparation failed
     """
     if not thumb_key:
-        logger.info("THUMB_DEBUG: prepare_thumbnail called with empty thumb_key")
         return None, None
 
-    logger.info(f"THUMB_DEBUG: prepare_thumbnail called — key={thumb_key[:50]}, ip={tautulli_ip}, https={use_https}")
-    image_data = await fetch_plex_image(tautulli_ip, thumb_key, width, height, use_https=use_https)
+    image_data = await fetch_plex_image(tautulli_ip, thumb_key, width, height, use_https=use_https, api_key=api_key)
     if image_data:
         file = File(fp=image_data, filename="image.jpg")
         attachment_url = "attachment://image.jpg"

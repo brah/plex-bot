@@ -100,11 +100,12 @@ def _format_torrent_field(dl) -> str:
 class RecentlyAddedPageSource(menus.ListPageSource):
     """One item per page with a rich embed and poster thumbnail."""
 
-    def __init__(self, data, tautulli_ip, embed_color, use_https=False):
+    def __init__(self, data, tautulli_ip, embed_color, use_https=False, api_key=""):
         super().__init__(data, per_page=1)
         self.tautulli_ip = tautulli_ip
         self.embed_color = embed_color
         self.use_https = use_https
+        self.api_key = api_key
 
     async def format_page(self, menu, page):
         item = page[0] if isinstance(page, list) else page
@@ -138,7 +139,7 @@ class RecentlyAddedPageSource(menus.ListPageSource):
         # Poster thumbnail
         thumb = item.get("thumb", "")
         if thumb:
-            file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https)
+            file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https, api_key=self.api_key)
             if file and url:
                 embed.set_thumbnail(url=url)
                 return {"embed": embed, "file": file}
@@ -149,13 +150,14 @@ class RecentlyAddedPageSource(menus.ListPageSource):
 class RandomMediaView(nextcord.ui.View):
     """Interactive view with a 'Roll Again' button for the random command."""
 
-    def __init__(self, ctx, items: list, tautulli_ip: str, embed_color: int, use_https: bool = False, timeout: float = 120):
+    def __init__(self, ctx, items: list, tautulli_ip: str, embed_color: int, use_https: bool = False, api_key: str = "", timeout: float = 120):
         super().__init__(timeout=timeout)
         self.ctx = ctx
         self.items = items
         self.tautulli_ip = tautulli_ip
         self.embed_color = embed_color
         self.use_https = use_https
+        self.api_key = api_key
         self.message = None
         self.used_indices: set = set()
 
@@ -222,9 +224,8 @@ class RandomMediaView(nextcord.ui.View):
         embed = self._build_embed(item)
 
         thumb = item.get("thumb")
-        logger.info(f"THUMB_DEBUG: RandomMediaView.send_initial — thumb={thumb!r}, title={item.get('title')}")
         if thumb:
-            file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https)
+            file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https, api_key=self.api_key)
             if file and url:
                 embed.set_thumbnail(url=url)
                 self.message = await self.ctx.send(file=file, embed=embed, view=self)
@@ -243,7 +244,7 @@ class RandomMediaView(nextcord.ui.View):
 
         thumb = item.get("thumb")
         if thumb:
-            file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https)
+            file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https, api_key=self.api_key)
             if file and url:
                 embed.set_thumbnail(url=url)
                 await interaction.response.edit_message(embed=embed, view=self, file=file)
@@ -311,7 +312,7 @@ class MediaCommands(commands.Cog):
                 return
 
             pages = NoStopButtonMenuPages(
-                source=RecentlyAddedPageSource(items, self.tautulli.tautulli_ip, self.plex_embed_color, use_https=self.tautulli.use_https),
+                source=RecentlyAddedPageSource(items, self.tautulli.tautulli_ip, self.plex_embed_color, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key),
             )
             await pages.start(ctx)
         except Exception as e:
@@ -423,7 +424,7 @@ class MediaCommands(commands.Cog):
                 await ctx.send(f"No media items found{filter_desc}." if filter_desc else "No media items found.")
                 return
 
-            view = RandomMediaView(ctx, items, self.tautulli.tautulli_ip, self.plex_embed_color, use_https=self.tautulli.use_https)
+            view = RandomMediaView(ctx, items, self.tautulli.tautulli_ip, self.plex_embed_color, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key)
             await view.send_initial()
         except Exception as e:
             logger.error(f"Error in random command: {e}", exc_info=True)
@@ -800,7 +801,7 @@ class MediaCommands(commands.Cog):
         file = None
         thumb = metadata.get("thumb")
         if thumb:
-            file, url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https)
+            file, url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key)
             if file and url:
                 embed.set_thumbnail(url=url)
 
