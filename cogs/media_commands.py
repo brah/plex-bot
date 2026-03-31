@@ -287,7 +287,7 @@ class MediaCommands(commands.Cog):
             await ctx.send("Failed to retrieve watchers.")
 
     @commands.command(name="tv")
-    async def lookup_tv(self, ctx, *, show_name: str):
+    async def lookup_tv(self, ctx, *, show_name: str = None):
         """
         Lookup information about a TV show in your Plex library.
 
@@ -297,10 +297,17 @@ class MediaCommands(commands.Cog):
         Example:
         plex tv Game of Thrones
         """
+        logger.info(f"TV lookup command invoked by {ctx.author.name} with query: '{show_name}'")
+        
+        if not show_name:
+            await ctx.send("Please provide a TV show name to search for.")
+            logger.warning("TV lookup command used without a show name")
+            return
+        
         await self.lookup_media(ctx, show_name, media_type="tv")
 
     @commands.command(name="movie")
-    async def lookup_movie(self, ctx, *, movie_name: str):
+    async def lookup_movie(self, ctx, *, movie_name: str = None):
         """
         Lookup information about a movie in your Plex library.
 
@@ -310,7 +317,15 @@ class MediaCommands(commands.Cog):
         Example:
         plex movie The Godfather
         """
+        logger.info(f"Movie lookup command invoked by {ctx.author.name} with query: '{movie_name}'")
+        
+        if not movie_name:
+            await ctx.send("Please provide a movie name to search for.")
+            logger.warning("Movie lookup command used without a movie name")
+            return
+        
         await self.lookup_media(ctx, movie_name, media_type="movie")
+
 
     async def lookup_media(self, ctx, title: str, media_type: str = None):
         """
@@ -323,6 +338,7 @@ class MediaCommands(commands.Cog):
         """
         if not title:
             await ctx.send("Please provide a title to search for.")
+            logger.warning(f"lookup_media called with empty title by {ctx.author.name}")
             return
 
         # Set media type for filtering
@@ -330,31 +346,146 @@ class MediaCommands(commands.Cog):
         if media_type == "tv":
             search_media_type = "show"
             media_type_str = "TV Show"
+            tautulli_type = "show"
         elif media_type == "movie":
             search_media_type = "movie"
             media_type_str = "Movie"
+            tautulli_type = "movie"
+        else:
+            media_type_str = "Content"
+            tautulli_type = None
+        
+        logger.info(f"Looking up {media_type_str}: '{title}' for {ctx.author.name}")
 
         # Let the user know we're searching
         search_msg = await ctx.send(
-            f"🔍 Searching for {media_type_str if media_type else 'content'}: **{title}**..."
+            f"🔍 Searching for {media_type_str}: **{title}**..."
         )
 
         try:
-            # First, search the media cache
+            # First, try direct API search through Tautulli (more reliable for exact titles)
+            direct_results = []
+            best_direct_match = None
+            
+            try:
+                await search_msg.edit(content=f"🔍 Searching for {media_type_str}: **{title}** (Direct API search...)")
+                
+                # Get all libraries of the appropriate type
+                libraries_response = await self.tautulli.get_libraries()
+                if libraries_response.get("response", {}).get("result") == "success":
+                    libraries = libraries_response["response"]["data"]
+                    
+                    # Filter libraries by type if needed
+                    if tautulli_type:
+                        libraries = [lib for lib in libraries if lib.get("section_type") == tautulli_type]
+                    
+                    logger.info(f"Searching for '{title}' in {len(libraries)} libraries via direct API")
+                    
+                    # Search each library
+                    for library in libraries:
+                        search_params = {
+                            "section_id": library["section_id"],
+                            "search": title,
+                            "length": 10
+                        }
+                        
+                        search_response = await self.tautulli.get_library_media_info(**search_params)
+                        if search_response.get("response", {}).get("result") == "success":
+                            library_results = search_response["response"]["data"]["data"]
+                            if library_results:
+                                logger.info(f"Found {len(library_results)} results via direct API search in library {library['section_name']}")
+                                direct_results.extend(library_results)
+                                
+                                # Check for exact match in this library
+                                for item in library_results:
+                                    if item.get("title", "").lower() == title.lower():
+                                        logger.info(f"Found exact direct match: {item.get('title')} in {library['section_name']}")
+                                        best_direct_match = item
+                                        break
+                                
+                                # If we found an exact match, no need to check other libraries
+                                if best_direct_match:
+                                    break
+                
+                # If no exact match but we have results, use the first one
+                if not best_direct_match and direct_results:
+                    # Try to find closest match
+                    import difflib
+                    
+                    # Sort by similarity score
+                    direct_results.sort(
+                        key=lambda x: difflib.SequenceMatcher(None, x.get("title", "").lower(), title.lower()).ratio(),
+                        reverse=True
+                    )
+                    
+                    best_direct_match = direct_results[0]
+                    similarity = difflib.SequenceMatcher(None, best_direct_match.get("title", "").lower(), title.lower()).ratio()
+                    logger.info(f"Best direct match: {best_direct_match.get('title')} (similarity: {similarity:.2f})")
+                    
+            except Exception as e:
+                logger.error(f"Error in direct API search: {e}", exc_info=True)
+                # Continue to cache search even if direct search fails
+            
+            # If we got a direct match, use it
+            if best_direct_match:
+                logger.info(f"Using direct API result: {best_direct_match.get('title')}")
+                
+                # Get full metadata for this direct match
+                rating_key = best_direct_match.get("rating_key")
+                metadata_response = await self.tautulli.get_metadata(rating_key)
+                
+                if metadata_response.get("response", {}).get("result") == "success":
+                    logger.info(f"Successfully retrieved metadata for direct match: {best_direct_match.get('title')}")
+                    metadata = metadata_response["response"]["data"]
+                    
+                    # Now we can build the embed and display the result
+                    await self._display_media_info(ctx, search_msg, metadata, best_direct_match.get("title"))
+                    return
+                else:
+                    logger.warning(f"Failed to get metadata for direct match, falling back to cache search")
+            else:
+                logger.info(f"No direct API match found for '{title}', trying cache search")
+            
+            # If direct search didn't work or failed, fall back to cache search
+            await search_msg.edit(content=f"🔍 Searching for {media_type_str}: **{title}** (Checking media cache...)")
+            
+            # Check if the media cache is initialized
+            if not self.media_cache:
+                logger.error("Media cache is not available - shared resource missing")
+                await search_msg.edit(content="Error: Media cache service is not available.")
+                return
+                
+            # Check if the cache is valid
+            logger.debug("Ensuring cache is valid before search")
             await self.media_cache.ensure_cache_valid()
+            logger.info(f"Cache validation complete, proceeding with search for '{title}'")
 
-            # Search items matching the title and media type
-            items = await self.media_cache.search(title, limit=20)
-
-            # Filter by media type if specified
-            if search_media_type:
-                items = [item for item in items if item.get("media_type") == search_media_type]
+            # Use enhanced search if available
+            if hasattr(self.media_cache, "enhanced_search"):
+                logger.info("Using enhanced search method")
+                items = await self.media_cache.enhanced_search(title, media_type=media_type, limit=20)
+            else:
+                # Fall back to standard search
+                logger.info("Using standard search method")
+                items = await self.media_cache.search(title, limit=20)
+                
+                # Filter by media type if specified
+                if search_media_type:
+                    filtered_items = [item for item in items if item.get("media_type") == search_media_type]
+                    logger.info(f"After filtering for {search_media_type}: {len(filtered_items)} results")
+                    items = filtered_items
 
             if not items:
+                # If we got here, both direct search and cache search failed
+                logger.warning(f"No {media_type_str.lower()} found matching '{title}'")
                 await search_msg.edit(
-                    content=f"No {media_type_str.lower() if media_type else 'content'} found matching '**{title}**'."
+                    content=f"No {media_type_str.lower()} found matching '**{title}**'."
                 )
                 return
+
+            # Log first few items for debugging
+            for i, item in enumerate(items[:3]):
+                logger.debug(f"Result {i+1}: {item.get('title')} ({item.get('media_type')}, key: {item.get('rating_key')})")
 
             # If we have multiple matches, try to find the best one
             best_match = None
@@ -362,34 +493,72 @@ class MediaCommands(commands.Cog):
             # Exact title match gets priority
             for item in items:
                 if item.get("title", "").lower() == title.lower():
+                    logger.info(f"Found exact title match: {item.get('title')} (rating_key: {item.get('rating_key')})")
                     best_match = item
                     break
 
             # If no exact match, use the first result
             if not best_match:
                 best_match = items[0]
+                logger.info(f"No exact match found, using first result: {best_match.get('title')}")
 
             # Get detailed metadata for this item
             rating_key = best_match.get("rating_key")
             if not rating_key:
+                logger.error(f"Selected item has no rating_key: {best_match}")
                 await search_msg.edit(
                     content="Found a match but couldn't retrieve its details. Try a different search."
                 )
                 return
 
-            # Get full metadata
+            # Get full metadata from Tautulli
+            logger.debug(f"Fetching metadata for rating_key: {rating_key}")
             metadata_response = await self.tautulli.get_metadata(rating_key)
-            if metadata_response["response"]["result"] != "success":
+            
+            if not metadata_response:
+                logger.error(f"No response from Tautulli when fetching metadata for rating_key: {rating_key}")
+                await search_msg.edit(content="Error connecting to Tautulli. Please try again later.")
+                return
+                
+            if metadata_response.get("response", {}).get("result") != "success":
+                error_msg = metadata_response.get("response", {}).get("message", "Unknown error")
+                logger.error(f"Failed to get metadata: {error_msg}")
                 await search_msg.edit(
-                    content="Found a match but couldn't retrieve its details. Try a different search."
+                    content=f"Error retrieving details: {error_msg}"
                 )
                 return
 
+            logger.info(f"Successfully retrieved metadata for {best_match.get('title')}")
             metadata = metadata_response["response"]["data"]
+            
+            # Display the media information
+            await self._display_media_info(ctx, search_msg, metadata, best_match.get("title"))
+            
+            # If we had multiple matches, mention this
+            if len(items) > 1:
+                other_titles = [
+                    item.get("title") for item in items[:5] if item.get("rating_key") != rating_key
+                ]
+                if other_titles:
+                    other_matches = ", ".join([f"**{title}**" for title in other_titles])
+                    await ctx.send(
+                        f"📌 Other possible matches: {other_matches}"
+                        + (f" and {len(items) - 5} more..." if len(items) > 5 else "")
+                    )
 
+        except Exception as e:
+            logger.error(f"Error in lookup_media: {e}", exc_info=True)
+            await search_msg.edit(
+                content=f"An error occurred while looking up information: {type(e).__name__}\n{str(e)}"
+            )
+
+    async def _display_media_info(self, ctx, search_msg, metadata, title):
+        """Helper method to display media information in an embed."""
+        try:
             # Get user watch statistics
-            user_stats_response = await self.tautulli.get_item_user_stats(rating_key)
-            watch_time_response = await self.tautulli.get_item_watch_time_stats(rating_key)
+            logger.debug(f"Fetching user statistics for rating_key: {metadata.get('rating_key')}")
+            user_stats_response = await self.tautulli.get_item_user_stats(metadata.get('rating_key'))
+            watch_time_response = await self.tautulli.get_item_watch_time_stats(metadata.get('rating_key'))
 
             # Create the embed with all the gathered information
             embed = nextcord.Embed(
@@ -407,8 +576,13 @@ class MediaCommands(commands.Cog):
 
             if metadata.get("duration"):
                 # Convert duration from milliseconds to minutes
-                duration_min = int(int(metadata.get("duration", 0)) / 60000)
-                embed.add_field(name="Duration", value=f"{duration_min} minutes", inline=True)
+                duration_ms = int(metadata.get("duration", 0))
+                logger.debug(f"Raw duration value: {duration_ms}")
+                
+                if duration_ms > 0:
+                    duration_min = int(duration_ms / 60000)
+                    embed.add_field(name="Duration", value=f"{duration_min} minutes", inline=True)
+                    logger.debug(f"Converted duration: {duration_min} minutes")
 
             if metadata.get("genres"):
                 genres = ", ".join([g.title() for g in metadata.get("genres", [])])
@@ -437,8 +611,9 @@ class MediaCommands(commands.Cog):
                     embed.add_field(name="Status", value=metadata.get("status", "Unknown"), inline=True)
 
             # Add watch statistics from user_stats
-            if user_stats_response["response"]["result"] == "success":
+            if user_stats_response and user_stats_response.get("response", {}).get("result") == "success":
                 user_stats = user_stats_response["response"]["data"]
+                logger.debug(f"User stats data available: {len(user_stats) if user_stats else 0} records")
 
                 if user_stats:
                     # Total play count
@@ -460,7 +635,8 @@ class MediaCommands(commands.Cog):
                                     user_list.append(f"**{discord_user.display_name}**: {play_count} plays")
                                 else:
                                     user_list.append(f"**{plex_username}**: {play_count} plays")
-                            except Exception:
+                            except Exception as e:
+                                logger.error(f"Error getting Discord user for ID {discord_id}: {e}")
                                 user_list.append(f"**{plex_username}**: {play_count} plays")
                         else:
                             user_list.append(f"**{plex_username}**: {play_count} plays")
@@ -475,8 +651,10 @@ class MediaCommands(commands.Cog):
                         )
 
             # Add watch time statistics
-            if watch_time_response["response"]["result"] == "success":
+            if watch_time_response and watch_time_response.get("response", {}).get("result") == "success":
                 watch_time_stats = watch_time_response["response"]["data"]
+                logger.debug(f"Watch time stats available: {len(watch_time_stats) if watch_time_stats else 0} records")
+                
                 if watch_time_stats and isinstance(watch_time_stats, list) and len(watch_time_stats) > 0:
                     # It's a list, so use the first item (usually there's only one)
                     stats_item = watch_time_stats[0]
@@ -500,33 +678,31 @@ class MediaCommands(commands.Cog):
             file = None
 
             if thumb:
-                file, attachment_url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb)
-                if file and attachment_url:
-                    embed.set_image(url=attachment_url)
+                logger.debug(f"Attempting to fetch thumbnail: {thumb}")
+                try:
+                    file, attachment_url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb)
+                    if file and attachment_url:
+                        embed.set_image(url=attachment_url)
+                        logger.debug("Successfully added thumbnail to embed")
+                    else:
+                        logger.warning(f"Failed to get thumbnail for {metadata.get('title')}")
+                except Exception as e:
+                    logger.error(f"Error preparing thumbnail: {e}")
 
             # Send the result
-            if file:
-                await search_msg.edit(content=None, embed=embed, file=file)
-            else:
-                await search_msg.edit(content=None, embed=embed)
-
-            # If we had multiple matches, mention this
-            if len(items) > 1:
-                other_titles = [
-                    item.get("title") for item in items[:5] if item.get("rating_key") != rating_key
-                ]
-                if other_titles:
-                    other_matches = ", ".join([f"**{title}**" for title in other_titles])
-                    await ctx.send(
-                        f"📌 Other possible matches: {other_matches}"
-                        + (f" and {len(items) - 5} more..." if len(items) > 5 else "")
-                    )
-
+            try:
+                if file:
+                    await search_msg.edit(content=None, embed=embed, file=file)
+                else:
+                    await search_msg.edit(content=None, embed=embed)
+                    
+                logger.info(f"Successfully displayed information for {title}")
+            except Exception as e:
+                logger.error(f"Error sending embed: {e}")
+                await ctx.send(f"Error displaying information: {str(e)}")
         except Exception as e:
-            logger.error(f"Error in lookup_media: {e}", exc_info=True)
-            await search_msg.edit(
-                content=f"An error occurred while looking up information: {type(e).__name__}"
-            )
+            logger.error(f"Error in _display_media_info: {e}", exc_info=True)
+            await search_msg.edit(content=f"Error displaying media information: {type(e).__name__}")
 
     @commands.command()
     async def downloading(self, ctx):
@@ -661,6 +837,117 @@ class MediaCommands(commands.Cog):
             logger.error(f"Failed to refresh media cache: {e}")
             await refresh_message.edit(content="Failed to refresh media cache. Check logs for details.")
 
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def check_media_cache(self, ctx):
+        """Debug command to check media cache content."""
+        try:
+            # First check if cache is initialized
+            if not self.media_cache:
+                await ctx.send("Error: Media cache is not initialized.")
+                return
+                
+            # Get basic cache stats
+            cache_size = len(await self.media_cache.get_items(limit=10000))
+            await ctx.send(f"Media cache contains {cache_size} items.")
+            
+            # Show cache validity status
+            is_valid = self.media_cache.is_cache_valid()
+            await ctx.send(f"Cache validity: {'Valid' if is_valid else 'Invalid'}")
+            
+            # Show cache last update time
+            last_updated = self.media_cache.last_updated
+            if last_updated:
+                await ctx.send(f"Cache last updated: {last_updated}")
+            else:
+                await ctx.send("Cache has not been updated yet.")
+            
+            # Count items by media type
+            movies = len(await self.media_cache.get_items(media_type="movie", limit=10000))
+            tv_shows = len(await self.media_cache.get_items(media_type="tv", limit=10000))
+            
+            await ctx.send(f"Media types in cache: {movies} movies, {tv_shows} TV shows")
+            
+            # Sample some titles from different media types
+            movie_samples = await self.media_cache.get_items(media_type="movie", limit=5, random_sort=True)
+            tv_samples = await self.media_cache.get_items(media_type="tv", limit=5, random_sort=True)
+            
+            if movie_samples:
+                movie_titles = [f"{item.get('title')} ({item.get('year', 'Unknown')})" for item in movie_samples]
+                await ctx.send(f"Sample movies: {', '.join(movie_titles)}")
+            else:
+                await ctx.send("No movie samples found in cache.")
+                
+            if tv_samples:
+                tv_titles = [f"{item.get('title')} ({item.get('year', 'Unknown')})" for item in tv_samples]
+                await ctx.send(f"Sample TV shows: {', '.join(tv_titles)}")
+            else:
+                await ctx.send("No TV samples found in cache.")
+            
+            # Check on exact search functionality
+            sample_movie = next((item for item in movie_samples if item), None) if movie_samples else None
+            sample_tv = next((item for item in tv_samples if item), None) if tv_samples else None
+            
+            if sample_movie:
+                movie_title = sample_movie.get('title', '')
+                search_results = await self.media_cache.search(movie_title, limit=5)
+                search_count = len(search_results)
+                await ctx.send(f"Search for exact movie title '{movie_title}' returned {search_count} results.")
+            
+            if sample_tv:
+                tv_title = sample_tv.get('title', '')
+                search_results = await self.media_cache.search(tv_title, limit=5)
+                search_count = len(search_results)
+                await ctx.send(f"Search for exact TV title '{tv_title}' returned {search_count} results.")
+            
+            # Attempt partial matches
+            if sample_movie and len(sample_movie.get('title', '')) > 3:
+                # Use first 3 characters as partial search
+                partial_query = sample_movie.get('title', '')[:3]
+                search_results = await self.media_cache.search(partial_query, limit=5)
+                search_count = len(search_results)
+                await ctx.send(f"Partial search for '{partial_query}' returned {search_count} results.")
+            
+            logger.info("Media cache check completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error in check_media_cache command: {e}", exc_info=True)
+            await ctx.send(f"An error occurred while checking the media cache: {type(e).__name__}: {str(e)}")
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def force_refresh_cache(self, ctx):
+        """Force invalidate and refresh the media cache completely."""
+        message = await ctx.send("🔄 Forcing complete media cache refresh...")
+        
+        try:
+            # First invalidate the cache
+            async with self.media_cache.cache_lock:
+                self.media_cache.media_items = {}
+                self.media_cache.last_updated = None
+                logger.info("Media cache has been forcibly invalidated")
+                
+            await message.edit(content="Cache invalidated. Starting full refresh (this may take a while)...")
+            
+            # Now perform a full update
+            await self.media_cache.update_cache()
+            
+            # Get new statistics
+            cache_size = len(await self.media_cache.get_items(limit=10000))
+            movies = len(await self.media_cache.get_items(media_type="movie", limit=10000))
+            tv_shows = len(await self.media_cache.get_items(media_type="tv", limit=10000))
+            
+            await message.edit(content=f"✅ Media cache has been completely refreshed!\n"
+                                    f"Cache now contains {cache_size} items "
+                                    f"({movies} movies, {tv_shows} TV shows)\n\n"
+                                    f"Last Updated: {self.media_cache.last_updated}")
+            
+            logger.info(f"Force refresh complete. New cache contains {cache_size} items "
+                    f"({movies} movies, {tv_shows} TV shows)")
+                    
+        except Exception as e:
+            logger.error(f"Error in force_refresh_cache command: {e}", exc_info=True)
+            await message.edit(content=f"❌ Error during cache refresh: {type(e).__name__}: {str(e)}")
 
 def setup(bot):
     bot.add_cog(MediaCommands(bot))

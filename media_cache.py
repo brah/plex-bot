@@ -199,28 +199,77 @@ class MediaCache:
 
         return paginated_items
 
-    async def search(self, query: str, limit: int = 10) -> List[Dict]:
+    async def search(self, query: str, limit: int = 10, include_partial_matches: bool = True) -> List[Dict]:
         """
-        Search for media items by title.
+        Search for media items by title with improved matching.
 
         Args:
             query: The search query
             limit: Maximum number of results to return
+            include_partial_matches: If True, includes partial matches in results
 
         Returns:
             List of media items matching the search query
         """
+        if not query:
+            logger.warning("Empty search query provided")
+            return []
+        
         query = query.lower()
+        logger.debug(f"Searching for '{query}' in media cache")
         await self.ensure_cache_valid()
 
-        matching_items = []
-        for item in self.media_items.values():
-            title = item.get("title", "").lower()
-            if query in title:
-                matching_items.append(item)
-                if len(matching_items) >= limit:
-                    break
+        # Early check if cache is empty
+        if not self.media_items:
+            logger.warning("MediaCache is empty during search")
+            return []
 
+        # Count total items before search for debugging
+        total_items = len(self.media_items)
+        logger.debug(f"Searching through {total_items} total items in media cache")
+        
+        # Log some sample titles from the cache to verify content
+        sample_titles = [item.get("title", "Unknown") 
+                        for i, item in enumerate(list(self.media_items.values())[:5])]
+        logger.debug(f"Sample titles in cache: {sample_titles}")
+
+        # First pass: exact match on title
+        exact_matches = []
+        partial_matches = []
+        
+        for rating_key, item in self.media_items.items():
+            title = item.get("title", "").lower()
+            media_type = item.get("media_type", "unknown").lower()
+            
+            # Skip items without a title
+            if not title:
+                continue
+                
+            # Check for exact match
+            if query == title:
+                logger.debug(f"Found exact match: {title} ({media_type}, key: {rating_key})")
+                exact_matches.append(item)
+            # Check for partial match if enabled
+            elif include_partial_matches and query in title:
+                logger.debug(f"Found partial match: {title} ({media_type}, key: {rating_key})")
+                partial_matches.append(item)
+                
+            # Break if we have enough results
+            if len(exact_matches) + len(partial_matches) >= limit:
+                break
+        
+        # Combine results, prioritizing exact matches
+        matching_items = exact_matches + partial_matches
+        matching_items = matching_items[:limit]
+        
+        logger.info(f"Search for '{query}' found {len(matching_items)} results "
+                    f"({len(exact_matches)} exact, {len(partial_matches)} partial)")
+        
+        # Log all found items for debugging
+        for idx, item in enumerate(matching_items):
+            logger.debug(f"Result {idx+1}: {item.get('title')} "
+                        f"({item.get('media_type')}, key: {item.get('rating_key')})")
+        
         return matching_items
 
     async def load_cache_from_disk(self) -> None:
@@ -308,6 +357,10 @@ class MediaCache:
         libraries = await self._get_libraries()
         logger.info(f"Starting to fetch media items from {len(libraries)} libraries.")
 
+        # Log libraries for debugging
+        for lib in libraries:
+            logger.info(f"Processing library: {lib['section_name']} (ID: {lib['section_id']}, Type: {lib['section_type']})")
+
         tasks = []
         for library in libraries:
             tasks.append(self._process_library(library))
@@ -329,6 +382,15 @@ class MediaCache:
         if items_filtered > 0:
             logger.info(f"Filtered out {items_filtered} low-quality media items")
 
+        # Count items by media type for debugging
+        media_types_count = {}
+        for item in filtered_items:
+            media_type = item.get("media_type", "unknown")
+            if media_type not in media_types_count:
+                media_types_count[media_type] = 0
+            media_types_count[media_type] += 1
+        
+        logger.info(f"Media types count in fetched items: {media_types_count}")
         logger.info(f"Fetched a total of {len(filtered_items)} quality media items.")
         return filtered_items
 
@@ -391,11 +453,15 @@ class MediaCache:
 
             # Collect all rating keys for the metadata fetch
             rating_keys = [item["rating_key"] for item in media_items]
-
-            # Process rating keys in batches to avoid overwhelming the API
-            batch_size = 20
+            
+            # Process rating keys in smaller batches to improve reliability
+            batch_size = 10  # Reduced from 20 to 10 for better reliability
             for i in range(0, len(rating_keys), batch_size):
                 batch_keys = rating_keys[i : i + batch_size]
+                
+                # Log batch progress
+                logger.debug(f"Processing batch {(i//batch_size)+1}/{(len(rating_keys)+batch_size-1)//batch_size} in {library['section_name']}")
+                
                 batch_tasks = [self._fetch_item_metadata(key) for key in batch_keys]
                 batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
 
@@ -405,8 +471,8 @@ class MediaCache:
                     elif result:
                         library_items.append(result)
 
-                # Small pause to avoid API rate limits
-                await asyncio.sleep(0.2)
+                # Longer pause between batches to avoid API rate limits
+                await asyncio.sleep(0.5)
 
             logger.info(
                 f"Completed processing library '{library['section_name']}' with {len(library_items)} items"
@@ -416,6 +482,104 @@ class MediaCache:
         except Exception as e:
             logger.error(f"Error processing library {library.get('section_name', 'unknown')}: {e}")
             return library_items
+
+    async def search_by_prefix(self, query: str, limit: int = 10) -> List[Dict]:
+        """
+        Search for media items where the title starts with the given prefix.
+        
+        This is useful for autocomplete-style searches and can help find items
+        that might be missed by the regular search.
+        
+        Args:
+            query: The title prefix to search for
+            limit: Maximum number of results to return
+            
+        Returns:
+            List of media items matching the search prefix
+        """
+        if not query:
+            return []
+            
+        query = query.lower()
+        await self.ensure_cache_valid()
+        
+        matching_items = []
+        
+        for item in self.media_items.values():
+            title = item.get("title", "").lower()
+            if title.startswith(query):
+                matching_items.append(item)
+                if len(matching_items) >= limit:
+                    break
+                    
+        logger.info(f"Prefix search for '{query}' found {len(matching_items)} results")
+        return matching_items
+
+    # Add this enhanced search method that combines multiple search approaches
+    async def enhanced_search(self, query: str, media_type: str = None, limit: int = 10) -> List[Dict]:
+        """
+        Enhanced search that combines multiple search techniques to find media items.
+        
+        Args:
+            query: The search query
+            media_type: Optional media type to filter results (movie, tv, etc.)
+            limit: Maximum number of results to return
+            
+        Returns:
+            List of media items matching the search criteria
+        """
+        if not query:
+            return []
+            
+        query = query.lower()
+        await self.ensure_cache_valid()
+        
+        # First try the normal search
+        normal_results = await self.search(query, limit=limit)
+        
+        # If we didn't get enough results, try prefix search
+        if len(normal_results) < limit:
+            prefix_results = await self.search_by_prefix(query, limit=limit)
+            
+            # Merge results, avoiding duplicates
+            seen_keys = {item["rating_key"] for item in normal_results}
+            for item in prefix_results:
+                if item["rating_key"] not in seen_keys and len(normal_results) < limit:
+                    normal_results.append(item)
+                    seen_keys.add(item["rating_key"])
+        
+        # If we still don't have enough, try a more fuzzy approach - searching words
+        if len(normal_results) < limit and " " in query:
+            # Split the query into words and search for each word
+            words = query.split()
+            for word in words:
+                if len(word) < 3:  # Skip very short words
+                    continue
+                    
+                word_results = await self.search(word, limit=limit)
+                
+                # Add any new results
+                for item in word_results:
+                    if item["rating_key"] not in seen_keys and len(normal_results) < limit:
+                        normal_results.append(item)
+                        seen_keys.add(item["rating_key"])
+        
+        # Filter by media type if specified
+        if media_type and normal_results:
+            if media_type.lower() == "tv":
+                valid_types = ["show", "episode"]
+            elif media_type.lower() == "movie":
+                valid_types = ["movie"]
+            else:
+                valid_types = [media_type.lower()]
+                
+            normal_results = [
+                item for item in normal_results 
+                if item.get("media_type", "unknown").lower() in valid_types
+            ]
+        
+        logger.info(f"Enhanced search for '{query}' found {len(normal_results)} results")
+        return normal_results
 
     async def _fetch_item_metadata(self, rating_key: str) -> Optional[Dict]:
         """Fetch and process metadata for a single media item."""
