@@ -125,10 +125,17 @@ class PlexBot(commands.Bot):
     """
 
     async def setup_hook(self) -> None:
-        """Run once, after login but before connecting to the gateway."""
+        """One-time async initialization. Invoked explicitly from start() below,
+        because nextcord — unlike discord.py — never calls setup_hook() itself."""
         self.shared_resources = await initialize_resources()
         logger.info("Shared resources initialized")
         await load_cogs(self)
+
+    async def start(self, *args, **kwargs) -> None:
+        # nextcord (unlike discord.py) never invokes setup_hook(); call it
+        # ourselves so shared resources + cogs initialize once before connecting.
+        await self.setup_hook()
+        await super().start(*args, **kwargs)
 
     async def close(self) -> None:
         """Shut down the gateway first, then close shared aiohttp sessions.
