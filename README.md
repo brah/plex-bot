@@ -12,6 +12,10 @@ A Discord bot that interfaces with your Plex server through Tautulli's API, offe
 - **Media Statistics**: Generate detailed viewing statistics with visual charts
 - **Efficient Media Cache**: Optimized caching system for fast responses even with large libraries
 
+## A note on AI
+
+Being a hobby project, don't be surprised by the use of AI models in commits — I encourage and invite you to do the same! Use whatever tools help you build and contribute.
+
 ## Setup
 
 ### Requirements
@@ -44,7 +48,7 @@ A Discord bot that interfaces with your Plex server through Tautulli's API, offe
    If you have a previous version of PlexBot with `config.json` and `bot_config.py` files, use the migration script:
    
    ```bash
-   python migrate_config.py
+   python migration.py
    ```
    
    **Option 2: Create a new configuration**
@@ -122,7 +126,7 @@ If you're upgrading from an older version of PlexBot, follow these steps:
 
 2. **Run the migration script**:
    ```bash
-   python migrate_config.py
+   python migration.py
    ```
 
 3. **Review the new configuration**:
@@ -202,6 +206,8 @@ pm2 save
 |---------|-------------|
 | `plex top` | Shows the top Plex users and assigns roles |
 | `plex random [media_type] [genre]` | Shows a random item from your library with optional filtering |
+| `plex tv <show name>` | Looks up a TV show in your library with watch stats |
+| `plex movie <movie name>` | Looks up a movie in your library with watch stats |
 | `plex recommend [@user]` | Recommends media based on watch history |
 | `plex watchers` | Shows who's currently watching Plex |
 | `plex downloading` | Shows current qBittorrent downloads |
@@ -209,6 +215,7 @@ pm2 save
 | `plex stats [days]` | Shows server statistics for the specified time period |
 | `plex shows` | Shows top users by TV show watch time |
 | `plex history [@user/username]` | Shows watch history for a user |
+| `plex hot [days]` | Shows trending content and activity insights |
 | `plex chart` | Shows options for visualized data/charts |
 | `plex chart hours [@user] [days]` | Shows most active hours |
 | `plex chart days [@user] [days]` | Shows most active days of week |
@@ -219,7 +226,8 @@ pm2 save
 | `plex killstream [session_key] [message]` | Terminates a user's stream (admin only) |
 | `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
 | `plex ignore [plex_username]` | Toggles ignoring a user in stats (admin only) |
-| `plex refresh_cache` | Manually refreshes the media cache |
+| `plex refresh_cache` | Manually refreshes the media cache (admin only) |
+| `plex force_refresh_cache` | Fully invalidates and rebuilds the media cache (admin only) |
 | `plex help [command]` | Shows help information |
 
 ## Troubleshooting
@@ -255,6 +263,7 @@ The bot logs information to both the console and `plexbot.log`. If you're experi
 - **tautulli_wrapper.py**: Tautulli API wrapper
 - **media_cache.py**: Media caching system
 - **utilities.py**: Utility functions
+- **tests/**: Unit tests for the helper functions
 
 ### Error Handling
 
@@ -313,7 +322,7 @@ Adjust default command behaviors:
 
 2. Run the migration script to update your configuration:
    ```bash
-   python migrate_config.py
+   python migration.py
    ```
 
 3. Install any new dependencies:
