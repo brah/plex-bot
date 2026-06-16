@@ -5,7 +5,7 @@ import logging
 
 import aiohttp
 import nextcord
-from nextcord.ext import commands
+from nextcord.ext import commands, tasks
 
 from config import config
 from utilities import (
@@ -25,14 +25,8 @@ class ServerCommands(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
         self.plex_image = config.get("ui", "plex_image")
-        self._status_task = None
-        self.bot.loop.create_task(self.initialize())
-
-    async def initialize(self):
-        await self.bot.wait_until_ready()
-        self.tautulli.initialize()
-        await self._log_startup_info()
-        self._status_task = self.bot.loop.create_task(self.status_task())
+        self._display_streams = True  # presence alternates between stream stats and a help hint
+        self.status_task.start()  # type: ignore[attr-defined]
 
     async def _log_startup_info(self):
         """Log Tautulli connectivity and the bot's git version, once, at startup."""
@@ -67,38 +61,40 @@ class ServerCommands(commands.Cog):
     def cog_unload(self):
         # Stop the background presence loop. The shared Tautulli client is owned by
         # the bot (PlexBot.close()) and must not be closed here.
-        if self._status_task is not None:
-            self._status_task.cancel()
+        self.status_task.cancel()  # type: ignore[attr-defined]
 
+    @tasks.loop(seconds=15)
     async def status_task(self):
-        """Background task to update the bot's presence."""
-        display_streams = True  # Toggles between showing streams and help command
-        while not self.bot.is_closed():
-            try:
-                response = await self.tautulli.get_activity()
-                if not Tautulli.check_response(response):
-                    logger.error("Failed to retrieve activity from Tautulli.")
-                    await asyncio.sleep(15)
-                    continue
-                data = Tautulli.get_response_data(response, {})
-                stream_count = data.get("stream_count", 0)
-                wan_bandwidth_mbps = round(data.get("wan_bandwidth", 0) / 1000, 1)
+        """Update the bot's presence, alternating between stream stats and a help hint."""
+        try:
+            response = await self.tautulli.get_activity()
+            if not Tautulli.check_response(response):
+                logger.error("Failed to retrieve activity from Tautulli.")
+                return
+            data = Tautulli.get_response_data(response, {})
+            stream_count = data.get("stream_count", 0)
+            wan_bandwidth_mbps = round(data.get("wan_bandwidth", 0) / 1000, 1)
 
-                if display_streams:
-                    activity_text = f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
-                    activity_type = nextcord.ActivityType.playing
-                else:
-                    activity_text = ": plex help"
-                    activity_type = nextcord.ActivityType.listening
+            if self._display_streams:
+                activity_text = f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
+                activity_type = nextcord.ActivityType.playing
+            else:
+                activity_text = ": plex help"
+                activity_type = nextcord.ActivityType.listening
 
-                await self.bot.change_presence(
-                    activity=nextcord.Activity(type=activity_type, name=activity_text)
-                )
-                display_streams = not display_streams  # Toggle the display mode
-            except Exception as e:
-                logger.error(f"Error in status_task(): {e}")
+            await self.bot.change_presence(
+                activity=nextcord.Activity(type=activity_type, name=activity_text)
+            )
+            self._display_streams = not self._display_streams  # Toggle the display mode
+        except Exception as e:
+            logger.error(f"Error in status_task(): {e}")
 
-            await asyncio.sleep(15)  # Control how often to update the status
+    @status_task.before_loop  # type: ignore[attr-defined]
+    async def _before_status_task(self):
+        """Wait for the gateway, initialize Tautulli, and log startup info before the first tick."""
+        await self.bot.wait_until_ready()
+        self.tautulli.initialize()
+        await self._log_startup_info()
 
     @commands.command()
     async def status(self, ctx):
