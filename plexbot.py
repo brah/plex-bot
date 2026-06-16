@@ -17,7 +17,7 @@ from nextcord.ext import commands
 
 # Import our new configuration and error handling systems
 from config import config
-from errors import ErrorHandler, PlexBotError
+from errors import ErrorHandler
 
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
@@ -115,6 +115,43 @@ async def load_cogs(bot):
             logger.exception(f"Failed to load cog {cog_name}: {e}")
 
 
+class PlexBot(commands.Bot):
+    """Bot subclass that owns one-time async initialization and graceful teardown.
+
+    All setup lives in ``setup_hook`` rather than ``on_ready`` because ``on_ready``
+    can fire multiple times (on every gateway reconnect/resume); doing heavy
+    initialization there would re-create clients, leak aiohttp sessions, and
+    re-populate the media cache on every reconnect.
+    """
+
+    async def setup_hook(self) -> None:
+        """Run once, after login but before connecting to the gateway."""
+        self.shared_resources = await initialize_resources()
+        logger.info("Shared resources initialized")
+        await load_cogs(self)
+
+    async def close(self) -> None:
+        """Shut down the gateway first, then close shared aiohttp sessions.
+
+        super().close() stops the gateway and lets background loops (e.g.
+        ServerCommands.status_task, gated on is_closed()) observe shutdown, so we
+        don't tear the shared Tautulli/TMDB sessions down while a task is still
+        mid-request — which would otherwise error or silently re-open a new,
+        never-closed session via Tautulli._ensure_session().
+        """
+        await super().close()
+
+        logger.info("Closing shared resources...")
+        resources = getattr(self, "shared_resources", None) or {}
+        for name in ("tautulli", "tmdb"):
+            client = resources.get(name)
+            if client is not None:
+                try:
+                    await client.close()
+                except Exception as e:
+                    logger.error(f"Error closing {name} client during shutdown: {e}")
+
+
 def main():
     """Main entry point for the bot."""
     logger.info("Starting PlexBot...")
@@ -137,27 +174,17 @@ def main():
 
     # Initialize bot with the prefix from configuration
     bot_prefix = config.get("core", "prefix")
-    bot = commands.Bot(command_prefix=[bot_prefix, bot_prefix.title()], intents=intents, help_command=None)
+    bot = PlexBot(command_prefix=[bot_prefix, bot_prefix.title()], intents=intents, help_command=None)
 
-    # Create the error handler
+    # Create and register the error handler (only adds a listener; no gateway needed).
     error_handler = ErrorHandler(bot)
+    error_handler.setup()
+    logger.info("Error handler initialized.")
 
     @bot.event
     async def on_ready():
-        """Event triggered when the bot is ready to start."""
+        """Triggered whenever the gateway (re)connects. Keep this idempotent and cheap."""
         logger.info(f"Logged in as {bot.user} (ID: {bot.user.id})")
-
-        # Initialize the error handler
-        error_handler.setup()
-        logger.info("Error handler initialized.")
-
-        # Initialize shared resources asynchronously after bot is ready
-        bot.shared_resources = await initialize_resources()
-        logger.info("Shared resources initialized")
-
-        # Dynamically load all cogs from the 'cogs' directory
-        await load_cogs(bot)
-
         logger.info(f"PlexBot is now ready to serve {len(bot.guilds)} servers")
 
     # Run the bot

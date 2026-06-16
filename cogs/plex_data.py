@@ -1,10 +1,10 @@
 # cogs/plex_data.py
 
 import logging
-import asyncio
-import pytz
-import tzlocal
 import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import tzlocal
 import pandas as pd
 from typing import Optional, Dict, List, Any, Tuple
 
@@ -30,24 +30,24 @@ class PlexData(commands.Cog):
         self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
         self.timezone = None  # Timezone will be fetched from Tautulli or local timezone
 
-    async def get_tautulli_timezone(self) -> pytz.timezone:
+    async def get_tautulli_timezone(self) -> datetime.tzinfo:
         """Retrieve the timezone from Tautulli settings."""
         response = await self.tautulli.api_call("get_settings")
-        if response["response"]["result"] != "success":
+        if not Tautulli.check_response(response):
             logger.warning("Failed to retrieve Tautulli settings. Using local timezone.")
             return tzlocal.get_localzone()
-        else:
-            settings = response["response"]["data"]
-            timezone_str = settings.get("default_timezone")
-            if timezone_str:
-                try:
-                    return pytz.timezone(timezone_str)
-                except pytz.UnknownTimeZoneError:
-                    logger.warning(f"Unknown timezone '{timezone_str}'. Using local timezone.")
-                    return tzlocal.get_localzone()
-            else:
-                logger.warning("Timezone not found in Tautulli settings. Using local timezone.")
-                return tzlocal.get_localzone()
+
+        settings = Tautulli.get_response_data(response, {})
+        timezone_str = settings.get("default_timezone")
+        if not timezone_str:
+            logger.warning("Timezone not found in Tautulli settings. Using local timezone.")
+            return tzlocal.get_localzone()
+
+        try:
+            return ZoneInfo(timezone_str)
+        except (ZoneInfoNotFoundError, ValueError):
+            logger.warning(f"Unknown timezone '{timezone_str}'. Using local timezone.")
+            return tzlocal.get_localzone()
 
     def get_utc_offset_str(self) -> str:
         """Returns a string representation of the UTC offset, e.g., '(UTC+10)'."""
@@ -108,12 +108,12 @@ class PlexData(commands.Cog):
         }
         response = await self.tautulli.get_history(params=params)
 
-        if response["response"]["result"] != "success":
+        if not Tautulli.check_response(response):
             logger.error("Failed to retrieve watch history from Tautulli.")
             await ctx.send("Failed to retrieve watch history.")
             return []
 
-        history_entries = response["response"]["data"]["data"]
+        history_entries = (Tautulli.get_response_data(response, {}) or {}).get("data", [])
 
         # Filter data by date range
         cutoff_timestamp = pd.Timestamp.now(tz=self.timezone) - pd.Timedelta(days=days)
@@ -136,7 +136,7 @@ class PlexData(commands.Cog):
             timestamp = entry.get("started")
             if timestamp:
                 entry_time = (
-                    pd.to_datetime(timestamp, unit="s").tz_localize(pytz.utc).astimezone(self.timezone)
+                    pd.to_datetime(timestamp, unit="s").tz_localize("UTC").astimezone(self.timezone)
                 )
                 if entry_time < cutoff_timestamp:
                     continue  # Skip entries older than the cutoff

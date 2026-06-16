@@ -7,7 +7,7 @@ import os
 import random
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Set
 import aiofiles
 
 # Configure logging
@@ -112,8 +112,11 @@ class MediaCache:
                     self.media_items = {str(item["rating_key"]): item for item in new_items}
                     self.last_updated = datetime.now()
 
-                    # Save the updated cache to disk
-                    await self.save_cache_to_disk()
+                    # We already hold cache_lock here, so snapshot and write directly.
+                    # Calling save_cache_to_disk() would re-acquire the same non-reentrant
+                    # asyncio.Lock from this task and deadlock.
+                    items_snapshot = list(self.media_items.values())
+                    await self._write_items_to_disk(items_snapshot)
                     logger.info(f"Media cache updated with {len(self.media_items)} items")
                 else:
                     logger.warning("No media items found during update")
@@ -300,44 +303,50 @@ class MediaCache:
             self.media_items = {}
 
     async def save_cache_to_disk(self) -> None:
-        """Save the media cache to disk with improved efficiency."""
+        """Snapshot the cache under the lock, then write it to disk.
+
+        Use this from callers that do NOT already hold ``cache_lock``.
+        """
+        async with self.cache_lock:
+            # Snapshot inside the lock to avoid holding it during slow file I/O.
+            # The empty-cache guard lives in _write_items_to_disk (the single writer).
+            items_list = list(self.media_items.values())
+
+        await self._write_items_to_disk(items_list)
+
+    async def _write_items_to_disk(self, items_list: List[Dict]) -> None:
+        """Atomically write a snapshot of media items to disk.
+
+        This performs no locking; the caller passes a consistent snapshot. It is
+        therefore safe to call whether or not ``cache_lock`` is held, which is why
+        ``update_cache`` (which holds the lock) calls it directly — re-acquiring a
+        non-reentrant ``asyncio.Lock`` from the same task would deadlock.
+        """
         self.cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+        if not items_list:
+            logger.warning("Attempted to write empty cache to disk")
+            return
 
         try:
             logger.info(f"Saving media cache to {self.cache_file_path}")
-            async with self.cache_lock:
-                if not self.media_items:
-                    logger.warning("Attempted to save empty cache to disk")
-                    return
 
-                # Use a temporary file for safety
-                temp_file = self.cache_file_path.with_suffix(".tmp")
+            # Use a temporary file for safety, then atomically replace.
+            temp_file = self.cache_file_path.with_suffix(".tmp")
 
-                # Convert to a list first to avoid holding the lock during file writes
-                items_list = list(self.media_items.values())
-
-            # Release the lock before file operations
-            # Write in chunks to avoid memory issues
+            # Write in chunks, yielding to the event loop periodically.
             chunk_size = 100
             async with aiofiles.open(temp_file, "w", encoding="utf-8") as f:
-                # Write opening bracket
                 await f.write("[\n")
-
-                # Write items in chunks
                 for i, item in enumerate(items_list):
                     json_str = json.dumps(item, ensure_ascii=False)
                     if i < len(items_list) - 1:
                         json_str += ","
                     await f.write(json_str + "\n")
-
-                    # Periodically yield control back to the event loop
                     if i % chunk_size == 0 and i > 0:
                         await asyncio.sleep(0)
-
-                # Write closing bracket
                 await f.write("]\n")
 
-            # Atomically replace the cache file (os.replace is atomic on most platforms)
+            # os.replace is atomic on most platforms.
             if temp_file.exists():
                 os.replace(str(temp_file), str(self.cache_file_path))
 

@@ -7,13 +7,10 @@ import nextcord
 from nextcord.ext import commands
 
 from config import config
-from utilities import UserMappings, fetch_plex_image, prepare_thumbnail_for_embed
+from utilities import UserMappings, prepare_thumbnail_for_embed
 from tautulli_wrapper import Tautulli
 from media_cache import MediaCache
 
-import aiohttp
-from io import BytesIO
-from nextcord import File
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.recommendations")
@@ -66,12 +63,12 @@ class Recommendations(commands.Cog):
             }
             response = await self.tautulli.get_history(params=params)
 
-            if response["response"]["result"] != "success":
+            if not Tautulli.check_response(response):
                 await ctx.send("Failed to retrieve watch history from Plex.")
                 logger.error("Failed to retrieve watch history from Tautulli.")
                 return
 
-            history_entries = response["response"]["data"]["data"]
+            history_entries = (Tautulli.get_response_data(response, {}) or {}).get("data", [])
 
             if not history_entries:
                 await ctx.send(f"No watch history found for {member.display_name}.")
@@ -313,11 +310,11 @@ class Recommendations(commands.Cog):
         """Retrieve a list of Discord usernames who have watched the media item."""
         user_stats_response = await self.tautulli.get_item_user_stats(rating_key)
 
-        if user_stats_response["response"]["result"] != "success":
+        if not Tautulli.check_response(user_stats_response):
             logger.error(f"Failed to retrieve user stats for rating_key {rating_key}.")
-            return [] if not return_count else 0
+            return 0 if return_count else []
 
-        user_stats = user_stats_response["response"]["data"]
+        user_stats = Tautulli.get_response_data(user_stats_response, []) or []
         watched_users = []
         for user_stat in user_stats:
             plex_username = user_stat.get("username")
