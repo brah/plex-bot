@@ -6,28 +6,13 @@ from datetime import timedelta, datetime
 import nextcord
 from nextcord.ext import commands
 
-from utilities import UserMappings
+from utilities import UserMappings, format_duration
 from config import config
 from tautulli_wrapper import Tautulli
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.plex_stats")
 logger.setLevel(logging.INFO)
-
-
-def _format_watch_duration(seconds: int) -> str:
-    """Format seconds into a compact duration like '2d 5h 30m' or '5h 12m'."""
-    days, remainder = divmod(int(seconds), 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes = remainder // 60
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if hours:
-        parts.append(f"{hours}h")
-    if minutes or not parts:
-        parts.append(f"{minutes}m")
-    return " ".join(parts)
 
 
 class PlexStats(commands.Cog):
@@ -101,7 +86,7 @@ class PlexStats(commands.Cog):
             username = entry["user"]
             watch_seconds = entry["total_duration"]
             total_watchtime += watch_seconds
-            watch_str = _format_watch_duration(watch_seconds)
+            watch_str = format_duration(watch_seconds)
 
             # What they've been watching
             media_type = entry.get("media_type")
@@ -128,7 +113,7 @@ class PlexStats(commands.Cog):
         embed.description = "\n".join(lines)
 
         # Footer with totals
-        footer_parts = [f"Total: {_format_watch_duration(total_watchtime)}"]
+        footer_parts = [f"Total: {format_duration(total_watchtime)}"]
         history_resp = await self.tautulli.get_history()
         if Tautulli.check_response(history_resp):
             all_time = Tautulli.get_response_data(history_resp, {}).get("total_duration")
@@ -228,7 +213,7 @@ class PlexStats(commands.Cog):
 
             library_line = f"{total_movies} movies  \u2022  {total_shows} shows  \u2022  {total_episodes} episodes"
             if total_duration_seconds:
-                library_line += f"  \u2022  {_format_watch_duration(total_duration_seconds)} watched"
+                library_line += f"  \u2022  {format_duration(total_duration_seconds)} watched"
 
             embed = nextcord.Embed(
                 title=f"Plex Server Stats \u2014 Last {time} Days",
@@ -324,7 +309,7 @@ class PlexStats(commands.Cog):
             lines = []
             for i, (username, data) in enumerate(ranked, 1):
                 prefix = medal.get(i, f"`#{i}`")
-                watch_str = _format_watch_duration(data["time"])
+                watch_str = format_duration(data["time"])
                 libs = ", ".join(data["libraries"])
                 lines.append(f"{prefix}  **{username}** \u2014 {watch_str}\n\u2003\u2003{libs}")
 
@@ -394,7 +379,7 @@ class PlexStats(commands.Cog):
             title = entry.get("full_title", entry.get("title", "Unknown"))
             timestamp = entry.get("date")
             duration_s = entry.get("duration", 0)
-            duration_str = _format_watch_duration(duration_s) if duration_s else ""
+            duration_str = format_duration(duration_s) if duration_s else ""
 
             time_str = f"<t:{timestamp}:R>" if timestamp else ""
             user_suffix = f"  \u2022  {user}" if not plex_username else ""

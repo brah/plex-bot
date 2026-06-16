@@ -129,8 +129,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# JSON files
+# JSON files (config.json, map.json, the media cache, etc. — may hold secrets)
 *.json
+# ...but ship the committed config template
+!config.example.json
 
 #PyCharm / VSCode files
 .idea/

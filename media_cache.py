@@ -286,21 +286,41 @@ class MediaCache:
             async with self.cache_lock:
                 async with aiofiles.open(self.cache_file_path, "r", encoding="utf-8") as f:
                     contents = await f.read()
-                    data = json.loads(contents)
+                data = json.loads(contents)
 
-                    # Convert the list to a dictionary for faster lookups
-                    self.media_items = {str(item["rating_key"]): item for item in data}
-                    self.last_updated = datetime.now()
+                # Support both the current wrapped format ({"updated_at", "items"})
+                # and the legacy bare-list format. Restoring the real timestamp is
+                # what lets cache freshness (update_interval) survive a restart.
+                if isinstance(data, dict):
+                    items = data.get("items", [])
+                    self.last_updated = self._parse_timestamp(data.get("updated_at"))
+                else:
+                    items = data
+                    # Legacy file with no embedded timestamp: fall back to its mtime.
+                    self.last_updated = datetime.fromtimestamp(self.cache_file_path.stat().st_mtime)
 
-                logger.info(
-                    f"Media cache loaded from {self.cache_file_path} with {len(self.media_items)} items"
-                )
+                # Convert the list to a dictionary for faster lookups
+                self.media_items = {str(item["rating_key"]): item for item in items}
+
+            logger.info(
+                f"Media cache loaded from {self.cache_file_path} with {len(self.media_items)} items"
+            )
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error loading cache: {e}")
             self.media_items = {}
         except Exception as e:
             logger.error(f"Failed to load media cache from disk: {e}")
             self.media_items = {}
+
+    @staticmethod
+    def _parse_timestamp(value) -> Optional[datetime]:
+        """Parse an ISO-8601 timestamp string, or return None if absent/invalid."""
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            return None
 
     async def save_cache_to_disk(self) -> None:
         """Snapshot the cache under the lock, then write it to disk.
@@ -333,10 +353,14 @@ class MediaCache:
             # Use a temporary file for safety, then atomically replace.
             temp_file = self.cache_file_path.with_suffix(".tmp")
 
-            # Write in chunks, yielding to the event loop periodically.
+            # Persist the timestamp alongside the items so freshness survives a
+            # restart (otherwise a cache loaded from disk looks brand-new).
+            updated_at = (self.last_updated or datetime.now()).isoformat()
+
+            # Stream items in chunks, yielding to the event loop periodically.
             chunk_size = 100
             async with aiofiles.open(temp_file, "w", encoding="utf-8") as f:
-                await f.write("[\n")
+                await f.write('{"updated_at": ' + json.dumps(updated_at) + ', "items": [\n')
                 for i, item in enumerate(items_list):
                     json_str = json.dumps(item, ensure_ascii=False)
                     if i < len(items_list) - 1:
@@ -344,7 +368,7 @@ class MediaCache:
                     await f.write(json_str + "\n")
                     if i % chunk_size == 0 and i > 0:
                         await asyncio.sleep(0)
-                await f.write("]\n")
+                await f.write("]}\n")
 
             # os.replace is atomic on most platforms.
             if temp_file.exists():

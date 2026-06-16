@@ -1,0 +1,27 @@
+{
+    "core": {
+        "token": "",
+        "prefix": "plex ",
+        "log_level": "INFO"
+    },
+    "tautulli": {
+        "ip": "localhost:8181",
+        "apikey": "",
+        "use_https": false
+    },
+    "discord": {
+        "server_id": "",
+        "top_role_id": 0,
+        "second_role_id": 0,
+        "third_role_id": 0
+    },
+    "qbittorrent": {
+        "ip": "localhost",
+        "port": "8080",
+        "username": "",
+        "password": ""
+    },
+    "tmdb": {
+        "apikey": ""
+    }
+}
