@@ -4,19 +4,15 @@ import asyncio
 import difflib
 import logging
 import random
-from io import BytesIO
 from config import config
 
-import aiohttp
 import nextcord
-from nextcord import File
 from nextcord.ext import commands, menus
 import qbittorrentapi
 
 from utilities import (
     UserMappings,
     NoStopButtonMenuPages,
-    fetch_plex_image,
     prepare_thumbnail_for_embed,
 )
 from tautulli_wrapper import Tautulli, TMDB
@@ -272,11 +268,9 @@ class MediaCommands(commands.Cog):
         self.plex_image = config.get("ui", "plex_image")
         logger.info("MediaCommands cog initialized.")
 
-    def cog_unload(self):
-        """Clean up resources when the cog is unloaded."""
-        self.bot.loop.create_task(self.tautulli.close())
-        if self.tmdb:
-            self.bot.loop.create_task(self.tmdb.close())
+    # Note: the Tautulli/TMDB clients are shared across all cogs and owned by the
+    # bot (PlexBot.close()). A cog must not close them on unload, or it would tear
+    # down the session other cogs are still using.
 
     @commands.command()
     async def recent(self, ctx, amount: int = None):

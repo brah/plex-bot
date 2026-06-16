@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 108
-target-version = ['py38', 'py39', 'py310']
+target-version = ['py312']
 skip-string-normalization = false
 skip-magic-trailing-comma = false
 include = '\.pyi?$'
@@ -17,3 +17,14 @@ exclude = '''
   | dist
 )/
 '''
+
+[tool.ruff]
+line-length = 108
+target-version = "py312"
+
+[tool.ruff.lint]
+# Conservative, high-signal ruleset:
+#   F   -> pyflakes (unused imports, undefined names, f-string mistakes)
+#   E9  -> syntax / IndentationError / IO errors
+# Broaden this (e.g. add "B", "I", "UP") once the codebase is clean for them.
+select = ["E9", "F"]

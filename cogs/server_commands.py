@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from datetime import timedelta
 
 import aiohttp
 import nextcord
@@ -26,15 +25,50 @@ class ServerCommands(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
         self.plex_image = config.get("ui", "plex_image")
+        self._status_task = None
         self.bot.loop.create_task(self.initialize())
 
     async def initialize(self):
         await self.bot.wait_until_ready()
         self.tautulli.initialize()
-        self.bot.loop.create_task(self.status_task())
+        await self._log_startup_info()
+        self._status_task = self.bot.loop.create_task(self.status_task())
+
+    async def _log_startup_info(self):
+        """Log Tautulli connectivity and the bot's git version, once, at startup."""
+        try:
+            r = await self.tautulli.get_home_stats()
+
+            # These shell out to git (and the "latest" check hits the network),
+            # so run them in threads — concurrently — to avoid blocking the event loop.
+            local_commit, latest_commit = await asyncio.gather(
+                asyncio.to_thread(get_git_revision_short_hash),
+                asyncio.to_thread(get_git_revision_short_hash_latest),
+            )
+            # The git helpers return the sentinel "unknown" on failure (e.g. offline),
+            # which is truthy — exclude it so a failed fetch isn't read as "outdated".
+            up_to_date = ""
+            known = local_commit not in ("", "unknown") and latest_commit not in ("", "unknown")
+            if known and local_commit != latest_commit:
+                up_to_date = "Version outdated. Consider running git pull"
+
+            if Tautulli.check_response(r):
+                logger.info(f"Logged in as {self.bot.user}")
+                logger.info("Connection to Tautulli successful")
+                logger.info(
+                    f"Current PlexBot version ID: {local_commit or 'unknown'}; "
+                    f"latest: {latest_commit or 'unknown'}; {up_to_date}"
+                )
+            else:
+                logger.critical("Connection to Tautulli failed")
+        except Exception as e:
+            logger.error(f"Error during startup info logging: {e}")
 
     def cog_unload(self):
-        self.bot.loop.create_task(self.tautulli.close())
+        # Stop the background presence loop. The shared Tautulli client is owned by
+        # the bot (PlexBot.close()) and must not be closed here.
+        if self._status_task is not None:
+            self._status_task.cancel()
 
     async def status_task(self):
         """Background task to update the bot's presence."""
@@ -65,31 +99,6 @@ class ServerCommands(commands.Cog):
                 logger.error(f"Error in status_task(): {e}")
 
             await asyncio.sleep(15)  # Control how often to update the status
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        try:
-            r = await self.tautulli.get_home_stats()
-            status = r.get("response", {}).get("result") if r else None
-
-            local_commit = get_git_revision_short_hash()
-            latest_commit = get_git_revision_short_hash_latest()
-            up_to_date = ""
-            if local_commit and latest_commit:
-                up_to_date = (
-                    "Version outdated. Consider running git pull" if local_commit != latest_commit else ""
-                )
-
-            if status == "success":
-                logger.info(f"Logged in as {self.bot.user}")
-                logger.info("Connection to Tautulli successful")
-                logger.info(
-                    f"Current PlexBot version ID: {local_commit if local_commit else 'unknown'}; latest: {latest_commit if latest_commit else 'unknown'}; {up_to_date}"
-                )
-            else:
-                logger.critical(f"Connection to Tautulli failed, result {status}")
-        except Exception as e:
-            logger.error(f"Error during bot initialization: {e}")
 
     @commands.command()
     async def status(self, ctx):

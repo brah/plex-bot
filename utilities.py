@@ -1,6 +1,5 @@
 # utilities.py
 
-import asyncio
 import json
 import logging
 import subprocess
@@ -9,7 +8,6 @@ from io import BytesIO
 from typing import List, Dict, Any, Optional, Tuple
 
 import aiohttp
-import nextcord
 from nextcord.ext import menus
 from nextcord import File
 
@@ -17,44 +15,8 @@ logger = logging.getLogger("plexbot.utilities")
 logger.setLevel(logging.INFO)
 
 
-class Config:
-    _config_data = None
-
-    @classmethod
-    def load_config(cls, filename: str = "config.json") -> Dict[str, Any]:
-        """Load the configuration data from a JSON file."""
-        if cls._config_data is None:
-            try:
-                with open(filename, "r", encoding="utf-8") as f:
-                    cls._config_data = json.load(f)
-                logger.info("Configuration loaded successfully.")
-            except Exception as e:
-                logger.exception(f"Failed to load configuration: {e}")
-                cls._config_data = {}
-        return cls._config_data
-
-    @classmethod
-    def get(cls, key: str, default: Any = None) -> Any:
-        """Get a configuration value."""
-        config = cls.load_config()
-        return config.get(key, default)
-
-    @classmethod
-    def save_config(cls, data: Dict[str, Any], filename: str = "config.json") -> None:
-        """Save the configuration data to a JSON file."""
-        try:
-            with open(filename, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            cls._config_data = data
-            logger.info("Configuration saved successfully.")
-        except Exception as e:
-            logger.exception(f"Failed to save configuration: {e}")
-
-    @classmethod
-    def reload_config(cls, filename: str = "config.json") -> Dict[str, Any]:
-        """Reload the configuration data from the JSON file."""
-        cls._config_data = None
-        return cls.load_config(filename)
+# Bot configuration lives in the `config` package (config/__init__.py).
+# The old utilities.Config JSON reader was removed as dead code.
 
 
 class UserMappings:
@@ -227,32 +189,3 @@ class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
         self.add_item(menus.MenuPaginationButton(emoji=self.NEXT_PAGE))
         # Disable buttons that are unavailable to be pressed at the start
         self._disable_unavailable_buttons()
-
-
-class MyEmbedDescriptionPageSource(menus.ListPageSource):
-    def __init__(self, data, tautulli_ip):
-        super().__init__(data, per_page=2)
-        self.tautulli_ip = tautulli_ip
-
-    async def format_page(self, menu, entries):
-        from config import config
-        embed = nextcord.Embed(title="Recently Added", color=config.get("ui", "plex_embed_color", 0xE5A00D))
-        embed.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
-
-        file = None
-        attachment_url = None
-
-        for entry in entries:
-            embed.add_field(name="\u200b", value=entry["description"], inline=False)
-            thumb_key = entry.get("thumb_key", "")
-
-            if thumb_key and not attachment_url:
-                file, attachment_url = await prepare_thumbnail_for_embed(
-                    self.tautulli_ip, thumb_key, 200, 400
-                )
-
-        if attachment_url:
-            embed.set_image(url=attachment_url)
-            return {"embed": embed, "file": file}
-
-        return embed

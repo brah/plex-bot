@@ -1,21 +1,18 @@
 # cogs/visualizations.py
 
 import logging
-import asyncio
 from io import BytesIO
-from typing import Optional, Dict, List, Any, Union
+from typing import Optional
 
 import nextcord
 from nextcord.ext import commands
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import pytz
 
 from config import config
 from media_cache import MediaCache
 from tautulli_wrapper import Tautulli
-from utilities import UserMappings
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.visualizations")
