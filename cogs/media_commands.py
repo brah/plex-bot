@@ -14,6 +14,7 @@ from utilities import (
     UserMappings,
     NoStopButtonMenuPages,
     prepare_thumbnail_for_embed,
+    format_duration,
 )
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
@@ -34,15 +35,6 @@ def _format_ms(ms: int) -> str:
     if hours:
         return f"{hours}:{minutes:02d}:{seconds:02d}"
     return f"{minutes}:{seconds:02d}"
-
-
-def _format_seconds(seconds: int) -> str:
-    """Format seconds into a human-readable duration like '2h 15m' or '45m'."""
-    hours, remainder = divmod(int(seconds), 3600)
-    minutes = remainder // 60
-    if hours > 0:
-        return f"{hours}h {minutes}m" if minutes else f"{hours}h"
-    return f"{minutes}m"
 
 
 def _format_bytes_speed(bps: int) -> str:
@@ -783,7 +775,7 @@ class MediaCommands(commands.Cog):
             stats_item = watch_time_stats[0]
             total_time = stats_item.get("total_time", 0)
             if total_time > 0:
-                embed.add_field(name="Total Watch Time", value=_format_seconds(total_time), inline=True)
+                embed.add_field(name="Total Watch Time", value=format_duration(total_time), inline=True)
             last_watch = stats_item.get("last_watch")
             if last_watch:
                 try:

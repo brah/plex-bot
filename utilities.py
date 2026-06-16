@@ -62,27 +62,25 @@ class UserMappings:
         return next((m for m in mappings if m.get("plex_username") == plex_username), None)
 
 
-def days_hours_minutes(seconds: int) -> str:
-    """Converts seconds to days, hours, minutes."""
-    if not isinstance(seconds, int):
-        raise TypeError("Seconds must be an integer.")
+def format_duration(seconds: int) -> str:
+    """Format a number of seconds into a compact duration like '2d 5h 30m'.
 
-    if seconds < 0:
-        raise ValueError("Seconds must be non-negative.")
-
-    days, seconds = divmod(seconds, 86400)
-    hours, seconds = divmod(seconds, 3600)
-    minutes, _ = divmod(seconds, 60)
+    Days/hours are omitted when zero; minutes are always shown when nothing else
+    is (so a sub-minute value renders as '0m'). This is the canonical duration
+    formatter used across the bot.
+    """
+    days, remainder = divmod(int(seconds), 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
 
     parts = []
-    if days > 0:
-        parts.append(f"{days} {'day' if days == 1 else 'days'}")
-    if hours > 0:
-        parts.append(f"{hours} {'hour' if hours == 1 else 'hours'}")
-    if minutes > 0:
-        parts.append(f"{minutes} {'minute' if minutes == 1 else 'minutes'}")
-
-    return ", ".join(parts) if parts else "0 minutes"
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes or not parts:
+        parts.append(f"{minutes}m")
+    return " ".join(parts)
 
 
 def get_git_revision_short_hash() -> str:
