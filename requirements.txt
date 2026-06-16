@@ -1,11 +1,24 @@
-nextcord==3.0.1
+# Direct dependencies only (transitive deps like numpy, requests are pulled in
+# automatically). Requires Python 3.12+ (nextcord 3.2.0 floor).
+
+# Discord
+nextcord==3.2.0
 nextcord-ext-menus==1.5.7
-qbittorrent-api==2025.2.0
-requests==2.32.3
-aiofiles==24.1.0
-pandas==2.2.3
-numpy==2.1.2
+
+# HTTP / async I/O
+aiohttp==3.14.1
+aiofiles==25.1.0
+
+# External service clients
+qbittorrent-api==2026.6.0
+
+# Data & visualization
+pandas==3.0.3
+matplotlib==3.11.0
 seaborn==0.13.2
-pytz==2025.1
-tzlocal==5.3.1
-datetime==5.5
+
+# Timezones: zone lookups use stdlib zoneinfo, which needs an IANA database —
+# tzdata supplies it on platforms without a system copy (Windows, slim containers);
+# tzlocal detects the local zone.
+tzdata==2026.2
+tzlocal==5.4

@@ -16,7 +16,7 @@ A Discord bot that interfaces with your Plex server through Tautulli's API, offe
 
 ### Requirements
 
-- **Python 3.8+**
+- **Python 3.12+** (required by nextcord 3.2.0)
 - A working **Tautulli** setup ([Tautulli GitHub](https://github.com/Tautulli/Tautulli))
 - **Discord Bot Token** ([Discord Developer Portal](https://discord.com/developers/applications))
 - Optional: **qBittorrent** for download tracking
