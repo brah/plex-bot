@@ -1,10 +1,8 @@
 # errors/__init__.py
 
 import logging
-import traceback
-import sys
 from enum import Enum
-from typing import Dict, Optional, Any, Union, Callable, TypeVar, Awaitable
+from typing import Dict, Optional
 
 import nextcord
 from nextcord.ext import commands

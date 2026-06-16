@@ -2,9 +2,8 @@
 
 import json
 import logging
-import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List, TypeVar, Generic
+from typing import Any, Dict, Optional, List, TypeVar, Generic
 
 # Configure logging
 logger = logging.getLogger("plexbot.config")
