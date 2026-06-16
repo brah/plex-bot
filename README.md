@@ -48,8 +48,14 @@ A Discord bot that interfaces with your Plex server through Tautulli's API, offe
    ```
    
    **Option 2: Create a new configuration**
-   
-   Create a `config.json` file in the root directory based on this structure:
+
+   Copy the bundled template and fill in your values:
+
+   ```bash
+   cp config.example.json config.json
+   ```
+
+   The template mirrors this structure (everything not listed falls back to sensible defaults):
 
    ```json
    {
