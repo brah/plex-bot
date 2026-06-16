@@ -133,11 +133,11 @@ class PlexBot(commands.Bot):
     async def close(self) -> None:
         """Shut down the gateway first, then close shared aiohttp sessions.
 
-        super().close() stops the gateway and lets background loops (e.g.
-        ServerCommands.status_task, gated on is_closed()) observe shutdown, so we
-        don't tear the shared Tautulli/TMDB sessions down while a task is still
-        mid-request — which would otherwise error or silently re-open a new,
-        never-closed session via Tautulli._ensure_session().
+        super().close() unloads the cogs (cancelling background loops like
+        ServerCommands.status_task via cog_unload) and stops the gateway before we
+        close the shared Tautulli/TMDB sessions here, so we don't tear those sessions
+        down while a task is still mid-request — which would otherwise error or
+        silently re-open a new, never-closed session via Tautulli._ensure_session().
         """
         await super().close()
 
