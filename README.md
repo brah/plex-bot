@@ -48,7 +48,7 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
    If you have a previous version of PlexBot with `config.json` and `bot_config.py` files, use the migration script:
    
    ```bash
-   python migration.py
+   python migrate_config.py
    ```
    
    **Option 2: Create a new configuration**
@@ -126,7 +126,7 @@ If you're upgrading from an older version of PlexBot, follow these steps:
 
 2. **Run the migration script**:
    ```bash
-   python migration.py
+   python migrate_config.py
    ```
 
 3. **Review the new configuration**:
@@ -322,7 +322,7 @@ Adjust default command behaviors:
 
 2. Run the migration script to update your configuration:
    ```bash
-   python migration.py
+   python migrate_config.py
    ```
 
 3. Install any new dependencies:

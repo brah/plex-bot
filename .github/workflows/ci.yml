@@ -25,7 +25,7 @@ jobs:
       - name: Compile all sources (syntax smoke test)
         run: >-
           python -m compileall -q
-          plexbot.py media_cache.py tautulli_wrapper.py utilities.py migration.py
+          plexbot.py media_cache.py tautulli_wrapper.py utilities.py migrate_config.py
           config errors cogs
 
   test:
