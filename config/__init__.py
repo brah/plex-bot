@@ -262,7 +262,7 @@ def setup_default_config():
 
     # Command settings
     commands = config.add_section("commands", "Command-specific settings")
-    commands.add("recommendation_timeout", 180, "Timeout in seconds for recommendation reactions")
+    commands.add("recommendation_timeout", 180, "Timeout in seconds for recommendation buttons")
 
     # API settings
     api = config.add_section("api", "API request settings")

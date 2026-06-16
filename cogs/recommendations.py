@@ -1,6 +1,5 @@
 import logging
 import random
-import asyncio
 from collections import Counter
 
 import nextcord
@@ -17,19 +16,156 @@ logger = logging.getLogger("plexbot.recommendations")
 logger.setLevel(logging.INFO)
 
 
+class RecommendationView(nextcord.ui.View):
+    """Interactive recommendation browser: numbered buttons drill into each pick."""
+
+    def __init__(self, ctx, member, recommendations: list, user_counts: list, plex_username: str, cog, timeout: float = 180):
+        super().__init__(timeout=timeout)
+        self.ctx = ctx
+        self.member = member
+        self.recommendations = recommendations
+        self.user_counts = user_counts
+        self.plex_username = plex_username
+        self.cog = cog
+        self.message = None
+
+        # One numbered button per recommendation, plus a Back button for the detail view.
+        for i in range(len(recommendations)):
+            button = nextcord.ui.Button(label=str(i + 1), style=nextcord.ButtonStyle.primary)
+            button.callback = self._make_detail_callback(i)
+            self.add_item(button)
+        self.back_button = nextcord.ui.Button(label="Back to list", style=nextcord.ButtonStyle.secondary, disabled=True)
+        self.back_button.callback = self._on_back
+        self.add_item(self.back_button)
+
+    def _make_detail_callback(self, index: int):
+        async def _callback(interaction: nextcord.Interaction):
+            await self._show_detail(interaction, index)
+        return _callback
+
+    async def _build_overview(self) -> tuple:
+        """Build the recommendations list embed and an optional thumbnail file."""
+        embed = nextcord.Embed(
+            title=f"Recommendations for {self.member.display_name}",
+            description="Use the buttons below to see more details.",
+            color=self.cog.plex_embed_color,
+        )
+        for idx, (item, user_count) in enumerate(zip(self.recommendations, self.user_counts), start=1):
+            title = item.get("title") or "Unknown Title"
+            overview = item.get("summary") or "No description available."
+            if len(overview) > 150:
+                overview = overview[:147] + "..."
+            year = item.get("year", "Unknown")
+            media_type = item.get("media_type", "movie").capitalize()
+            genres = ", ".join(genre.title() for genre in item.get("genres", []))
+            embed.add_field(
+                name=f"{idx}. {title} ({media_type}, {year})",
+                value=(
+                    f"**Summary**: {overview}\n"
+                    f"**Genres**: {genres}\n"
+                    f"**Watched by**: {user_count} user{'s' if user_count != 1 else ''}\n"
+                ),
+                inline=False,
+            )
+
+        # Thumbnail: first recommendation with a poster, else the bot's avatar.
+        file = None
+        for item in self.recommendations:
+            thumb = item.get("thumb")
+            if thumb and thumb.strip():
+                file, url = await prepare_thumbnail_for_embed(
+                    self.cog.tautulli.tautulli_ip, thumb, use_https=self.cog.tautulli.use_https, api_key=self.cog.tautulli.api_key
+                )
+                if file and url:
+                    embed.set_thumbnail(url=url)
+                    break
+                file = None
+        if file is None and self.cog.bot.user and self.cog.bot.user.display_avatar:
+            embed.set_thumbnail(url=self.cog.bot.user.display_avatar.url)
+        return embed, file
+
+    async def _build_detail(self, index: int) -> tuple:
+        """Build the detail embed and optional poster file for one recommendation."""
+        item = self.recommendations[index]
+        title = item.get("title") or "Unknown Title"
+        year = item.get("year", "Unknown")
+        media_type = item.get("media_type", "movie").capitalize()
+        embed = nextcord.Embed(title=f"{title} ({media_type}, {year})", color=self.cog.plex_embed_color)
+
+        overview = item.get("summary") or "No description available."
+        rating = item.get("rating") or "N/A"
+        genres = ", ".join(genre.title() for genre in item.get("genres", []))
+        watched_users = await self.cog.get_watched_users(item.get("rating_key"), exclude_user=self.plex_username)
+
+        field_value = f"**Summary**: {overview}\n**Genres**: {genres}\n**Rating**: {rating}\n"
+        field_value += f"**Watched by**: {', '.join(watched_users)}\n" if watched_users else "**Watched by**: No one yet!\n"
+        embed.description = field_value
+        embed.set_footer(text=f"Recommendation {index + 1} of {len(self.recommendations)}")
+
+        file = None
+        thumb = item.get("thumb")
+        if thumb and thumb.strip():
+            file, url = await prepare_thumbnail_for_embed(
+                self.cog.tautulli.tautulli_ip, thumb, use_https=self.cog.tautulli.use_https, api_key=self.cog.tautulli.api_key
+            )
+            if file and url:
+                embed.set_image(url=url)
+        return embed, file
+
+    async def _edit(self, interaction: nextcord.Interaction, embed: nextcord.Embed, file):
+        # attachments=[] clears the previous poster; pass the new file if any.
+        kwargs = {"embed": embed, "view": self, "attachments": []}
+        if file:
+            kwargs["file"] = file
+        try:
+            await interaction.edit_original_message(**kwargs)
+        except nextcord.HTTPException as e:
+            logger.warning(f"Failed to update recommendation view: {e}")
+            if file:
+                file.close()
+
+    async def send_initial(self):
+        embed, file = await self._build_overview()
+        if file:
+            self.message = await self.ctx.send(embed=embed, view=self, file=file)
+        else:
+            self.message = await self.ctx.send(embed=embed, view=self)
+
+    async def _show_detail(self, interaction: nextcord.Interaction, index: int):
+        # Ack first so the watcher/poster fetch can't blow the 3s interaction window.
+        await interaction.response.defer()
+        self.back_button.disabled = False
+        embed, file = await self._build_detail(index)
+        await self._edit(interaction, embed, file)
+
+    async def _on_back(self, interaction: nextcord.Interaction):
+        await interaction.response.defer()
+        self.back_button.disabled = True
+        embed, file = await self._build_overview()
+        await self._edit(interaction, embed, file)
+
+    async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message("Only the command author can use these buttons.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except nextcord.NotFound:
+                pass
+
+
 class Recommendations(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
         self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
-
-        # Mapping from number emoji to integer
-        self.number_emojis = {
-            "1️⃣": 0,
-            "2️⃣": 1,
-            "3️⃣": 2,
-        }
 
     @commands.command()
     async def recommend(self, ctx, member: nextcord.Member = None):
@@ -124,100 +260,13 @@ class Recommendations(commands.Cog):
                 watched_users = await self.get_watched_users(rating_key, return_count=True)
                 user_counts.append(watched_users)
 
-            # Create and send an embed with recommendations
-            embed = nextcord.Embed(
-                title=f"Recommendations for {member.display_name}",
-                description="React with a number to see more details.",
-                color=self.plex_embed_color,
-            )
-
-            # Try to set thumbnail from the first recommendation
-            thumbnail_set = False
-            for rec_item in selected_recommendations:
-                thumb = rec_item.get("thumb")
-                if thumb and thumb.strip():
-                    file, attachment_url = await prepare_thumbnail_for_embed(
-                        self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key
-                    )
-                    if file and attachment_url:
-                        embed.set_thumbnail(url=attachment_url)
-                        thumbnail_set = True
-                        break
-
-            if not thumbnail_set and self.bot.user and self.bot.user.display_avatar:
-                embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-
-            for idx, (item, user_count) in enumerate(zip(selected_recommendations, user_counts), start=1):
-                title = item.get("title") or "Unknown Title"
-                overview = item.get("summary", "No description available.")
-                if len(overview) > 150:
-                    overview = overview[:147] + "..."
-                year = item.get("year", "Unknown")
-                media_type = item.get("media_type", "movie").capitalize()
-                genres = ", ".join([genre.title() for genre in item.get("genres", [])])
-
-                field_value = (
-                    f"**Summary**: {overview}\n"
-                    f"**Genres**: {genres}\n"
-                    f"**Watched by**: {user_count} user{'s' if user_count != 1 else ''}\n"
-                )
-
-                embed.add_field(
-                    name=f"{idx}. {title} ({media_type}, {year})",
-                    value=field_value,
-                    inline=False,
-                )
-
-            # Replace the processing message with the recommendations
+            # Replace the processing message with an interactive recommendations browser.
             await processing_msg.delete()
-
-            # Send the embed with or without the thumbnail file
-            if thumbnail_set:
-                message = await ctx.send(embed=embed, file=file)
-            else:
-                message = await ctx.send(embed=embed)
-
-            # Add number reactions with a delay between each to avoid rate limiting
-            for emoji in list(self.number_emojis.keys())[: len(selected_recommendations)]:
-                try:
-                    await message.add_reaction(emoji)
-                    await asyncio.sleep(1.0)
-                except Exception as e:
-                    logger.error(f"Failed to add reaction {emoji}: {e}")
-
-            interaction_timeout = config.get("commands", "recommendation_timeout", 180)
-            detailed_message = None
-
-            # Set up the event handlers for reactions
-            def check_reaction(reaction, user):
-                return (
-                    reaction.message.id == message.id
-                    and user == ctx.author
-                    and str(reaction.emoji) in self.number_emojis
-                )
-
-            end_time = asyncio.get_event_loop().time() + interaction_timeout
-            while asyncio.get_event_loop().time() < end_time:
-                try:
-                    reaction_event = await self.bot.wait_for(
-                        "reaction_add", timeout=30.0, check=check_reaction
-                    )
-
-                    reaction, _ = reaction_event
-                    emoji = str(reaction.emoji)
-                    selected_index = self.number_emojis[emoji]
-                    selected_item = selected_recommendations[selected_index]
-
-                    # Show detailed info
-                    detailed_message = await self.show_detailed_info(
-                        ctx, selected_item, plex_username, detailed_message
-                    )
-
-                except asyncio.TimeoutError:
-                    if asyncio.get_event_loop().time() >= end_time:
-                        break
-                except Exception as e:
-                    logger.error(f"Error handling reaction: {e}")
+            timeout = config.get("commands", "recommendation_timeout", 180)
+            view = RecommendationView(
+                ctx, member, selected_recommendations, user_counts, plex_username, self, timeout=timeout
+            )
+            await view.send_initial()
 
         except Exception as e:
             logger.error(f"Error in recommend command: {e}", exc_info=True)
@@ -240,71 +289,6 @@ class Recommendations(commands.Cog):
             genres=top_genres_lower, exclude_rating_keys=watched_rating_keys, limit=50, random_sort=True
         )
         return recommendations
-
-    async def show_detailed_info(self, ctx, item, plex_username, detailed_message=None):
-        """Shows detailed information for the selected media item."""
-        try:
-            title = item.get("title") or "Unknown Title"
-            year = item.get("year", "Unknown")
-            media_type = item.get("media_type", "movie").capitalize()
-
-            embed = nextcord.Embed(
-                title=f"{title} ({media_type}, {year})",
-                color=self.plex_embed_color,
-            )
-
-            overview = item.get("summary", "No description available.")
-            rating = item.get("rating") or "N/A"
-            genres = ", ".join([genre.title() for genre in item.get("genres", [])])
-
-            rating_key = item.get("rating_key")
-            watched_users = await self.get_watched_users(rating_key, exclude_user=plex_username)
-
-            field_value = f"**Summary**: {overview}\n**Genres**: {genres}\n**Rating**: {rating}\n"
-            if watched_users:
-                field_value += f"**Watched by**: {', '.join(watched_users)}\n"
-            else:
-                field_value += "**Watched by**: No one yet!\n"
-
-            embed.description = field_value
-
-            thumb = item.get("thumb")
-            file = None
-
-            if thumb and thumb.strip():
-                logger.info(f"Processing thumbnail for {title}: {thumb}")
-                file, attachment_url = await prepare_thumbnail_for_embed(self.tautulli.tautulli_ip, thumb, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key)
-
-                if file and attachment_url:
-                    embed.set_image(url=attachment_url)
-                else:
-                    logger.warning(f"Failed to retrieve thumbnail image for {title}")
-                    embed.add_field(
-                        name="Image",
-                        value="Failed to retrieve image.",
-                        inline=False,
-                    )
-            else:
-                logger.warning(f"No thumbnail available for {title}")
-                embed.add_field(name="Image", value="No poster available.", inline=False)
-
-            if detailed_message:
-                try:
-                    await detailed_message.delete()
-                except Exception as e:
-                    logger.error(f"Failed to delete previous detailed message: {e}")
-
-            if file:
-                detailed_message = await ctx.send(embed=embed, file=file)
-            else:
-                detailed_message = await ctx.send(embed=embed)
-
-            return detailed_message
-
-        except Exception as e:
-            logger.error(f"Error in show_detailed_info: {e}", exc_info=True)
-            await ctx.send(f"An error occurred while showing detailed information: {type(e).__name__}")
-            return detailed_message
 
     async def get_watched_users(self, rating_key, exclude_user=None, return_count=False):
         """Retrieve a list of Discord usernames who have watched the media item."""
