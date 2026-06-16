@@ -1,0 +1,32 @@
+services:
+  plexbot:
+    build: .
+    container_name: plexbot
+    restart: unless-stopped
+    environment:
+      # Container timezone (the bot also reads Tautulli's own TZ for display).
+      TZ: ${TZ:-UTC}
+    volumes:
+      # config.json is read at startup AND rewritten when a user persists a
+      # command default (e.g. `plex stats <days>`), so it is mounted read-write.
+      - ./config.json:/app/config.json
+      - ./map.json:/app/map.json
+      # Media cache in a named volume: auto-created, app-owned, survives rebuilds.
+      - plexbot-cache:/app/cache
+
+    # The image runs as UID:GID 1000:1000. If your host user differs, set this to
+    # your `id -u`:`id -g` so the bot can read/write config.json and map.json
+    # (alternatively: `chown 1000:1000 config.json map.json`).
+    # user: "1000:1000"
+
+    # Reaching Tautulli / qBittorrent (set the addresses in config.json):
+    #  - Both in this Docker network: use the service name, e.g. "tautulli:8181".
+    #  - Tautulli native on the host: set tautulli.ip to the host's LAN IP, OR
+    #    uncomment the mapping below and use "host.docker.internal:8181".
+    #    ("localhost" inside the container is the container itself — it will NOT
+    #     reach a service running on the host.)
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+volumes:
+  plexbot-cache:

@@ -1,0 +1,33 @@
+# systemd unit for PlexBot.
+#
+# Install:
+#   sudo cp deploy/plexbot.service /etc/systemd/system/plexbot.service
+#   # then edit User= and the two paths below to match your install
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now plexbot
+#
+# Logs:    journalctl -u plexbot -f
+# Restart: sudo systemctl restart plexbot
+
+[Unit]
+Description=PlexBot Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=plexbot
+WorkingDirectory=/opt/plex-bot
+# Use the project's virtualenv interpreter, NOT the system python3 — the pinned
+# dependencies require Python 3.12+ and are installed into this venv.
+ExecStart=/opt/plex-bot/venv/bin/python /opt/plex-bot/plexbot.py
+Restart=on-failure
+RestartSec=5
+
+# Light hardening (safe: the bot only writes inside WorkingDirectory).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

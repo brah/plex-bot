@@ -138,67 +138,76 @@ If you're upgrading from an older version of PlexBot, follow these steps:
    - `--output FILE`: Specify output location
    - `--backup-dir DIR`: Specify backup directory
 
-### Running as a Service
+### Deployment
 
-For 24/7 operation, consider one of these methods:
+For 24/7 operation, pick one of the two supported options below. The bot is a
+single long-running process with **no inbound ports**, and a Discord token allows
+**one connection** — run exactly one instance. Because it talks to Tautulli (and
+optionally qBittorrent) over your local network, it normally runs on the same
+host/network as Tautulli.
 
-#### Option 1: systemd (Linux)
+#### Option A — Docker
 
-Create a file at `/etc/systemd/system/plexbot.service`:
+Best if you already run a Dockerized media stack. Requires Docker with the
+Compose plugin. A `Dockerfile` and `docker-compose.yml` are included.
 
-```ini
-[Unit]
-Description=Plex Discord Bot Service
-After=network.target
+1. Create your config and an empty mappings file in the repo directory:
 
-[Service]
-User=<your-username>
-WorkingDirectory=/path/to/plex-bot
-ExecStart=/usr/bin/python3 /path/to/plex-bot/plexbot.py
-Restart=always
+   ```bash
+   cp config.example.json config.json   # then edit it
+   echo "[]" > map.json
+   ```
 
-[Install]
-WantedBy=multi-user.target
-```
+2. Make Tautulli reachable from the container — set `tautulli.ip` in `config.json`
+   accordingly (see the networking notes in `docker-compose.yml`). **Do not use
+   `localhost`**; inside a container that points at the container itself. Use your
+   host's LAN IP, a `host.docker.internal:8181` mapping, or the Tautulli service
+   name if it shares this Docker network.
 
-Then enable and start the service:
+3. Build and start:
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl start plexbot
-sudo systemctl enable plexbot  # to start on boot
-```
+   ```bash
+   docker compose up -d --build
+   ```
 
-#### Option 2: Screen or tmux
+4. Manage it:
 
-For temporary background operation:
+   ```bash
+   docker compose logs -f                 # follow logs
+   git pull && docker compose up -d --build   # update
+   ```
 
-**Screen:**
-```bash
-screen -S plexbot
-python plexbot.py
-# Press Ctrl+A, then D to detach
-# Resume with: screen -r plexbot
-```
+`config.json` and `map.json` stay on the host (mounted in); the media cache lives
+in a named Docker volume. The container runs as UID:GID `1000:1000` — if your host
+user differs, set `user:` in `docker-compose.yml` (or `chown 1000:1000 config.json
+map.json`) so it can read/write them.
 
-**Tmux:**
-```bash
-tmux new -s plexbot
-python plexbot.py
-# Press Ctrl+B, then D to detach
-# Resume with: tmux attach -t plexbot
-```
+#### Option B — systemd
 
-#### Option 3: PM2
+Best for a bare-metal or VM host. A ready-to-edit unit lives at
+[`deploy/plexbot.service`](deploy/plexbot.service).
 
-If you're familiar with Node.js ecosystem:
+1. Install the bot (e.g. into `/opt/plex-bot`) with a virtualenv and deps, and
+   create `config.json` (see [Installation](#installation)). Using a venv is
+   important — the unit runs the bot via `venv/bin/python`, not the system
+   `python3`, which won't have the pinned Python 3.12+ dependencies.
 
-```bash
-npm install -g pm2
-pm2 start plexbot.py --name plexbot --interpreter=python3
-pm2 startup
-pm2 save
-```
+2. Install and enable the service (edit `User=` and the paths inside the unit
+   first):
+
+   ```bash
+   sudo cp deploy/plexbot.service /etc/systemd/system/plexbot.service
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now plexbot
+   ```
+
+3. Logs: `journalctl -u plexbot -f`
+
+#### Temporary (screen / tmux)
+
+For quick testing only — these do **not** restart on reboot. Run `python
+plexbot.py` inside a `screen -S plexbot` or `tmux new -s plexbot` session and
+detach (`Ctrl+A D` / `Ctrl+B D`).
 
 ## Commands
 

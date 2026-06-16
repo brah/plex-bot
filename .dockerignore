@@ -1,0 +1,30 @@
+# Local state / secrets — must never be baked into the image (supplied via volumes)
+config.json
+map.json
+cache/
+*.log
+
+# Virtualenv & VCS
+venv/
+.venv/
+.git/
+.gitignore
+
+# Python / tooling caches
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Not needed at runtime
+tests/
+.github/
+deploy/
+Dockerfile
+.dockerignore
+docker-compose.yml
+*.md
+config.example.json
+repomix-output.*
+.idea/
+.vscode/
