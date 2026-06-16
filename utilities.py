@@ -8,7 +8,6 @@ from io import BytesIO
 from typing import List, Dict, Any, Optional, Tuple
 
 import aiohttp
-from nextcord.ext import menus
 from nextcord import File
 
 logger = logging.getLogger("plexbot.utilities")
@@ -177,13 +176,3 @@ async def prepare_thumbnail_for_embed(
         attachment_url = "attachment://image.jpg"
         return file, attachment_url
     return None, None
-
-
-class NoStopButtonMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
-    def __init__(self, source, timeout=60) -> None:
-        super().__init__(source, timeout=timeout)
-        # Add the buttons we want
-        self.add_item(menus.MenuPaginationButton(emoji=self.PREVIOUS_PAGE))
-        self.add_item(menus.MenuPaginationButton(emoji=self.NEXT_PAGE))
-        # Disable buttons that are unavailable to be pressed at the start
-        self._disable_unavailable_buttons()

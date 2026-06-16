@@ -7,12 +7,11 @@ import random
 from config import config
 
 import nextcord
-from nextcord.ext import commands, menus
+from nextcord.ext import commands
 import qbittorrentapi
 
 from utilities import (
     UserMappings,
-    NoStopButtonMenuPages,
     prepare_thumbnail_for_embed,
     format_duration,
 )
@@ -85,19 +84,22 @@ def _format_torrent_field(dl) -> str:
     return f"`{bar}` {pct:.1f}%\n{speed_str}  \u2022  {size_str}  \u2022  ETA {eta_str}{seed_str}"
 
 
-class RecentlyAddedPageSource(menus.ListPageSource):
-    """One item per page with a rich embed and poster thumbnail."""
+class RecentlyAddedView(nextcord.ui.View):
+    """Paginated view of recently added media \u2014 one item per page with Prev/Next buttons."""
 
-    def __init__(self, data, tautulli_ip, embed_color, use_https=False, api_key=""):
-        super().__init__(data, per_page=1)
+    def __init__(self, ctx, items: list, tautulli_ip: str, embed_color: int, use_https: bool = False, api_key: str = "", timeout: float = 120):
+        super().__init__(timeout=timeout)
+        self.ctx = ctx
+        self.items = items
         self.tautulli_ip = tautulli_ip
         self.embed_color = embed_color
         self.use_https = use_https
         self.api_key = api_key
+        self.message = None
+        self.index = 0
+        self._update_buttons(self.index)
 
-    async def format_page(self, menu, page):
-        item = page[0] if isinstance(page, list) else page
-
+    def _build_embed(self, index: int, item: dict) -> nextcord.Embed:
         embed = nextcord.Embed(
             title=item["display_title"],
             description=item["summary"] or None,
@@ -121,18 +123,79 @@ class RecentlyAddedPageSource(menus.ListPageSource):
         if item["added_at"]:
             embed.add_field(name="Added", value=f"<t:{item['added_at']}:R>", inline=True)
 
-        page_num = getattr(menu, "current_page", 0)
-        embed.set_footer(text=f"Item {page_num + 1} of {self.get_max_pages()}")
+        embed.set_footer(text=f"Item {index + 1} of {len(self.items)}")
+        return embed
 
-        # Poster thumbnail
+    async def _render(self, index: int) -> tuple:
+        """Build the embed and optional poster file for the item at ``index``."""
+        item = self.items[index]
+        embed = self._build_embed(index, item)
         thumb = item.get("thumb", "")
         if thumb:
             file, url = await prepare_thumbnail_for_embed(self.tautulli_ip, thumb, use_https=self.use_https, api_key=self.api_key)
             if file and url:
                 embed.set_thumbnail(url=url)
-                return {"embed": embed, "file": file}
+                return embed, file
+        return embed, None
 
-        return embed
+    def _update_buttons(self, index: int):
+        """Disable Prev/Next at the ends of the list."""
+        # nextcord rebinds these names to Button instances in View.__init__.
+        self.previous_item.disabled = index == 0  # type: ignore[attr-defined]
+        self.next_item.disabled = index >= len(self.items) - 1  # type: ignore[attr-defined]
+
+    async def send_initial(self):
+        embed, file = await self._render(self.index)
+        if file:
+            self.message = await self.ctx.send(embed=embed, view=self, file=file)
+        else:
+            self.message = await self.ctx.send(embed=embed, view=self)
+
+    async def _show(self, interaction: nextcord.Interaction):
+        # Ack first so a slow poster fetch can't blow the 3s interaction window; for a
+        # component interaction this defers the update with no visible change.
+        await interaction.response.defer()
+        # Snapshot the index so a rapid second click can't tear the embed across items.
+        index = self.index
+        self._update_buttons(index)
+        embed, file = await self._render(index)
+        # attachments=[] clears the previous item's poster; pass the new file if any.
+        kwargs = {"embed": embed, "view": self, "attachments": []}
+        if file:
+            kwargs["file"] = file
+        try:
+            await interaction.edit_original_message(**kwargs)
+        except nextcord.HTTPException as e:
+            logger.warning(f"Failed to update recent-additions page: {e}")
+            if file:
+                file.close()
+
+    @nextcord.ui.button(emoji="\u25c0", style=nextcord.ButtonStyle.secondary)
+    async def previous_item(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if self.index > 0:
+            self.index -= 1
+        await self._show(interaction)
+
+    @nextcord.ui.button(emoji="\u25b6", style=nextcord.ButtonStyle.secondary)
+    async def next_item(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if self.index < len(self.items) - 1:
+            self.index += 1
+        await self._show(interaction)
+
+    async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message("Only the command author can use these buttons.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except nextcord.NotFound:
+                pass
 
 
 class RandomMediaView(nextcord.ui.View):
@@ -297,10 +360,8 @@ class MediaCommands(commands.Cog):
                 await ctx.send("No recently added items found.")
                 return
 
-            pages = NoStopButtonMenuPages(
-                source=RecentlyAddedPageSource(items, self.tautulli.tautulli_ip, self.plex_embed_color, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key),
-            )
-            await pages.start(ctx)
+            view = RecentlyAddedView(ctx, items, self.tautulli.tautulli_ip, self.plex_embed_color, use_https=self.tautulli.use_https, api_key=self.tautulli.api_key)
+            await view.send_initial()
         except Exception as e:
             logger.error(f"Failed to retrieve recent additions: {e}", exc_info=True)
             await ctx.send("Failed to retrieve recent additions.")
