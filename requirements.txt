@@ -20,4 +20,4 @@ seaborn==0.13.2
 # tzdata supplies it on platforms without a system copy (Windows, slim containers);
 # tzlocal detects the local zone.
 tzdata==2026.2
-tzlocal==5.4
+tzlocal==5.4.4
