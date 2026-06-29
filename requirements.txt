@@ -9,7 +9,7 @@ aiohttp==3.14.1
 aiofiles==25.1.0
 
 # External service clients
-qbittorrent-api==2026.6.0
+qbittorrent-api==2026.6.1
 
 # Data & visualization
 pandas==3.0.3
