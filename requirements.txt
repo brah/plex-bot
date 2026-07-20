@@ -13,7 +13,7 @@ qbittorrent-api==2026.6.0
 
 # Data & visualization
 pandas==3.0.3
-matplotlib==3.11.0
+matplotlib==3.11.1
 seaborn==0.13.2
 
 # Timezones: zone lookups use stdlib zoneinfo, which needs an IANA database —
