@@ -73,6 +73,10 @@ class Reply:
         visibility, so delete the placeholder first. If that delete fails, fall back to
         a compact public line: the first line of the description, with no hint, mascot
         or view, so the full reply never goes out publicly.
+
+        Hazard: replace_placeholder deletes the original response unconditionally, so it
+        assumes this send is the command's last step that can fail. A command that sent
+        real content and then raised would lose that content with the placeholder.
         """
         if not interaction.response.is_done():
             await interaction.response.send_message(ephemeral=ephemeral, **self._send_payload())
