@@ -99,6 +99,11 @@ class TestSlashEquivalent:
     def test_renamed(self):
         assert slash_equivalent("killstream", self.paths) == "/plex watchers"
 
+    def test_cache_commands_point_at_plexadmin_cache(self):
+        paths = self.paths + ["/plexadmin cache"]
+        for old in ("refresh_cache", "force_refresh_cache", "check_media_cache"):
+            assert slash_equivalent(old, paths) == "/plexadmin cache"
+
     def test_nested_group_points_at_group(self):
         assert slash_equivalent("chart", self.paths) == "/plex chart"
 

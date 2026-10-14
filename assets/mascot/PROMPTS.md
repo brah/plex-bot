@@ -113,3 +113,21 @@ then adds the pose.
 > hand. Eyes squeezed into happy upward arcs under small worried, slanted brows; an awkward wide
 > grin showing a strip of white teeth. One small light-blue sweat drop (#7CC8F4, white highlight)
 > on the opposite side of its head.
+
+## mascot-downloading
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the character, no gradients, no text. Transparent background. Centred,
+> square 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big friendly face
+> on the stripes with glossy oval black eyes, white highlight dots, coral blush cheeks and a small
+> open smile; short chunky amber arms with round cream mitten hands.
+> Pose: excitedly catching a download. Kernel stands centred with both arms raised in a cheer,
+> eyes bright and a big open smile. Directly above its popcorn, a chunky bright green (#3FDB78)
+> download arrow, with a thin light-green highlight down its shaft, points straight down into the
+> bucket. Two popcorn pieces fall in on either side, each with two short vertical motion marks
+> above it.

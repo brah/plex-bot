@@ -23,7 +23,9 @@ from utilities import fetch_plex_image
 logger = logging.getLogger("plexbot.ui.images")
 
 MASCOT_DIR = Path(__file__).resolve().parent.parent / "assets" / "mascot"
-MASCOT_SLOTS = ("mascot-wave", "mascot-sleepy", "mascot-server", "mascot-unplugged", "mascot-oops")
+MASCOT_SLOTS = (
+    "mascot-wave", "mascot-sleepy", "mascot-server", "mascot-unplugged", "mascot-oops", "mascot-downloading",
+)
 # A hung image proxy must not hold up a reply; the response goes out without the image.
 IMAGE_TIMEOUT = 8.0
 

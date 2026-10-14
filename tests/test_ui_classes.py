@@ -16,6 +16,7 @@ import pytest
 
 import cogs
 import errors
+from cogs.media_commands import MediaCommands, RecentView
 from cogs.server_commands import ServerCommands, StreamDetailsSelect, WatchersView
 from cogs.utility_commands import HelpEntry, HelpView
 from plexbot import PlexBot
@@ -41,7 +42,8 @@ def test_finds_our_ui_classes():
     names = {cls.__name__ for cls in _our_ui_classes()}
     expected = {
         "WatchersView", "StreamDetailsSelect", "StreamDetailView", "StopStreamModal", "LoggedView",
-        "HelpCategorySelect", "StatusView",
+        "HelpCategorySelect", "StatusView", "RandomView", "RecentView", "RecentDetailsSelect",
+        "DownloadsView", "CacheView",
     }
     assert expected <= names
 
@@ -72,7 +74,8 @@ def test_selects_send_a_custom_id():
         help_view = HelpView([HelpEntry("/plex status", "Server health", "watching")])
         watchers_view = WatchersView(object.__new__(ServerCommands), [])
         watchers_view.add_item(StreamDetailsSelect({"Alice - The Matrix": "abc"}))
-        return _custom_ids(help_view) + _custom_ids(watchers_view)
+        recent_view = RecentView(object.__new__(MediaCommands), [{"rating_key": "1", "title": "Heat"}])
+        return _custom_ids(help_view) + _custom_ids(watchers_view) + _custom_ids(recent_view)
 
     ids = asyncio.run(run())
     assert ids and all(ids), ids

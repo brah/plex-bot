@@ -1,8 +1,8 @@
 # ui/cards.py
 
-"""Renderers for the /plex watchers stream overview and stream detail cards."""
+"""Renderers for the /plex watchers stream cards and the media card (lookups, random, recent)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Sequence
 from urllib.parse import quote
 
@@ -11,8 +11,8 @@ from nextcord.utils import escape_markdown
 
 from ui.embeds import card, set_image, set_thumbnail
 from ui.format import format_ms, join, plural, progress_bar, timestamp, to_int, truncate
-from ui.images import Attachment
-from ui.theme import Colour, Emoji, Limits
+from ui.images import Attachment, dominant_colour
+from ui.theme import Colour, Emoji, Limits, media_colour
 
 _DECISIONS = {"direct play": "Direct Play", "copy": "Direct Stream", "transcode": "Transcode"}
 _SUBTITLE_DECISIONS = {"burn": "Burned in", "copy": "Direct Stream", "transcode": "Transcode"}
@@ -32,14 +32,29 @@ def session_title(session: dict) -> str:
         episode = to_int(session.get("media_index"), -1)
         code = f"S{season:02d}E{episode:02d}" if season >= 0 and episode >= 0 else None
         return join([session.get("grandparent_title"), code, title])
+    if media_type == "season":
+        return join([session.get("parent_title"), title])
     if media_type == "track":
         return join([session.get("grandparent_title"), title], " — ")
+    if media_type == "album":
+        return join([session.get("parent_title"), title], " — ")
     year = session.get("year")
     return f"{title} ({year})" if year else title
 
 
-_MEDIA_ICONS = {"movie": "\U0001F3AC", "episode": "\U0001F4FA", "track": "\U0001F3B5"}
+_MEDIA_ICONS = {
+    "movie": "\U0001F3AC", "show": "\U0001F4FA", "season": "\U0001F4FA", "episode": "\U0001F4FA",
+    "artist": "\U0001F3B5", "album": "\U0001F3B5", "track": "\U0001F3B5",
+}
+_MEDIA_NAMES = {
+    "movie": "Movie", "show": "TV show", "season": "Season", "episode": "Episode",
+    "artist": "Artist", "album": "Album", "track": "Track",
+}
 _FINISHED_PERCENT = 90  # below this, a play reads as "stopped at 45%"
+
+
+def media_icon(media_type) -> str:
+    return _MEDIA_ICONS.get(media_type or "", Emoji.PLAYING)
 
 
 def recent_viewer_line(row: dict) -> str:
@@ -47,7 +62,7 @@ def recent_viewer_line(row: dict) -> str:
     percent = to_int(row.get("percent_complete"), 100)
     when = to_int(row.get("stopped")) or to_int(row.get("date"))
     return join([
-        f"{_MEDIA_ICONS.get(row.get('media_type'), Emoji.PLAYING)} **{escape_markdown(session_user(row))}**",
+        f"{media_icon(row.get('media_type'))} **{escape_markdown(session_user(row))}**",
         escape_markdown(truncate(session_title(row), 80)),
         f"stopped at {percent}%" if percent < _FINISHED_PERCENT else None,
         f"on {escape_markdown(str(row['platform']))}" if row.get("platform") else None,
@@ -178,4 +193,96 @@ def stream_detail(session: dict, *, avatar_url: Optional[str], link: Optional[st
 
     set_image(embed, frame)
     set_thumbnail(embed, poster)
+    return embed
+
+
+# --- media cards: lookups, random picks, recently added ----------------------
+
+_SUMMARY_LENGTH = 350
+_CREDITS = 3  # directors / actors named on a card
+
+
+def runtime(ms) -> Optional[str]:
+    """Milliseconds as "2h 16m" or "45m"; None when unknown."""
+    minutes = to_int(ms) // 60000
+    if minutes <= 0:
+        return None
+    hours, minutes = divmod(minutes, 60)
+    return join([f"{hours}h" if hours else None, f"{minutes}m" if minutes else None], " ")
+
+
+def _star_rating(item: dict) -> Optional[str]:
+    for key in ("audience_rating", "rating"):
+        try:
+            value = float(item.get(key) or 0)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            return f"⭐ {value:.1f}"
+    return None
+
+
+def _air_date(value) -> Optional[str]:
+    try:
+        day = datetime.strptime(str(value), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return timestamp(day, "D")
+
+
+def _names(values, limit: int) -> list:
+    return [str(value) for value in (values or [])[:limit] if value]
+
+
+def _genre(name) -> str:
+    """Tautulli genres are "Action"; the media cache stores some lower-case."""
+    name = str(name)
+    return name[:1].upper() + name[1:]
+
+
+def media_facts(item: dict) -> str:
+    """One line of facts: "R · 2h 16m · Action, Science Fiction · ⭐ 8.7"."""
+    media_type = item.get("media_type")
+    seasons = to_int(item.get("children_count"))
+    aired = _air_date(item.get("originally_available_at")) if media_type == "episode" else None
+    return join([
+        item.get("content_rating"),
+        runtime(item.get("duration")) if media_type in ("movie", "episode") else None,
+        plural(seasons, "season") if media_type == "show" and seasons else None,
+        f"aired {aired}" if aired else None,
+        ", ".join(_genre(g) for g in (item.get("genres") or [])[:3]),
+        _star_rating(item),
+    ])
+
+
+def _credits(item: dict) -> Optional[str]:
+    directors, actors = _names(item.get("directors"), 2), _names(item.get("actors"), _CREDITS)
+    return join([
+        f"Directed by {', '.join(directors)}" if directors else None,
+        f"Starring {', '.join(actors)}" if actors else None,
+    ]) or None
+
+
+def media_card(item: dict, *, poster: Optional[Attachment] = None, art: Optional[Attachment] = None,
+               url: Optional[str] = None, stats: Optional[str] = None) -> nextcord.Embed:
+    """A movie, show, season or episode (Tautulli metadata or a media cache item).
+
+    Tinted with the poster's colour when there is one; `stats` is an extra line for watch stats.
+    """
+    media_type = item.get("media_type")
+    facts, credit_line = media_facts(item), _credits(item)
+    tagline = item.get("tagline")
+    summary = truncate(item.get("summary") or "", _SUMMARY_LENGTH)
+    description = join([
+        f"-# {facts}" if facts else None,
+        f"*{escape_markdown(tagline)}*" if tagline else None,
+        escape_markdown(summary) if summary else None,
+        f"-# {escape_markdown(credit_line)}" if credit_line else None,
+        f"\n{stats}" if stats else None,
+    ], "\n")
+    colour = (dominant_colour(poster.data) if poster else None) or media_colour(media_type)
+    embed = card(title=session_title(item), description=description or None, colour=colour, url=url)
+    embed.set_author(name=f"{media_icon(media_type)} {_MEDIA_NAMES.get(media_type or '', 'Media')}")
+    set_thumbnail(embed, poster)
+    set_image(embed, art)
     return embed

@@ -220,12 +220,7 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | Command | Description |
 |---------|-------------|
 | `plex top` | Shows the top Plex users and assigns roles |
-| `plex random [media_type] [genre]` | Shows a random item from your library with optional filtering |
-| `plex tv <show name>` | Looks up a TV show in your library with watch stats |
-| `plex movie <movie name>` | Looks up a movie in your library with watch stats |
 | `plex recommend [@user]` | Recommends media based on watch history |
-| `plex downloading` | Shows current qBittorrent downloads |
-| `plex recent [amount]` | Shows recently added media |
 | `plex stats [days]` | Shows server statistics for the specified time period |
 | `plex shows` | Shows top users by TV show watch time |
 | `plex history [@user/username]` | Shows watch history for a user |
@@ -239,11 +234,15 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `/plex help` | Shows what the bot can do, by category (private) |
 | `/plex status` | Server health: version and update status, library totals and sizes, activity, and plex.tv service status (the **Plex services** button lists every service privately) |
 | `/plex watchers [stop] [message]` | Shows every current stream with a poster strip; pick one for private details (current frame, quality, device). Stream managers can stop streams from the details card or with `stop:` |
+| `/plex movie <title>` | Looks up a movie: poster, details, cast and who's watched it most. Titles are suggested as you type |
+| `/plex tv <title>` | The same for a TV show |
+| `/plex random [type] [genre]` | A random movie or show, optionally of one genre (suggested as you type); **Roll again** for another |
+| `/plex recent [count] [type]` | What was added recently, with a poster strip; pick one for its details (private) |
+| `/plex downloading` | What qBittorrent is downloading, with progress and time left |
 | `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
+| `/plexadmin cache` | Shows the media cache behind `/plex random` and title suggestions, with a **Refresh now** button (admin only) |
 | `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
 | `plex ignore [plex_username]` | Toggles ignoring a user in stats (admin only) |
-| `plex refresh_cache` | Manually refreshes the media cache (admin only) |
-| `plex force_refresh_cache` | Fully invalidates and rebuilds the media cache (admin only) |
 
 Library sizes on `/plex status` come from Tautulli. Movie sizes appear on their own; for TV and music, run **Calculate Total File Sizes** on the library's Media Info tab in Tautulli once.
 

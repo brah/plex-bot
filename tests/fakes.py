@@ -109,6 +109,37 @@ class FakeTautulli:
         self.sessions = [s for s in self.sessions if s.get("session_id") != session_id]
         return 200
 
+    # Library data for the media commands: metadata by rating key, plus per-item stats.
+    metadata: dict = {}
+    user_stats: dict = {}
+    watch_time: dict = {}
+    libraries: list = []
+    library_items: dict = {}  # section_id -> rows
+    recently_added: list = []
+    recent_calls: list = []
+
+    async def get_metadata(self, rating_key):
+        return self._ok(self.metadata.get(str(rating_key), {}))
+
+    async def get_item_user_stats(self, rating_key, params=None):
+        return self._ok(self.user_stats.get(str(rating_key), []))
+
+    async def get_item_watch_time_stats(self, rating_key, params=None):
+        return self._ok(self.watch_time.get(str(rating_key), []))
+
+    async def get_libraries(self):
+        return self._ok(self.libraries)
+
+    async def get_library_media_info(self, section_id=None, search=None, length=50, **kwargs):
+        rows = self.library_items.get(str(section_id), [])
+        if search:
+            rows = [r for r in rows if search.lower() in r.get("title", "").lower()]
+        return self._ok({"data": rows[:length]})
+
+    async def get_recently_added(self, count, media_type=None):
+        self.recent_calls = self.recent_calls + [(count, media_type)]
+        return self._ok({"recently_added": self.recently_added[:count]})
+
 
 def patch_images(monkeypatch):
     """Make every Plex image fetch return a tiny valid PNG instead of hitting the network."""
@@ -197,6 +228,32 @@ def build_bot(tautulli):
     cog.status_task.cancel()
     bot.add_cog(cog)
     return bot, cog
+
+
+def build_media_bot(tautulli, items=()):
+    """A PlexBot with MediaCommands loaded and a fresh media cache holding `items`."""
+    from datetime import datetime
+
+    from cogs.media_commands import MediaCommands
+    from media_cache import MediaCache
+    from plexbot import PlexBot, install_slash_groups
+
+    cache = MediaCache(tautulli)
+    cache.media_items = {str(item["rating_key"]): item for item in items}
+    cache.last_updated = datetime.now()
+    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+                  default_guild_ids=[GUILD_ID])
+    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache}
+    bot._connection.application_id = 999
+    install_slash_groups(bot)
+    cog = MediaCommands(bot)
+    bot.add_cog(cog)
+    return bot, cog
+
+
+def interaction(bot, **kwargs):
+    """A component-style interaction from user 42; good enough for slash command bodies too."""
+    return nextcord.Interaction(data=component_payload("cmd", **kwargs), state=bot._connection)
 
 
 def member_payload(user_id=42, permissions="0", roles=()):
