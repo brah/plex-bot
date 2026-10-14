@@ -120,3 +120,46 @@ def test_ctrl_c_still_exits_cleanly(monkeypatch):
 
     monkeypatch.setattr(plexbot.PlexBot, "run", interrupt)
     plexbot.main()  # no SystemExit
+
+
+def test_view_error_card_is_the_oops_state(monkeypatch):
+    import ui.embeds
+
+    monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+    sent = {}
+
+    class Response(FakeResponse):
+        async def send_message(self, content=None, *, ephemeral=False, **kwargs):
+            sent.update(kwargs, ephemeral=ephemeral)
+
+    async def run():
+        interaction = FakeInteraction()
+        interaction.response = Response()
+        await LoggedView().on_error(ValueError("x"), nextcord.ui.Button(label="x"), interaction)
+
+    asyncio.run(run())
+    assert sent["ephemeral"] is True
+    assert "Something went wrong" in sent["embeds"][0].description
+
+
+def test_slash_error_names_the_command(monkeypatch):
+    import ui.embeds
+    from errors import ErrorHandler
+
+    monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+    sent = {}
+
+    class Response(FakeResponse):
+        async def send_message(self, content=None, *, ephemeral=False, **kwargs):
+            sent.update(kwargs, ephemeral=ephemeral)
+
+    async def run():
+        bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None)
+        interaction = FakeInteraction()
+        interaction.response = Response()
+        interaction.data = {"name": "plex", "options": [{"type": 1, "name": "status"}]}
+        error = nextcord.ApplicationInvokeError(RuntimeError("boom"))
+        await ErrorHandler(bot).application_error_handler(interaction, error)
+
+    asyncio.run(run())
+    assert sent["ephemeral"] is True and "`/plex status`" in sent["embeds"][0].description
