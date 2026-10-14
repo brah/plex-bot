@@ -247,7 +247,7 @@ class ErrorHandler:
         else:
             reply = unexpected_error(path)
         try:
-            await reply.send(interaction, ephemeral=True)
+            await reply.send(interaction, ephemeral=True, replace_placeholder=True)
         except nextcord.HTTPException as e:
             logger.warning(f"Could not send error reply for {path}: {e}")
 
