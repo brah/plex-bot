@@ -19,6 +19,7 @@ from utilities import (
 )
 from slash_commands import plex, plexadmin
 from tautulli_wrapper import Tautulli
+from ui.format import format_ms, truncate
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
@@ -84,10 +85,6 @@ def _redact(text: str, secrets) -> str:
     return _SECRET_PARAM.sub(rf"\g<1>{_REDACTED}", text)
 
 
-def _truncate(text: str, length: int) -> str:
-    return text if len(text) <= length else text[: length - 1] + "…"
-
-
 def _fit_tail(records: list[str], budget: int) -> list[str]:
     """Return the most recent records whose newline-joined length fits in budget.
 
@@ -99,7 +96,7 @@ def _fit_tail(records: list[str], budget: int) -> list[str]:
         cost = len(record) + (1 if shown else 0)
         if used + cost > budget:
             if not shown:
-                shown.append(_truncate(record, budget))
+                shown.append(truncate(record, budget))
             break
         shown.append(record)
         used += cost
@@ -141,7 +138,7 @@ def _build_logs_reply(text: str, min_level: int | None, search: str | None):
         if min_level is not None:
             parts.append(f"{logging.getLevelName(min_level)}+")
         if search:
-            parts.append(f'matching "{_truncate(search, _HEADER_SEARCH_MAX)}"')
+            parts.append(f'matching "{truncate(search, _HEADER_SEARCH_MAX)}"')
         description = " ".join(parts)
         if not matches:
             header = f"No log records **{description}** · {attached}"
@@ -165,16 +162,6 @@ _MAX_CHOICES = 25
 _MAX_LABEL = 100
 
 
-def _format_ms(ms: int) -> str:
-    """Format milliseconds into H:MM:SS or M:SS."""
-    total_seconds = ms // 1000
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    if hours:
-        return f"{hours}:{minutes:02d}:{seconds:02d}"
-    return f"{minutes}:{seconds:02d}"
-
-
 def _session_user(session: dict) -> str:
     return session.get("friendly_name") or session.get("username") or "Unknown"
 
@@ -186,7 +173,7 @@ def _session_title(session: dict) -> str:
 def _session_label(session: dict, suffix: str = "") -> str:
     """One-line "user — title" label for a stream, within Discord's label limit."""
     label = f"{_session_user(session)} — {_session_title(session)}"
-    return _truncate(label, _MAX_LABEL - len(suffix)) + suffix
+    return truncate(label, _MAX_LABEL - len(suffix)) + suffix
 
 
 def _session_choices(sessions: list[dict], query: str) -> dict[str, str]:
@@ -245,11 +232,11 @@ def _format_session_field(session: dict) -> tuple:
             pct = min(100, (view_offset / duration) * 100)
             filled = round(pct / 10)
             bar = "█" * filled + "░" * (10 - filled)
-            elapsed = _format_ms(view_offset)
-            total = _format_ms(duration)
+            elapsed = format_ms(view_offset)
+            total = format_ms(duration)
             progress_bar = f"`{bar}` {elapsed} / {total}"
         else:
-            elapsed = _format_ms(view_offset)
+            elapsed = format_ms(view_offset)
             progress_bar = f"{elapsed}"
     except (ValueError, TypeError):
         pass
@@ -291,7 +278,7 @@ class StopStreamModal(LoggedModal):
     """Asks for an optional message to the viewer, then stops the chosen stream."""
 
     def __init__(self, cog: "ServerCommands", session_id: str, label: str, watchers_view: "WatchersView"):
-        super().__init__(title=_truncate(f"Stop: {label}", 45), timeout=300)
+        super().__init__(title=truncate(f"Stop: {label}", 45), timeout=300)
         self.cog = cog
         self.session_id = session_id
         self.watchers_view = watchers_view

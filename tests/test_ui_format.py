@@ -1,0 +1,89 @@
+"""ui.format: the text helpers every response uses."""
+
+from datetime import datetime, timezone
+
+from ui.format import format_ms, is_truthy, join, plural, progress_bar, timestamp, to_int, truncate
+from ui.theme import Colour, Limits, media_colour
+
+
+class TestTruncate:
+    def test_short_text_unchanged(self):
+        assert truncate("hello", 10) == "hello"
+
+    def test_exact_limit_unchanged(self):
+        assert truncate("x" * 10, 10) == "x" * 10
+
+    def test_long_text_cut_with_ellipsis(self):
+        result = truncate("x" * 20, 10)
+        assert len(result) == 10 and result.endswith("…")
+
+    def test_none_becomes_empty(self):
+        assert truncate(None, 10) == ""
+
+    def test_non_string_is_stringified(self):
+        assert truncate(12345, 3) == "12…"
+
+
+class TestFormatMs:
+    def test_minutes(self):
+        assert format_ms(754000) == "12:34"
+
+    def test_hours(self):
+        assert format_ms(5025000) == "1:23:45"
+
+    def test_string_and_missing_values(self):
+        assert format_ms("754000") == "12:34"
+        assert format_ms(None) == "0:00"
+
+
+class TestProgressBar:
+    def test_half(self):
+        assert progress_bar(0.5) == "█████░░░░░"
+
+    def test_clamped(self):
+        assert progress_bar(1.7) == "██████████"
+        assert progress_bar(-1) == "░░░░░░░░░░"
+
+    def test_none_is_empty(self):
+        assert progress_bar(None) == ""
+
+
+class TestTimestamp:
+    def test_from_datetime(self):
+        moment = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        assert timestamp(moment) == f"<t:{int(moment.timestamp())}:R>"
+
+    def test_from_number_with_style(self):
+        assert timestamp(1700000000.9, "t") == "<t:1700000000:t>"
+
+
+class TestSmallHelpers:
+    def test_plural(self):
+        assert plural(1, "stream") == "1 stream"
+        assert plural(2, "stream") == "2 streams"
+        assert plural(1234, "movie") == "1,234 movies"
+        assert plural(3, "match", "matches") == "3 matches"
+
+    def test_join_skips_empty_parts(self):
+        assert join(["a", None, "", "b"]) == "a · b"
+        assert join(["a", "b"], " ") == "a b"
+
+    def test_to_int(self):
+        assert to_int("42") == 42
+        assert to_int("") == 0
+        assert to_int(None, default=-1) == -1
+
+    def test_is_truthy(self):
+        assert all(is_truthy(v) for v in (True, 1, "1", "true", "True"))
+        assert not any(is_truthy(v) for v in (False, 0, "0", "", None, "false"))
+
+
+class TestTheme:
+    def test_media_colour(self):
+        assert media_colour("movie") == Colour.MOVIE
+        assert media_colour("episode") == Colour.TV
+        assert media_colour("track") == Colour.MUSIC
+        assert media_colour(None) == Colour.NEUTRAL
+
+    def test_limits(self):
+        assert Limits.DESCRIPTION == 4096 and Limits.SELECT_OPTIONS == 25
