@@ -105,7 +105,7 @@ def get_git_revision_short_hash_latest() -> str:
 
 async def fetch_plex_image(
     tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450,
-    use_https: bool = False, api_key: str = ""
+    use_https: bool = False, api_key: str = "", fallback: Optional[str] = "poster"
 ) -> Optional[BytesIO]:
     """
     Fetch an image from the Plex/Tautulli server.
@@ -117,6 +117,7 @@ async def fetch_plex_image(
         height: The desired height of the image
         use_https: Whether to use HTTPS
         api_key: Tautulli API key (required for authenticated image proxy)
+        fallback: Image Tautulli substitutes when the real one is missing (None to fail instead)
 
     Returns:
         BytesIO object containing the image data, or None if the fetch failed
@@ -132,12 +133,16 @@ async def fetch_plex_image(
             "img": thumb_key.strip(),
             "width": width,
             "height": height,
-            "fallback": "poster",
         }
+        # Tautulli substitutes a generic image when the real one is missing; callers that
+        # want "no image" instead (e.g. a stream's current frame) pass fallback=None.
+        if fallback:
+            params["fallback"] = fallback
         if api_key:
             params["apikey"] = api_key
 
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, params=params) as response:
                 if response.status == 200 and "image" in (response.content_type or ""):
                     return BytesIO(await response.read())
