@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512"
+     height="512" viewBox="0 0 512 512">
+  <defs>
+    <filter id="soft" x="-50%" y="-200%" width="200%" height="500%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <clipPath id="bucket">
+      <path d="M120 222 L392 222 L362 448 L150 448 Z"/>
+    </clipPath>
+    <!-- one popcorn piece: lumpy union of four puffs, outlined as a single shape -->
+    <g id="pop">
+      <g fill="#2B2D31">
+        <circle cx="-17" cy="6" r="36"/>
+        <circle cx="8" cy="-15" r="36"/>
+        <circle cx="19" cy="11" r="34"/>
+        <circle cx="-9" cy="-19" r="30"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- the same piece, buttered -->
+    <g id="pop-butter">
+      <use xlink:href="#pop"/>
+      <g fill="#FFE39A">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- Kernel without a face: popcorn heap over the striped bucket (bottom centre 256,448) -->
+    <g id="kernel">
+      <use xlink:href="#pop-butter" transform="translate(150 196) rotate(-20)"/>
+      <use xlink:href="#pop" transform="translate(362 196) rotate(150)"/>
+      <use xlink:href="#pop" transform="translate(204 148) rotate(40)"/>
+      <use xlink:href="#pop-butter" transform="translate(310 150) rotate(-60)"/>
+      <use xlink:href="#pop" transform="translate(258 104) rotate(10)"/>
+      <use xlink:href="#pop" transform="translate(218 200) rotate(100)"/>
+      <use xlink:href="#pop-butter" transform="translate(298 202) rotate(-130)"/>
+      <g clip-path="url(#bucket)">
+        <rect x="100" y="210" width="320" height="260" fill="#FFF4DC"/>
+        <g fill="#E5A00D">
+          <path d="M120 222 L174.4 222 L192.4 448 L150 448 Z"/>
+          <path d="M228.8 222 L283.2 222 L277.2 448 L234.8 448 Z"/>
+          <path d="M337.6 222 L392 222 L362 448 L319.6 448 Z"/>
+        </g>
+        <path d="M366 222 L400 222 L370 448 L340 448 Z" fill="#2B2D31" opacity="0.12"/>
+      </g>
+      <path d="M120 222 L392 222 L362 448 L150 448 Z" fill="none" stroke="#2B2D31" stroke-width="15"
+            stroke-linejoin="round"/>
+      <rect x="104" y="206" width="304" height="38" rx="18" fill="#E5A00D" stroke="#2B2D31"
+            stroke-width="15" stroke-linejoin="round"/>
+      <path d="M128 218 L240 218" stroke="#F5C04A" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <ellipse cx="256" cy="474" rx="112" ry="15" fill="#2B2D31" opacity="0.28" filter="url(#soft)"/>
+  <g transform="translate(256 466) rotate(-4) scale(0.86) translate(-256 -448)">
+    <path d="M370 320 L468 284 L440 172" fill="none" stroke="#2B2D31" stroke-width="52"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M370 320 L468 284 L440 172" fill="none" stroke="#E5A00D" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <use xlink:href="#kernel"/>
+    <path d="M188 318 Q210 292 232 318" fill="none" stroke="#2B2D31" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M280 318 Q302 292 324 318" fill="none" stroke="#2B2D31" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M190 280 L228 268" fill="none" stroke="#2B2D31" stroke-width="11" stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <path d="M284 268 L322 280" fill="none" stroke="#2B2D31" stroke-width="11" stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <ellipse cx="180" cy="356" rx="19" ry="11" fill="#F2836B" opacity="0.95"/>
+    <ellipse cx="332" cy="356" rx="19" ry="11" fill="#F2836B" opacity="0.95"/>
+    <path d="M226 354 L286 354 Q284 386 256 386 Q228 386 226 354 Z" fill="#2B2D31" stroke="#2B2D31"
+          stroke-width="8" stroke-linejoin="round"/>
+    <rect x="236" y="354" width="40" height="11" rx="4" fill="#FFFFFF"/>
+    <circle cx="436" cy="158" r="31" fill="#FFF4DC" stroke="#2B2D31" stroke-width="13"/>
+    <path d="M486 112 L502 92" fill="none" stroke="#2B2D31" stroke-width="32" stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <path d="M486 112 L502 92" fill="none" stroke="#F5C04A" stroke-width="12" stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <path d="M494 146 L518 140" fill="none" stroke="#2B2D31" stroke-width="32" stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <path d="M494 146 L518 140" fill="none" stroke="#F5C04A" stroke-width="12" stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <path d="M96 156 Q70 198 70 214 A26 26 0 0 0 122 214 Q122 198 96 156 Z" fill="#7CC8F4"
+          stroke="#2B2D31" stroke-width="11" stroke-linejoin="round"/>
+    <ellipse cx="88" cy="212" rx="6" ry="10" fill="#FFFFFF" opacity="0.9"/>
+  </g>
+</svg>
