@@ -30,6 +30,7 @@ logger.setLevel(logging.INFO)
 
 _MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 _RANKED = 10
+_TOP_DAYS = 7  # /plex top's default window, and the ranking that sets roles
 _STRIP = 6
 
 
@@ -297,13 +298,12 @@ class PlexStats(commands.Cog):
         self,
         interaction: nextcord.Interaction,
         days: int = nextcord.SlashOption(
-            description="How many days back (default: the server's setting)", required=False,
+            description="How many days back (default 7)", required=False,
             min_value=1, max_value=3650,
         ),
     ):
         await interaction.response.defer()
-        default_days = to_int(config.get("defaults", "stats_duration", 7), 7)
-        days = days or default_days
+        days = days or _TOP_DAYS
         response, history_r = await asyncio.gather(
             self.tautulli.get_home_stats(params={
                 "stats_type": "duration", "stat_id": "top_users", "stats_count": str(_RANKED + 10),
@@ -329,7 +329,7 @@ class PlexStats(commands.Cog):
             embed.set_thumbnail(url=avatar)
         await Reply([embed]).send(interaction)
         # Roles follow the server's standard ranking, not whatever window someone asked for.
-        if interaction.guild and days == default_days:
+        if interaction.guild and days == _TOP_DAYS:
             await self._assign_top_roles(interaction.guild, ranked[:3])
 
     async def _assign_top_roles(self, guild: nextcord.Guild, top_rows: list) -> None:
