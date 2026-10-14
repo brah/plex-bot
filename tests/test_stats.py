@@ -45,6 +45,8 @@ class TestRenderers:
         assert lines[5] == "🥉 **Cara** · 1m"
         assert lines[6] == "`4.` **Dan** · 0m"
         assert embed.footer.text == "Together: 13h 31m"
+        with_total = top_card(TOP_USERS[1:], days=7, name=name, all_time="41 days 6 hrs")
+        assert with_total.footer.text == "Together: 13h 31m · All time: 41 days 6 hrs"
 
     def test_library_line_and_popular(self):
         rows = [{"section_type": "movie", "count": "1866", "duration": "360000"},
