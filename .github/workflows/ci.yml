@@ -26,7 +26,7 @@ jobs:
         run: >-
           python -m compileall -q
           plexbot.py media_cache.py tautulli_wrapper.py utilities.py migrate_config.py slash_commands.py
-          config errors cogs
+          config errors cogs ui
 
   test:
     name: Unit tests
