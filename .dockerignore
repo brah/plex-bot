@@ -3,6 +3,8 @@ config.json
 map.json
 cache/
 *.log
+**/config.json
+**/*.log
 
 # Virtualenv & VCS
 venv/
@@ -25,6 +27,10 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 *.md
+**/*.md
+.claude/
+.superpowers/
+docs/
 config.example.json
 repomix-output.*
 .idea/

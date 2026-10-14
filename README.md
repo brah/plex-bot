@@ -244,7 +244,7 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `plex refresh_cache` | Manually refreshes the media cache (admin only) |
 | `plex force_refresh_cache` | Fully invalidates and rebuilds the media cache (admin only) |
 
-Responses use posters, avatars and a mascot instead of a fixed logo; mascot art lives in `assets/mascot/` (see `PROMPTS.md` to swap in your own).
+The redesigned commands use posters, avatars and a mascot instead of a fixed logo; mascot art lives in `assets/mascot/` (see `PROMPTS.md` to swap in your own).
 
 ## Troubleshooting
 
@@ -278,6 +278,9 @@ Admins can also run `/plexadmin logs` in Discord: the bot replies privately with
   - **user_management.py**: User mapping
   - **utility_commands.py**: Utility commands
   - **visualizations.py**: Chart commands
+- **ui/**: Shared presentation layer (embeds, images, theme, formatting) used by the redesigned commands
+- **assets/mascot/**: Mascot art, with SVG sources and AI prompts
+- **scripts/**: Dev-only tools (not shipped in the Docker image)
 - **tautulli_wrapper.py**: Tautulli API wrapper
 - **media_cache.py**: Media caching system
 - **utilities.py**: Utility functions
