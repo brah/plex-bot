@@ -65,7 +65,7 @@ def _last_watched(row: dict) -> Optional[str]:
     return row.get("grandchild_title") or row.get("title")
 
 
-def top_card(rows, *, days: int, name: Callable[[dict], str]) -> nextcord.Embed:
+def top_card(rows, *, days: int, name: Callable[[dict], str], all_time: Optional[str] = None) -> nextcord.Embed:
     lines = [f"-# Last {plural(days, 'day')} · by watch time"]
     for rank, row in enumerate(rows[:_RANKED], 1):
         watched = format_duration(to_int(row.get("total_duration")))
@@ -75,7 +75,8 @@ def top_card(rows, *, days: int, name: Callable[[dict], str]) -> nextcord.Embed:
             lines.append(f"-# Last watched {_escaped(last)}")
     total = sum(to_int(row.get("total_duration")) for row in rows[:_RANKED])
     embed = card(title="🏆 Top watchers", description="\n".join(lines), colour=Colour.GOLD)
-    embed.set_footer(text=f"Together: {format_duration(total)}")
+    # all_time is Tautulli's own text, e.g. "41 days 6 hrs 2 mins".
+    embed.set_footer(text=join([f"Together: {format_duration(total)}", f"All time: {all_time}" if all_time else None]))
     return embed
 
 
@@ -303,9 +304,13 @@ class PlexStats(commands.Cog):
         await interaction.response.defer()
         default_days = to_int(config.get("defaults", "stats_duration", 7), 7)
         days = days or default_days
-        response = await self.tautulli.get_home_stats(params={
-            "stats_type": "duration", "stat_id": "top_users", "stats_count": str(_RANKED + 10), "time_range": days,
-        })
+        response, history_r = await asyncio.gather(
+            self.tautulli.get_home_stats(params={
+                "stats_type": "duration", "stat_id": "top_users", "stats_count": str(_RANKED + 10),
+                "time_range": days,
+            }),
+            self.tautulli.get_history({"length": 1}),  # carries the server's all-time watch total
+        )
         rows = self._rows(response)
         if rows is None:
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
@@ -315,7 +320,10 @@ class PlexStats(commands.Cog):
         if not ranked:
             await empty_state(f"Nobody's watched anything in the last {plural(days, 'day')}.").send(interaction)
             return
-        embed = top_card(ranked, days=days, name=self._name)
+        all_time = None
+        if Tautulli.check_response(history_r):
+            all_time = (Tautulli.get_response_data(history_r, {}) or {}).get("total_duration")
+        embed = top_card(ranked, days=days, name=self._name, all_time=all_time)
         avatar = viewer_avatar(self.bot, ranked[0])
         if avatar:
             embed.set_thumbnail(url=avatar)
