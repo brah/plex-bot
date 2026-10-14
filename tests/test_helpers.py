@@ -11,11 +11,11 @@ from tautulli_wrapper import Tautulli
 from utilities import format_duration
 from cogs.media_commands import (
     MediaCommands,
-    _format_ms,
     _truncate,
     _format_size,
     _format_bytes_speed,
 )
+from cogs.server_commands import _format_ms
 
 
 class TestCheckResponse:

@@ -19,6 +19,7 @@ from nextcord.ext import commands
 # Import our new configuration and error handling systems
 from config import config
 from errors import ErrorHandler
+from slash_commands import register_groups
 
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
@@ -136,6 +137,8 @@ class PlexBot(commands.Bot):
         self.shared_resources = await initialize_resources()
         logger.info("Shared resources initialized")
         await load_cogs(self)
+        # After the cogs: they bind the /plex and /plexadmin subcommands as they load.
+        register_groups(self)
 
     async def start(self, *args, **kwargs) -> None:
         # nextcord (unlike discord.py) never invokes setup_hook(); call it
@@ -187,7 +190,23 @@ def main():
 
     # Initialize bot with the prefix from configuration
     bot_prefix = config.get("core", "prefix")
-    bot = PlexBot(command_prefix=[bot_prefix, bot_prefix.title()], intents=intents, help_command=None)
+
+    # Register slash commands to the configured server: guild commands update
+    # instantly, whereas global ones can take up to an hour to appear.
+    server_id = str(config.get("discord", "server_id") or "").strip()
+    if server_id.isdigit():
+        guild_ids = [int(server_id)]
+        logger.info(f"Slash commands will register to server {server_id}.")
+    else:
+        guild_ids = None
+        logger.info("No discord.server_id set; slash commands register globally (may take up to an hour).")
+
+    bot = PlexBot(
+        command_prefix=[bot_prefix, bot_prefix.title()],
+        intents=intents,
+        help_command=None,
+        default_guild_ids=guild_ids,
+    )
 
     # Create and register the error handler (only adds a listener; no gateway needed).
     error_handler = ErrorHandler(bot)

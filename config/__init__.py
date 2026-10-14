@@ -213,6 +213,11 @@ def setup_default_config():
     discord.add("top_role_id", 0, "Role ID for top Plex user")
     discord.add("second_role_id", 0, "Role ID for second Plex user")
     discord.add("third_role_id", 0, "Role ID for third Plex user")
+    discord.add(
+        "stream_manager_ids",
+        [],
+        "Discord user or role IDs allowed to stop streams via /watchers (admins always can)",
+    )
 
     # qBittorrent settings
     qbit = config.add_section("qbittorrent", "qBittorrent settings")
