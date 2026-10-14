@@ -4,7 +4,9 @@ import asyncio
 import io
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import aiohttp
 import nextcord
@@ -20,9 +22,10 @@ from utilities import (
 from slash_commands import plex, plexadmin
 from tautulli_wrapper import Tautulli
 from ui.cards import plex_web_link, session_title, session_user, stream_detail, stream_overview
-from ui.embeds import ErrorKind, Reply, empty_state, error_state, service_down, success
-from ui.format import to_int, truncate
-from ui.images import current_frame, plex_image, poster_key, poster_strip
+from ui.embeds import ErrorKind, Reply, card, empty_state, error_state, service_down, set_thumbnail, success
+from ui.format import is_truthy, join, plural, to_int, truncate
+from ui.images import current_frame, mascot, plex_image, poster_key, poster_strip
+from ui.theme import Colour
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
@@ -324,12 +327,80 @@ class WatchersView(LoggedView):
                 pass
 
 
+# --- /plex status helpers ----------------------------------------------------
+
+
+def library_totals(rows) -> dict:
+    """Sum Tautulli's get_libraries rows into movie, show, episode, artist and track counts."""
+    totals = {"movies": 0, "shows": 0, "episodes": 0, "artists": 0, "tracks": 0}
+    for row in rows or []:
+        kind = row.get("section_type")
+        if kind == "movie":
+            totals["movies"] += to_int(row.get("count"))
+        elif kind == "show":
+            totals["shows"] += to_int(row.get("count"))
+            totals["episodes"] += to_int(row.get("child_count"))
+        elif kind == "artist":
+            totals["artists"] += to_int(row.get("count"))
+            totals["tracks"] += to_int(row.get("child_count"))
+    return totals
+
+
+def build_status_reply(server: dict, libraries, activity: Optional[dict], update: Optional[dict],
+                       plex_service: Optional[dict], *, now: datetime) -> Reply:
+    incident = plex_service is not None and (plex_service.get("indicator") or "none") != "none"
+    plex_pass = " · Plex Pass" if to_int(server.get("pms_plexpass")) else ""
+    embed = card(
+        title=server.get("pms_name") or "Plex Media Server",
+        description=(
+            f"Plex Media Server {server.get('pms_version') or 'unknown version'} "
+            f"on {server.get('pms_platform') or 'unknown platform'}{plex_pass}"
+        ),
+        colour=Colour.WARNING if incident else Colour.PLAYING,
+    )
+
+    totals = library_totals(libraries)
+    library = [
+        f"\U0001F3AC {plural(totals['movies'], 'movie')}" if totals["movies"] else None,
+        f"\U0001F4FA {plural(totals['shows'], 'show')} · {plural(totals['episodes'], 'episode')}"
+        if totals["shows"] else None,
+        f"\U0001F3B5 {plural(totals['artists'], 'artist')} · {plural(totals['tracks'], 'track')}"
+        if totals["artists"] else None,
+    ]
+    library = [line for line in library if line]
+    if library:
+        embed.add_field(name="Library", value="\n".join(library), inline=True)
+
+    if activity is None:
+        watching = "Unavailable"
+    else:
+        streams = to_int(activity.get("stream_count"))
+        bandwidth = to_int(activity.get("total_bandwidth"))
+        watching = (
+            join([plural(streams, "stream"), f"{bandwidth / 1000:.1f} Mbps" if bandwidth else None])
+            if streams else "Nobody's watching"
+        )
+    embed.add_field(name="Activity", value=watching, inline=True)
+
+    service = plex_service.get("description") if plex_service else "Status unavailable"
+    embed.add_field(name="Plex services", value=("⚠️ " if incident else "") + service, inline=False)
+
+    if update and is_truthy(update.get("update_available")):
+        embed.add_field(
+            name="Update available", value=f"Plex Media Server {update.get('version')}", inline=False
+        )
+
+    embed.timestamp = now
+    art = mascot("mascot-server")
+    set_thumbnail(embed, art)
+    return Reply([embed], [art] if art else [])
+
+
 class ServerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
-        self.plex_image = config.get("ui", "plex_image")
         self._pms_identifier: str | None = None  # cached by _server_id()
         self._display_streams = True  # presence alternates between stream stats and a help hint
         self.status_task.start()  # type: ignore[attr-defined]
@@ -404,42 +475,47 @@ class ServerCommands(commands.Cog):
 
     # --- /plex status ------------------------------------------------------
 
-    @plex.subcommand(description="Show Plex server details and Plex's service status")
-    async def status(self, interaction: nextcord.Interaction):
-        await interaction.response.defer()
-
-        server_info_response = await self.tautulli.get_server_info()
-        if not Tautulli.check_response(server_info_response):
-            logger.error("Failed to retrieve server info from Tautulli.")
-            await interaction.followup.send(
-                "Couldn't reach Tautulli for server details — try again shortly."
-            )
-            return
-        server_data = Tautulli.get_response_data(server_info_response, {})
-
-        plex_status = "Plex status unavailable"
+    async def _plex_service_status(self) -> Optional[dict]:
+        """plex.tv's own service status (Statuspage format), or None if it can't be fetched."""
         try:
             timeout = aiohttp.ClientTimeout(total=10)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get("https://status.plex.tv/api/v2/status.json") as response:
-                    if response.status == 200:
-                        json_response = await response.json()
-                        plex_status = json_response.get("status", {}).get("description", "Unknown")
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                    if response.status != 200:
+                        return None
+                    status = (await response.json()).get("status", {})
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
             logger.warning(f"Could not fetch Plex service status: {e}")
+            return None
+        return {"indicator": status.get("indicator"), "description": status.get("description") or "Unknown"}
 
-        embed = nextcord.Embed(title="Plex Server Details", colour=self.plex_embed_color)
-        embed.set_thumbnail(url=self.plex_image)
-        embed.add_field(name="Server Name", value=server_data.get("pms_name", "Unknown"), inline=True)
-        embed.add_field(name="Server Version", value=server_data.get("pms_version", "Unknown"), inline=True)
-        embed.add_field(
-            name="Server IP",
-            value=f"{server_data.get('pms_ip', '?')}:{server_data.get('pms_port', '?')}",
+    @plex.subcommand(description="Show how the Plex server is doing: library, activity, updates")
+    async def status(self, interaction: nextcord.Interaction):
+        await interaction.response.defer()
+        server_r, libraries_r, activity_r, update_r, plex_service = await asyncio.gather(
+            self.tautulli.get_server_info(),
+            self.tautulli.get_libraries(),
+            self.tautulli.get_activity(),
+            self.tautulli.get_pms_update(),
+            self._plex_service_status(),
         )
-        embed.add_field(name="Platform", value=server_data.get("pms_platform", "Unknown"))
-        embed.add_field(name="Plex Pass", value=server_data.get("pms_plexpass", "Unknown"))
-        embed.add_field(name="Plex API Status", value=plex_status)
-        await interaction.followup.send(embed=embed)
+        if not Tautulli.check_response(server_r):
+            logger.error("Failed to retrieve server info from Tautulli.")
+            await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
+            return
+        server = Tautulli.get_response_data(server_r, {})
+        self._pms_identifier = server.get("pms_identifier") or self._pms_identifier
+
+        def data(response, default):
+            if Tautulli.check_response(response):
+                return Tautulli.get_response_data(response, default)
+            return default
+
+        reply = build_status_reply(
+            server, data(libraries_r, []), data(activity_r, None), data(update_r, None), plex_service,
+            now=nextcord.utils.utcnow(),
+        )
+        await reply.send(interaction)
 
     # --- /plex watchers ----------------------------------------------------
 
