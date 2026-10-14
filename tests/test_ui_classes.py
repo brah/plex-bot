@@ -40,7 +40,7 @@ def test_finds_our_ui_classes():
     names = {cls.__name__ for cls in _our_ui_classes()}
     expected = {
         "WatchersView", "StreamDetailsSelect", "StreamDetailView", "StopStreamModal", "LoggedView",
-        "HelpCategorySelect",
+        "HelpCategorySelect", "StatusView",
     }
     assert expected <= names
 

@@ -60,3 +60,17 @@ def plural(count: int, singular: str, plural_form: Optional[str] = None) -> str:
 
 def join(parts: Iterable[Optional[str]], sep: str = " · ") -> str:
     return sep.join(part for part in parts if part)
+
+
+def file_size(num_bytes) -> str:
+    """Decimal units, as on drive labels: 8,100,000,000,000 bytes is "8.1 TB"."""
+    value = float(to_int(num_bytes))
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if value < 1000:
+            break
+        value /= 1000
+    else:
+        unit = "PB"
+    if unit == "B":
+        return f"{value:.0f} B"
+    return f"{value:.1f} {unit}" if value < 100 else f"{value:.0f} {unit}"
