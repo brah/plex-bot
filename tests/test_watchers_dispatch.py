@@ -1,6 +1,7 @@
 """/plex watchers through nextcord's real component dispatch (ConnectionState.parse_interaction_create)."""
 
 import asyncio
+from types import SimpleNamespace
 
 from fakes import (
     EPISODE_PAUSED, MOVIE_PLAYING, FakeMessage, FakeTautulli, Recorder, build_bot, component_payload,
@@ -109,13 +110,108 @@ def test_picking_a_stream_opens_private_detail(monkeypatch):
         await settle()
 
     asyncio.run(run())
-    assert recorder.kinds() == ["defer", "followup"]
+    assert recorder.kinds() == ["defer", "followup", "clicked_message.edit"]
     sent = recorder.last("followup")
     assert sent["ephemeral"] is True and sent["embeds"][0].title == "The Matrix (1999)"
     assert sorted(f.filename for f in sent["files"]) == ["frame.jpg", "poster.jpg"]
     detail_view = sent["view"]
     assert isinstance(detail_view, StreamDetailView)
     assert not any(getattr(c, "label", None) == "Stop this stream" for c in detail_view.children)
+
+
+def test_picking_a_stream_resets_the_public_dropdown(monkeypatch):
+    patch_images(monkeypatch)
+    recorder = Recorder(monkeypatch)
+    holder = {}
+
+    async def run():
+        bot, cog = build_bot(FakeTautulli([MOVIE_PLAYING]))
+        view = holder["view"] = WatchersView(cog, [MOVIE_PLAYING])
+        _store(bot, view)
+        select = next(c for c in view.children if isinstance(c, StreamDetailsSelect))
+        _click(bot, select, component_type=3, values=["abc"])
+        await settle()
+
+    asyncio.run(run())
+    reset = recorder.last("clicked_message.edit")
+    assert reset["view"] is holder["view"] and reset["message"].id == MESSAGE_ID
+    assert set(reset) == {"view", "message"}  # only the components change
+
+
+def test_failed_dropdown_reset_still_shows_the_detail_card(monkeypatch):
+    patch_images(monkeypatch)
+    recorder = Recorder(monkeypatch)
+
+    async def failing_edit(self, **kwargs):
+        raise nextcord.HTTPException(SimpleNamespace(status=500, reason="boom"), "boom")
+
+    monkeypatch.setattr(nextcord.Message, "edit", failing_edit)
+
+    async def run():
+        bot, cog = build_bot(FakeTautulli([MOVIE_PLAYING]))
+        view = WatchersView(cog, [MOVIE_PLAYING])
+        _store(bot, view)
+        select = next(c for c in view.children if isinstance(c, StreamDetailsSelect))
+        _click(bot, select, component_type=3, values=["abc"])
+        await settle()
+
+    asyncio.run(run())
+    assert recorder.kinds() == ["defer", "followup"]
+
+
+def test_overview_message_handle_is_the_clicked_message_after_refresh(monkeypatch):
+    patch_images(monkeypatch)
+    recorder = Recorder(monkeypatch)
+    original = FakeMessage(recorder, message_id=6666)  # the command's expiring webhook handle
+    holder = {}
+
+    async def run():
+        bot, cog = build_bot(FakeTautulli([MOVIE_PLAYING]))
+        view = holder["view"] = WatchersView(cog, [MOVIE_PLAYING])
+        view.message = original
+        _store(bot, view)
+        _click(bot, next(c for c in view.children if getattr(c, "label", None) == "Refresh"))
+        await settle()
+
+    asyncio.run(run())
+    message = holder["view"].message
+    assert message is not original
+    assert isinstance(message, nextcord.Message) and message.id == MESSAGE_ID
+
+
+def test_overview_message_handle_is_the_clicked_message_after_a_pick(monkeypatch):
+    patch_images(monkeypatch)
+    recorder = Recorder(monkeypatch)
+    original = FakeMessage(recorder, message_id=6666)
+    holder = {}
+
+    async def run():
+        bot, cog = build_bot(FakeTautulli([MOVIE_PLAYING]))
+        view = holder["view"] = WatchersView(cog, [MOVIE_PLAYING])
+        view.message = original
+        _store(bot, view)
+        select = next(c for c in view.children if isinstance(c, StreamDetailsSelect))
+        _click(bot, select, component_type=3, values=["abc"])
+        await settle()
+
+    asyncio.run(run())
+    message = holder["view"].message
+    assert message is not original
+    assert isinstance(message, nextcord.Message) and message.id == MESSAGE_ID
+
+
+def test_initial_overview_handle_is_a_bot_token_partial_message():
+    from cogs.server_commands import _bot_token_handle
+
+    class Channel:
+        def get_partial_message(self, message_id):
+            return ("partial", message_id)
+
+    webhook_message = SimpleNamespace(id=6666)
+    assert _bot_token_handle(SimpleNamespace(channel=Channel()), webhook_message) == ("partial", 6666)
+    # No channel that can make one: keep the original handle rather than lose it.
+    assert _bot_token_handle(SimpleNamespace(channel=None), webhook_message) is webhook_message
+    assert _bot_token_handle(SimpleNamespace(channel=Channel()), None) is None
 
 
 def test_stream_managers_get_stop_button(monkeypatch):
@@ -152,7 +248,6 @@ def test_stream_that_ended_shows_private_notice_and_rerenders(monkeypatch):
     async def run():
         bot, cog = build_bot(FakeTautulli([]))  # the stream ended before the click
         view = WatchersView(cog, [MOVIE_PLAYING])
-        view.message = FakeMessage(recorder)
         _store(bot, view)
         select = next(c for c in view.children if isinstance(c, StreamDetailsSelect))
         _click(bot, select, component_type=3, values=["abc"])
@@ -160,7 +255,8 @@ def test_stream_that_ended_shows_private_notice_and_rerenders(monkeypatch):
 
     asyncio.run(run())
     assert "That stream has ended" in recorder.last("followup")["embeds"][0].description
-    assert "message.edit" in recorder.kinds()  # overview re-rendered
+    # The overview was re-rendered (through the clicked message's bot-token handle).
+    assert any(kind == "clicked_message.edit" and "embeds" in kwargs for kind, kwargs in recorder.calls)
 
 
 def test_stop_from_detail_replaces_card_with_confirmation(monkeypatch):

@@ -215,6 +215,19 @@ def _find_session(activity: dict, session_id: str) -> dict | None:
     return next((s for s in activity.get("sessions", []) if str(s.get("session_id")) == session_id), None)
 
 
+def _bot_token_handle(interaction: nextcord.Interaction, message):
+    """A handle on a followup message that is edited with the bot token.
+
+    A WebhookMessage edits through the interaction token, which expires after 15 minutes
+    while the view can live on. A partial message from the channel doesn't expire. Falls back
+    to the original when the channel can't make one (voice channels, no channel).
+    """
+    get_partial = getattr(interaction.channel, "get_partial_message", None)
+    if message is None or get_partial is None:
+        return message
+    return get_partial(message.id)
+
+
 class StopStreamModal(LoggedModal):
     """Asks for an optional message to the viewer, then stops the stream."""
 
@@ -274,7 +287,16 @@ class StreamDetailsSelect(nextcord.ui.StringSelect):
 
     async def callback(self, interaction: nextcord.Interaction):
         watchers_view: WatchersView = self.view
+        # The clicked message is edited with the bot token, which (unlike the command's
+        # interaction webhook) doesn't expire after 15 minutes.
+        watchers_view.message = interaction.message
         await watchers_view.cog.show_stream_detail(interaction, self.values[0], watchers_view)
+        # Opening a detail card leaves the public message alone, so Discord would keep this
+        # choice selected locally and picking it again would send nothing. Re-send the view to reset it.
+        try:
+            await interaction.message.edit(view=watchers_view)
+        except nextcord.HTTPException as e:
+            logger.warning(f"Could not reset the /plex watchers dropdown: {e}")
 
 
 class WatchersView(LoggedView):
@@ -311,6 +333,7 @@ class WatchersView(LoggedView):
     @nextcord.ui.button(label="Refresh", emoji="\U0001F504", style=nextcord.ButtonStyle.secondary, row=1)
     async def refresh_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         await interaction.response.defer()
+        self.message = interaction.message  # bot-token handle; the command's webhook expires
         activity = await self.cog.fetch_activity()
         if activity is None:
             await service_down("Tautulli").send(interaction, ephemeral=True)
@@ -662,7 +685,7 @@ class ServerCommands(commands.Cog):
             return
         view = WatchersView(self, [])
         reply = await self.render_watchers(activity, view)
-        view.message = await reply.send(interaction)
+        view.message = _bot_token_handle(interaction, await reply.send(interaction))
 
     @watchers.on_autocomplete("stop")
     async def _watchers_stop_autocomplete(self, interaction: nextcord.Interaction, stop: str):

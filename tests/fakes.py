@@ -151,6 +151,9 @@ class Recorder:
         async def delete_original_message(self, **kwargs):
             recorder.calls.append(("delete_original_message", {}))
 
+        async def clicked_message_edit(self, **kwargs):
+            recorder.calls.append(("clicked_message.edit", dict(kwargs, message=self)))
+
         class Followup:
             async def send(self, content=None, **kwargs):
                 recorder.calls.append(("followup", dict(kwargs, content=content)))
@@ -163,6 +166,7 @@ class Recorder:
         monkeypatch.setattr(nextcord.InteractionResponse, "send_modal", send_modal)
         monkeypatch.setattr(nextcord.Interaction, "edit_original_message", edit_original_message)
         monkeypatch.setattr(nextcord.Interaction, "delete_original_message", delete_original_message)
+        monkeypatch.setattr(nextcord.Message, "edit", clicked_message_edit)
         monkeypatch.setattr(nextcord.Interaction, "followup", property(lambda self: Followup()))
 
     def kinds(self):
