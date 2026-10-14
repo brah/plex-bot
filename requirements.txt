@@ -11,10 +11,8 @@ aiofiles==25.1.0
 # External service clients
 qbittorrent-api==2026.10.0
 
-# Data & visualization
-pandas==3.0.6
+# Charts (/plex chart)
 matplotlib==3.11.2
-seaborn==0.13.2
 # Image composition (poster strips, poster tint); also a matplotlib dependency.
 pillow==12.3.0
 

@@ -4,7 +4,6 @@
 
 import asyncio
 import logging
-import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import Callable, Optional
@@ -14,10 +13,11 @@ from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
 from config import config
+from plex_users import PlexUsers
 from slash_commands import plex
 from tautulli_wrapper import Tautulli
 from ui.cards import media_icon, recent_viewer_line, session_title
-from ui.embeds import ErrorKind, Reply, card, empty_state, error_state, service_down
+from ui.embeds import Reply, card, empty_state, service_down
 from ui.format import join, plural, to_int, truncate
 from ui.images import plex_image, poster_key, poster_strip
 from ui.theme import Colour, Limits, brand_colour
@@ -160,7 +160,6 @@ def shows_card(ranked, *, name: Callable[[dict], str], several_libraries: bool) 
 # --- /plex history ---------------------------------------------------------------
 
 _HISTORY_ROWS = 15
-_USERS_TTL = 300
 
 
 def history_card(rows, *, name: Callable[[dict], str], person: Optional[str], strip) -> nextcord.Embed:
@@ -278,7 +277,7 @@ class PlexStats(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
-        self._users: tuple = (0.0, [])  # (fetched at, Tautulli users)
+        self.users = PlexUsers(bot, self.tautulli)
 
     def _name(self, row: dict) -> str:
         return viewer_name(self.bot, row)
@@ -418,31 +417,6 @@ class PlexStats(commands.Cog):
 
     # --- /plex history -----------------------------------------------------------
 
-    async def _plex_users(self) -> Optional[list]:
-        """Tautulli's users minus ignored ones (cached briefly: autocomplete asks on every key)."""
-        fetched, users = self._users
-        if users and time.monotonic() - fetched < _USERS_TTL:
-            return users
-        rows = self._rows(await self.tautulli.get_users(), [])
-        if rows is None:
-            return None
-        ignored = ignored_usernames()
-        users = [row for row in rows if row.get("username") and row["username"] not in ignored]
-        self._users = (time.monotonic(), users)
-        return users
-
-    def _user_label(self, row: dict) -> str:
-        shown, plex_name = self._name(row), row.get("friendly_name") or row["username"]
-        return shown if shown == plex_name else f"{shown} ({plex_name})"
-
-    def _find_user(self, users: list, wanted: str) -> Optional[dict]:
-        wanted = wanted.strip().lower()
-        for row in users:
-            names = {row["username"], row.get("friendly_name") or "", self._name(row)}
-            if wanted in {n.lower() for n in names if n}:
-                return row
-        return None
-
     @plex.subcommand(description="Recent plays on the server, or one person's")
     async def history(
         self,
@@ -455,15 +429,8 @@ class PlexStats(commands.Cog):
         person = None
         params = {"length": _HISTORY_ROWS + 25, "order_column": "date", "order_dir": "desc"}
         if user:
-            users = await self._plex_users()
-            if users is None:
-                await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
-                return
-            person = self._find_user(users, user)
-            if person is None:
-                await error_state(ErrorKind.INPUT, f"No Plex user called **{_escaped(user)}**.",
-                                  hint="Pick one from the suggestions as you type.").send(
-                    interaction, ephemeral=True, replace_placeholder=True)
+            person, ok = await self.users.resolve(interaction, user)
+            if not ok:
                 return
             params.update(user_id=person.get("user_id"), length=_HISTORY_ROWS)
         response = await self.tautulli.get_history(params)
@@ -486,13 +453,7 @@ class PlexStats(commands.Cog):
 
     @history.on_autocomplete("user")
     async def _history_user_autocomplete(self, interaction: nextcord.Interaction, user: str):
-        typed = (user or "").strip().lower()
-        choices = {}
-        for row in await self._plex_users() or []:
-            label = truncate(self._user_label(row), Limits.SELECT_LABEL)
-            if typed in label.lower() or typed in row["username"].lower():
-                choices.setdefault(label, row["username"])
-        await interaction.response.send_autocomplete(dict(list(choices.items())[:Limits.SELECT_OPTIONS]))
+        await interaction.response.send_autocomplete(await self.users.choices(user))
 
     # --- /plex hot ---------------------------------------------------------------
 

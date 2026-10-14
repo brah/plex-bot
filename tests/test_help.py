@@ -99,7 +99,7 @@ def test_group_subcommands_are_listed_instead_of_the_group():
         bot.add_cog(Charts())
         return collect_help_entries(bot, "plex ")
 
-    entries = {e.usage: e for e in asyncio.run(run()) if "chart" in e.usage}
+    entries = {e.usage: e for e in asyncio.run(run()) if e.usage.startswith("plex chart")}
     assert sorted(entries) == ["plex chart hours [args...]", "plex chart users [args...]"]
     hours = entries["plex chart hours [args...]"]
     assert hours.category == "charts" and hours.description == "Chart of the most-watched hours."

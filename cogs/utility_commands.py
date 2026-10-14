@@ -40,6 +40,8 @@ EXAMPLES = {
     "/plex top": "/plex top days:30",
     "/plex history": "/plex history user:alice",
     "/plex hot": "/plex hot days:14",
+    "/plex chart hours": "/plex chart hours user:alice days:60",
+    "/plex chart months": "/plex chart months days:730",
 }
 
 

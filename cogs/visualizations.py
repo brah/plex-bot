@@ -1,511 +1,285 @@
 # cogs/visualizations.py
 
+"""/plex chart hours, days, users, media and months: when and what people watch, as charts."""
+
+import asyncio
 import logging
-from io import BytesIO
-from typing import Optional
+from collections import Counter
+from datetime import date, datetime, timedelta, tzinfo
+from functools import partial
+from typing import Callable, List, Optional, Tuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import nextcord
+import tzlocal
 from nextcord.ext import commands
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
+from nextcord.utils import escape_markdown
 
 from config import config
-from media_cache import MediaCache
+from plex_users import PlexUsers
+from slash_commands import plex
 from tautulli_wrapper import Tautulli
+from ui.charts import bar_chart, stacked_day_chart
+from ui.embeds import Reply, card, empty_state, service_down, set_image
+from ui.format import join, plural, to_int, truncate
+from ui.theme import Colour, Limits, brand_colour
+from utilities import ignored_usernames, plex_username, viewer_avatar, viewer_name
 
-# Configure logging for this module
 logger = logging.getLogger("plexbot.visualizations")
 logger.setLevel(logging.INFO)
 
+Play = Tuple[datetime, dict]  # when it started (in the server's timezone), the history row
+Chart = Tuple[str, Callable]  # the one-line takeaway, and a no-argument renderer for a worker thread
 
-_MSG_NO_PLEX_DATA = "The PlexData cog is not loaded. Please contact the administrator."
-_MSG_NO_DATA = "No data available for the specified criteria."
-_MSG_CHART_FAILED = "Failed to generate chart."
+_WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+_KINDS = {"movie": "Movie", "episode": "TV"}  # anything else counts as "Other"
+_MEDIA_COLOURS = {"Movie": f"#{Colour.MOVIE:06X}", "TV": f"#{Colour.TV:06X}", "Other": f"#{Colour.MUSIC:06X}"}
+_TOP_USERS = 10
+
+
+def hour_label(hour: int) -> str:
+    return f"{hour % 12 or 12}{'am' if hour < 12 else 'pm'}"
+
+
+def utc_offset(zone: tzinfo, now: Optional[datetime] = None) -> str:
+    """"UTC+10", "UTC-3:30", "UTC" for the zone's current offset."""
+    offset = (now or datetime.now(zone)).astimezone(zone).utcoffset()
+    minutes = int(offset.total_seconds() // 60) if offset else 0
+    if not minutes:
+        return "UTC"
+    hours, rest = divmod(abs(minutes), 60)
+    return f"UTC{'+' if minutes > 0 else '-'}{hours}" + (f":{rest:02d}" if rest else "")
+
+
+def _busiest(labels, counts) -> Tuple[str, int]:
+    index = max(range(len(counts)), key=counts.__getitem__)
+    return labels[index], counts[index]
+
+
+# --- one function per chart: (takeaway, renderer) ----------------------------------
+
+
+def hours_chart(plays: List[Play]) -> Chart:
+    counts = [0] * 24
+    for started, _row in plays:
+        counts[started.hour] += 1
+    labels = [hour_label(h) for h in range(24)]
+    label, count = _busiest(labels, counts)
+    return (f"Busiest hour: **{label}** · {plural(count, 'play')}",
+            partial(bar_chart, labels, counts, filename="chart-hours.png", label_every=2))
+
+
+def days_chart(plays: List[Play]) -> Chart:
+    counts = [0] * 7
+    for started, _row in plays:
+        counts[started.weekday()] += 1
+    label, count = _busiest(_WEEKDAYS, counts)
+    return (f"Busiest day: **{label}** · {plural(count, 'play')}",
+            partial(bar_chart, [d[:3] for d in _WEEKDAYS], counts, filename="chart-days.png"))
+
+
+def users_chart(plays: List[Play], name: Callable[[dict], str]) -> Chart:
+    counts = Counter(plex_username(row) for _started, row in plays)
+    first_row = {}
+    for _started, row in plays:
+        first_row.setdefault(plex_username(row), row)
+    top = counts.most_common(_TOP_USERS)
+    labels = [truncate(name(first_row[user]), 24) for user, _count in top]
+    values = [count for _user, count in top]
+    return (f"Most active: **{escape_markdown(labels[0])}** · {plural(values[0], 'play')}",
+            partial(bar_chart, labels, values, filename="chart-users.png", horizontal=True))
+
+
+def media_chart(plays: List[Play], *, today: date, days: int) -> Chart:
+    first = today - timedelta(days=days - 1)
+    dates = [first + timedelta(days=i) for i in range(days)]
+    series = {"Movie": [0] * days, "TV": [0] * days, "Other": [0] * days}
+    for started, row in plays:
+        index = (started.date() - first).days
+        if 0 <= index < days:
+            series[_KINDS.get(row.get("media_type"), "Other")][index] += 1
+    totals = {kind: sum(values) for kind, values in series.items()}
+    takeaway = join([
+        plural(totals["TV"], "episode") if totals["TV"] else None,
+        plural(totals["Movie"], "movie") if totals["Movie"] else None,
+        f"{totals['Other']:,} other" if totals["Other"] else None,
+    ])
+    return takeaway, partial(stacked_day_chart, dates, series, _MEDIA_COLOURS, filename="chart-media.png")
+
+
+def months_chart(plays: List[Play], *, today: date, days: int) -> Chart:
+    start = today - timedelta(days=days - 1)
+    months, cursor = [], date(start.year, start.month, 1)
+    while cursor <= today:
+        months.append(cursor)
+        cursor = date(cursor.year + (cursor.month == 12), cursor.month % 12 + 1, 1)
+    index = {(m.year, m.month): i for i, m in enumerate(months)}
+    counts = [0] * len(months)
+    for started, _row in plays:
+        position = index.get((started.year, started.month))
+        if position is not None:
+            counts[position] += 1
+    # "Oct\n2025", "Nov", ..., "Jan\n2026": the year only where it changes, so labels never collide.
+    labels = [m.strftime("%b") + (f"\n{m.year}" if i == 0 or m.month == 1 else "") for i, m in enumerate(months)]
+    label, count = _busiest([m.strftime("%B %Y") for m in months], counts)
+    return (f"Busiest month: **{label}** · {plural(count, 'play')}",
+            partial(bar_chart, labels, counts, filename="chart-months.png",
+                    label_every=max(1, len(months) // 24)))
+
+
+# kind -> (embed title, default days, shows the timezone)
+_CHARTS = {
+    "hours": ("🕘 Busiest hours", 30, True),
+    "days": ("📅 Busiest days", 30, True),
+    "users": ("👥 Most active viewers", 30, False),
+    "media": ("🎞️ Movies and TV, day by day", 30, False),
+    "months": ("📈 Plays by month", 365, False),
+}
+
+
+def _user_option():
+    return nextcord.SlashOption(description="Only this person's plays (default: everyone)", required=False,
+                                autocomplete=True, max_length=100)
+
+
+def _days_option(default: int):
+    return nextcord.SlashOption(description=f"How many days back (default {default})", required=False,
+                                min_value=1, max_value=3650)
 
 
 class Visualizations(commands.Cog):
-    """Commands for creating visual charts and graphs from Plex/Tautulli data."""
+    """Charts of when and what people watch."""
 
     help_category = "charts"
 
     def __init__(self, bot):
-        """Initialize the Visualizations cog."""
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
-        self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
-        self.plex_data = self.bot.get_cog("PlexData")
-        # Defer timezone handling to PlexData cog
-
-        # Theme colors from config
-        self.plex_orange = config.get("colors", "plex_orange", "#E5A00D")
-        self.plex_embed_color = int(self.plex_orange.lstrip("#"), 16)
-        self.plex_grey_dark = config.get("colors", "plex_grey_dark", "#1B1B1B")
-        self.plex_colors = config.get("colors", "media_types", {
-            "Movie": "#E5A00D", "TV": "#F6E0B6", "Other": "#F3D38A", "Unknown": "#F0C75E"
-        })
-
-        # Chart dimensions from config
-        self.chart_width = config.get("charts", "width", 14)
-        self.chart_height = config.get("charts", "height", 6)
-        self.chart_dpi = config.get("charts", "dpi", 100)
-        self.chart_month_format = config.get("charts", "month_format", "%b %Y")
-
-    def _ensure_plex_data(self):
-        """Ensure PlexData cog is available, fetching lazily if needed."""
-        if not self.plex_data:
-            self.plex_data = self.bot.get_cog("PlexData")
-        return self.plex_data is not None
-
-    @commands.group(invoke_without_command=True)
-    async def chart(self, ctx):
-        """
-        Create various charts and visualizations of Plex data.
-
-        Available charts:
-        - hours: Most watched hours of the day
-        - days: Most watched days of the week
-        - users: Most active users
-        - media: Media types watched per day
-        - months: Play count by month
-
-        Usage: plex chart [type] [@user] [days]
-
-        Examples:
-        plex chart hours - Shows hours watched for the last 30 days
-        plex chart days @user - Shows days watched for a specific user
-        plex chart users 60 - Shows most active users for the last 60 days
-        """
-        embed = nextcord.Embed(
-            title="📊 Plex Chart Commands",
-            description="Generate visual charts from your Plex data",
-            color=self.plex_embed_color,
-        )
-
-        embed.add_field(
-            name="Available Charts",
-            value=(
-                "**hours** - Most watched hours of the day\n"
-                "**days** - Most watched days of the week\n"
-                "**users** - Most active users\n"
-                "**media** - Media types watched per day\n"
-                "**months** - Play count by month"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="Usage",
-            value=(
-                "`plex chart [type] [@user] [days]`\n\n"
-                "You can specify a user to see their stats, and/or a number of days to look back."
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="Examples",
-            value=(
-                "`plex chart hours` - Your viewing hours for last 30 days\n"
-                "`plex chart days @user` - When a specific user watches\n"
-                "`plex chart users 60` - Most active users over 60 days\n"
-                "`plex chart media 90` - Media types watched over 90 days\n"
-                "`plex chart months @user 365` - Monthly activity for a user over a year"
-            ),
-            inline=False,
-        )
-
-        await ctx.send(embed=embed)
-
-    @chart.command(name="hours")
-    async def chart_hours(self, ctx, *args):
-        """
-        Displays a chart of the most-watched hours of the day.
-
-        Usage:
-        plex chart hours [@member] [days]
-
-        Examples:
-        plex chart hours - Shows your own statistics for the last 30 days
-        plex chart hours @user - Shows another user's statistics
-        plex chart hours 60 - Shows your statistics for the last 60 days
-        """
-        await ctx.trigger_typing()
-
-        if not self._ensure_plex_data():
-            await ctx.send(_MSG_NO_PLEX_DATA)
-            return
-
-        member, days = await self.plex_data.parse_member_and_days(ctx, args)
-        if member is None and days is None:
-            return  # Invalid argument handled in parse_member_and_days
-
-        data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
-        if not data:
-            await ctx.send(_MSG_NO_DATA)
-            return
-
-        # Process data
-        hour_counts = await self.plex_data.calculate_hour_counts(data)
-        if hour_counts.empty:
-            await ctx.send("No data available for hours watched.")
-            return
-
-        # Get user name for personalized chart only if member was explicitly specified
-        user_name = member.display_name if member else None
-
-        # Generate chart with user name in title (will be None if user wasn't explicitly provided)
-        image = await self.generate_hour_chart(hour_counts, days, user_name)
-
-        # Send image
-        if image:
-            # Add user info to the filename only when specifically looking at someone's data
-            filename = f"hours_{member.display_name if member else 'server'}.png"
-            await ctx.send(file=nextcord.File(fp=image, filename=filename))
-        else:
-            await ctx.send(_MSG_CHART_FAILED)
-
-    @chart.command(name="days")
-    async def chart_days(self, ctx, *args):
-        """
-        Displays a chart of the most-watched days of the week.
-
-        Usage:
-        plex chart days [@member] [days]
-
-        Examples:
-        plex chart days - Shows your own statistics for the last 30 days
-        plex chart days @user - Shows another user's statistics
-        plex chart days 60 - Shows your statistics for the last 60 days
-        """
-        await ctx.trigger_typing()
-
-        if not self._ensure_plex_data():
-            await ctx.send(_MSG_NO_PLEX_DATA)
-            return
-
-        member, days = await self.plex_data.parse_member_and_days(ctx, args)
-        if member is None and days is None:
-            return
-
-        data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
-        if not data:
-            await ctx.send(_MSG_NO_DATA)
-            return
-
-        # Process data
-        day_counts = await self.plex_data.calculate_day_counts(data)
-        if day_counts.empty:
-            await ctx.send("No data available for days watched.")
-            return
-
-        # Get user name for personalized chart only if member was explicitly specified
-        user_name = member.display_name if member else None
-
-        # Generate chart with user name in title (will be None if user wasn't explicitly provided)
-        image = await self.generate_day_chart(day_counts, days, user_name)
-
-        # Send image
-        if image:
-            filename = f"days_{member.display_name if member else 'server'}.png"
-            await ctx.send(file=nextcord.File(fp=image, filename=filename))
-        else:
-            await ctx.send(_MSG_CHART_FAILED)
-
-    @chart.command(name="users")
-    async def chart_users(self, ctx, *args):
-        """
-        Displays a chart of the most active users.
-
-        Usage:
-        plex chart users [days]
-
-        Examples:
-        plex chart users - Shows activity for the last 30 days
-        plex chart users 60 - Shows activity for the last 60 days
-        """
-        await ctx.trigger_typing()
-
-        if not self._ensure_plex_data():
-            await ctx.send(_MSG_NO_PLEX_DATA)
-            return
-
-        member, days = await self.plex_data.parse_member_and_days(ctx, args)
-        if member is not None:
-            await ctx.send("This command does not support specifying a user.")
-            return
-        if days is None:
-            return
-
-        data = await self.plex_data.fetch_watch_history_with_genres(ctx, None, days)
-        if not data:
-            await ctx.send(_MSG_NO_DATA)
-            return
-
-        # Process data
-        user_counts = await self.plex_data.calculate_user_counts(data)
-        if user_counts.empty:
-            await ctx.send("No user data available.")
-            return
-
-        # Generate chart
-        image = await self.generate_user_chart(user_counts, days)
-
-        # Send image
-        if image:
-            await ctx.send(file=nextcord.File(fp=image, filename="active_users.png"))
-        else:
-            await ctx.send(_MSG_CHART_FAILED)
-
-    @chart.command(name="media")
-    async def chart_media(self, ctx, *args):
-        """
-        Displays a line graph of media types watched per day.
-
-        Usage:
-        plex chart media [@member] [days]
-
-        Examples:
-        plex chart media - Shows your own statistics for the last 30 days
-        plex chart media @user - Shows another user's statistics
-        plex chart media 60 - Shows your statistics for the last 60 days
-        """
-        await ctx.trigger_typing()
-
-        if not self._ensure_plex_data():
-            await ctx.send(_MSG_NO_PLEX_DATA)
-            return
-
-        member, days = await self.plex_data.parse_member_and_days(ctx, args)
-        if member is None and days is None:
-            return
-
-        data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
-        if not data:
-            await ctx.send(_MSG_NO_DATA)
-            return
-
-        # Process data
-        media_type_data = await self.plex_data.calculate_media_type_by_day(data)
-        if media_type_data.empty:
-            await ctx.send("No data available.")
-            return
-
-        # Get user name for personalized chart only if member was explicitly specified
-        user_name = member.display_name if member else None
-
-        # Generate chart with user name in title (will be None if user wasn't explicitly provided)
-        image = await self.generate_media_type_by_day_chart(media_type_data, days, user_name)
-
-        # Send image
-        if image:
-            filename = f"media_{member.display_name if member else 'server'}.png"
-            await ctx.send(file=nextcord.File(fp=image, filename=filename))
-        else:
-            await ctx.send(_MSG_CHART_FAILED)
-
-    @chart.command(name="months")
-    async def chart_months(self, ctx, *args):
-        """
-        Displays a bar chart of total play count by month.
-
-        Usage:
-        plex chart months [@member] [days]
-
-        Examples:
-        plex chart months - Shows your own statistics for the last 365 days
-        plex chart months @user - Shows another user's statistics
-        plex chart months 90 - Shows your statistics for the last 90 days
-        """
-        await ctx.trigger_typing()
-
-        if not self._ensure_plex_data():
-            await ctx.send(_MSG_NO_PLEX_DATA)
-            return
-
-        member, days = await self.plex_data.parse_member_and_days(ctx, args)
-        if member is None and days is None:
-            return
-        if days == 30:
-            days = 365  # Default to last 12 months if not specified
-
-        data = await self.plex_data.fetch_watch_history_with_genres(ctx, member, days)
-        if not data:
-            await ctx.send(_MSG_NO_DATA)
-            return
-
-        # Process data
-        month_counts = await self.plex_data.calculate_play_count_by_month(data)
-        if month_counts.empty:
-            await ctx.send("No data available.")
-            return
-
-        # Get user name for personalized chart only if member was explicitly specified
-        user_name = member.display_name if member else None
-
-        # Generate chart with user name in title (will be None if user wasn't explicitly provided)
-        image = await self.generate_play_count_by_month_chart(month_counts, days, user_name)
-
-        # Send image
-        if image:
-            filename = f"months_{member.display_name if member else 'server'}.png"
-            await ctx.send(file=nextcord.File(fp=image, filename=filename))
-        else:
-            await ctx.send(_MSG_CHART_FAILED)
-
-    def _render_bar_chart(self, title: str, xlabel: str, ylabel: str,
-                          x_data, y_data, horizontal: bool = False,
-                          extra_xticks=None, xtick_rotation=None) -> Optional[BytesIO]:
-        """Shared bar chart renderer — handles style, save, and cleanup."""
-        self.set_custom_style()
-        plt.figure(figsize=(self.chart_width, self.chart_height))
-        try:
-            if horizontal:
-                sns.barplot(x=y_data, y=x_data, color=self.plex_orange)
-            else:
-                sns.barplot(x=x_data, y=y_data, color=self.plex_orange)
-
-            plt.title(title, color="white")
-            plt.xlabel(xlabel, color="white")
-            plt.ylabel(ylabel, color="white")
-            if extra_xticks is not None:
-                plt.xticks(extra_xticks)
-            if xtick_rotation is not None:
-                plt.xticks(rotation=xtick_rotation, ha="right")
-            plt.tight_layout()
-
-            image_stream = BytesIO()
-            plt.savefig(
-                image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=self.chart_dpi
-            )
-            image_stream.seek(0)
-            return image_stream
-        except Exception as e:
-            logger.error(f"Error generating chart: {e}")
-            return None
-        finally:
-            plt.close()
-
-    def _user_title_suffix(self, user_name: str = None, days: int = 0,
-                           include_tz: bool = False) -> str:
-        """Build a common title suffix like ' for UserName (UTC+10) (past 30d)'."""
-        parts = ""
-        if user_name:
-            parts += f" for {user_name}"
-        if include_tz and self.plex_data and self.plex_data.timezone:
-            parts += f" {self.plex_data.get_utc_offset_str()}"
-        parts += f" (past {days}d)"
-        return parts
-
-    async def generate_hour_chart(
-        self, hour_counts: pd.Series, days: int, user_name: str = None
-    ) -> Optional[BytesIO]:
-        """Generates a bar chart for hour counts."""
-        suffix = self._user_title_suffix(user_name, days, include_tz=True)
-        return self._render_bar_chart(
-            title=f"Most Watched Hours of the Day{suffix}",
-            xlabel="Hour of Day", ylabel="Watch Count",
-            x_data=hour_counts.index, y_data=hour_counts.values,
-            extra_xticks=range(0, 24),
-        )
-
-    async def generate_day_chart(
-        self, day_counts: pd.Series, days: int, user_name: str = None
-    ) -> Optional[BytesIO]:
-        """Generates a bar chart for day counts."""
-        suffix = self._user_title_suffix(user_name, days)
-        return self._render_bar_chart(
-            title=f"Most Watched Days of the Week{suffix}",
-            xlabel="Days", ylabel="Watch Count",
-            x_data=day_counts.index, y_data=day_counts.values,
-        )
-
-    async def generate_user_chart(self, user_counts: pd.Series, days: int) -> Optional[BytesIO]:
-        """Generates a horizontal bar chart for user counts."""
-        return self._render_bar_chart(
-            title=f"Top {len(user_counts)} Most Active Users (past {days}d)",
-            xlabel="Watch Count", ylabel="Users",
-            x_data=user_counts.index, y_data=user_counts.values,
-            horizontal=True,
-        )
-
-    async def generate_media_type_by_day_chart(
-        self, media_type_data: pd.DataFrame, days: int, user_name: str = None
-    ) -> Optional[BytesIO]:
-        """Generates a line graph for media types per day."""
-        self.set_custom_style()
-        plt.figure(figsize=(self.chart_width, self.chart_height))
-        try:
-            media_type_pivot = media_type_data.pivot(
-                index="date", columns="media_type", values="count"
-            ).fillna(0)
-            media_type_pivot.index = pd.to_datetime(media_type_pivot.index)
-            media_type_pivot = media_type_pivot.sort_index()
-
-            media_type_pivot.plot(
-                kind="line",
-                marker="o",
-                color=[self.plex_colors.get(col, "#FFFFFF") for col in media_type_pivot.columns],
-                figsize=(self.chart_width, self.chart_height),
-            )
-
-            suffix = self._user_title_suffix(user_name, days, include_tz=True)
-            plt.title(f"Media Types Watched Per Day{suffix}", color="white")
-            plt.xlabel("Date", color="white")
-            plt.ylabel("Watch Count", color="white")
-            plt.legend(title="Media Type")
-            plt.tight_layout()
-
-            image_stream = BytesIO()
-            plt.savefig(
-                image_stream, format="png", facecolor=plt.gcf().get_facecolor(), dpi=self.chart_dpi
-            )
-            image_stream.seek(0)
-            return image_stream
-        except Exception as e:
-            logger.error(f"Error generating media type chart: {e}")
-            return None
-        finally:
-            plt.close()
-
-    async def generate_play_count_by_month_chart(
-        self, month_counts: pd.Series, days: int, user_name: str = None
-    ) -> Optional[BytesIO]:
-        """Generates a bar chart for play counts by month."""
-        months = pd.to_datetime(month_counts.index, format="%Y-%m")
-        month_labels = months.strftime(self.chart_month_format)
-        suffix = self._user_title_suffix(user_name, days)
-        return self._render_bar_chart(
-            title=f"Total Play Count by Month{suffix}",
-            xlabel="Month", ylabel="Play Count",
-            x_data=month_labels, y_data=month_counts.values,
-            xtick_rotation=45 if len(month_labels) > 6 else None,
-        )
-
-    def set_custom_style(self) -> None:
-        """Sets a custom Seaborn style to match the Plex theme."""
-        custom_style = {
-            "axes.facecolor": self.plex_grey_dark,
-            "figure.facecolor": self.plex_grey_dark,
-            "axes.edgecolor": self.plex_orange,  # Plex orange for axes edges
-            "axes.labelcolor": "white",
-            "xtick.color": "white",
-            "ytick.color": "white",
-            "text.color": "white",
-            "grid.color": "#2A2A2A",
-            "axes.grid": True,
-            "axes.titlecolor": "white",
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-            "axes.labelsize": 12,
-            "axes.titlesize": 14,
-            "legend.facecolor": self.plex_grey_dark,
-            "legend.edgecolor": "white",
-            "legend.labelcolor": "white",
-            "legend.title_fontsize": 12,
-            "legend.fontsize": 10,
+        self.users = PlexUsers(bot, self.tautulli)
+        self._zone: Optional[tzinfo] = None
+
+    async def timezone(self) -> tzinfo:
+        """The timezone Tautulli is set to (so 9pm means 9pm on the server), else the host's."""
+        if self._zone is None:
+            response = await self.tautulli.get_settings()
+            name = (Tautulli.get_response_data(response, {}) or {}).get("default_timezone") \
+                if Tautulli.check_response(response) else None
+            try:
+                self._zone = ZoneInfo(name) if name else tzlocal.get_localzone()
+            except (ZoneInfoNotFoundError, ValueError):
+                logger.warning(f"Unknown Tautulli timezone {name!r}; using the host's.")
+                self._zone = tzlocal.get_localzone()
+        return self._zone
+
+    async def plays(self, person: Optional[dict], days: int) -> Optional[List[Play]]:
+        """Plays in the last `days` days (one person's, or everyone's but ignored users'); None if
+        Tautulli didn't answer."""
+        zone = await self.timezone()
+        since = datetime.now(zone) - timedelta(days=days)
+        params = {
+            # Tautulli's "after" is a whole date; the exact cutoff is applied below.
+            "after": (since.date() - timedelta(days=1)).isoformat(),
+            "length": to_int(config.get("defaults", "history_length", 10000), 10000),
+            "order_column": "date", "order_dir": "desc",
         }
-        sns.set_theme(style="darkgrid", rc=custom_style)
+        if person:
+            params["user_id"] = person.get("user_id")
+        response = await self.tautulli.get_history(params)
+        if not Tautulli.check_response(response):
+            logger.error("Failed to retrieve watch history from Tautulli.")
+            return None
+        ignored = set() if person else ignored_usernames()
+        plays = []
+        for row in (Tautulli.get_response_data(response, {}) or {}).get("data") or []:
+            started = to_int(row.get("started")) or to_int(row.get("date"))
+            if not started or plex_username(row) in ignored:
+                continue
+            moment = datetime.fromtimestamp(started, zone)
+            if moment >= since:
+                plays.append((moment, row))
+        return plays
+
+    def _build(self, kind: str, plays: List[Play], days: int, today: date) -> Chart:
+        if kind == "hours":
+            return hours_chart(plays)
+        if kind == "days":
+            return days_chart(plays)
+        if kind == "users":
+            return users_chart(plays, lambda row: viewer_name(self.bot, row))
+        if kind == "media":
+            return media_chart(plays, today=today, days=days)
+        return months_chart(plays, today=today, days=days)
+
+    async def send_chart(self, interaction: nextcord.Interaction, kind: str, user: Optional[str],
+                         days: Optional[int]) -> None:
+        await interaction.response.defer()
+        title, default_days, shows_zone = _CHARTS[kind]
+        days = days or default_days
+        person = None
+        if user:
+            person, ok = await self.users.resolve(interaction, user)
+            if not ok:
+                return
+        plays = await self.plays(person, days)
+        if plays is None:
+            await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
+            return
+        who = escape_markdown(self.users.name(person)) if person else None
+        if not plays:
+            message = f"**{who}** hasn't" if who else "Nobody has"
+            await empty_state(f"{message} watched anything in the last {plural(days, 'day')}.").send(interaction)
+            return
+        zone = await self.timezone()
+        takeaway, render = self._build(kind, plays, days, datetime.now(zone).date())
+        image = await asyncio.to_thread(render)
+        context = join([
+            f"Last {plural(days, 'day')}",
+            plural(len(plays), "play"),
+            f"times in {zone} ({utc_offset(zone)})" if shows_zone else None,
+        ])
+        embed = card(title=title, description=f"-# {context}\n{takeaway}", colour=brand_colour())
+        if person:
+            embed.set_author(name=truncate(self.users.name(person), Limits.AUTHOR),
+                             icon_url=viewer_avatar(self.bot, person) or None)
+        set_image(embed, image)
+        await Reply([embed], [image] if image else []).send(interaction)
+
+    # --- /plex chart ... ---------------------------------------------------------
+
+    @plex.subcommand(name="chart", description="Charts of when and what people watch")
+    async def chart(self, interaction: nextcord.Interaction):
+        """Group root; Discord only ever invokes its subcommands."""
+
+    @chart.subcommand(name="hours", description="Which hours of the day people watch")
+    async def chart_hours(self, interaction: nextcord.Interaction, user: str = _user_option(),
+                          days: int = _days_option(30)):
+        await self.send_chart(interaction, "hours", user, days)
+
+    @chart.subcommand(name="days", description="Which days of the week people watch")
+    async def chart_days(self, interaction: nextcord.Interaction, user: str = _user_option(),
+                         days: int = _days_option(30)):
+        await self.send_chart(interaction, "days", user, days)
+
+    @chart.subcommand(name="users", description="Who watches the most")
+    async def chart_users(self, interaction: nextcord.Interaction, days: int = _days_option(30)):
+        await self.send_chart(interaction, "users", None, days)
+
+    @chart.subcommand(name="media", description="Movies, TV and other plays per day")
+    async def chart_media(self, interaction: nextcord.Interaction, user: str = _user_option(),
+                          days: int = _days_option(30)):
+        await self.send_chart(interaction, "media", user, days)
+
+    @chart.subcommand(name="months", description="Plays per month")
+    async def chart_months(self, interaction: nextcord.Interaction, user: str = _user_option(),
+                           days: int = _days_option(365)):
+        await self.send_chart(interaction, "months", user, days)
+
+    @chart_hours.on_autocomplete("user")
+    @chart_days.on_autocomplete("user")
+    @chart_media.on_autocomplete("user")
+    @chart_months.on_autocomplete("user")
+    async def _chart_user_autocomplete(self, interaction: nextcord.Interaction, user: str):
+        await interaction.response.send_autocomplete(await self.users.choices(user))
 
 
 def setup(bot):
