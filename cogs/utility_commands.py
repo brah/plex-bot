@@ -5,6 +5,8 @@ import nextcord
 from nextcord.ext import commands
 
 from config import config
+from errors import slash_equivalent
+from slash_commands import command_paths
 
 logger = logging.getLogger("plexbot.utility_commands")
 logger.setLevel(logging.INFO)
@@ -28,13 +30,19 @@ class UtilityCommands(commands.Cog):
             )
             embed.set_thumbnail(url=self.plex_image)
 
+            # Slash commands, grouped by the cog that defines each one
+            slash_by_cog = {}
+            for path, cmd in command_paths(self.bot):
+                slash_by_cog.setdefault(getattr(cmd, "parent_cog", None), []).append(path)
+
             # Collecting commands and categorizing them by cog
             for cog_name, cog in sorted(
                 self.bot.cogs.items(),
-                key=lambda x: len(x[1].get_commands()),
+                key=lambda x: len(x[1].get_commands()) + len(slash_by_cog.get(x[1], [])),
                 reverse=True,
             ):
-                cog_commands = [
+                cog_commands = list(slash_by_cog.get(cog, []))
+                cog_commands += [
                     (
                         f"{prefix}{cmd.name} [{' '.join(cmd.aliases)}]"
                         if cmd.aliases
@@ -50,13 +58,23 @@ class UtilityCommands(commands.Cog):
                         inline=False,
                     )
 
-            embed.set_footer(text="Use plex help <command> for more info on a command.")
+            embed.set_footer(
+                text="Use plex help <command> for more info on a command. "
+                "Type /plex to browse slash commands."
+            )
             await ctx.send(embed=embed)
         else:
             command_name = commands[0]
             cmd = self.bot.get_command(command_name)
             if not cmd:
-                await ctx.send(f"Command not found: {command_name}")
+                slash_paths = [path for path, _ in command_paths(self.bot)]
+                replacement = slash_equivalent(command_name, slash_paths)
+                if replacement:
+                    await ctx.send(
+                        f"`{command_name}` is now a slash command: type `{replacement}` to use it."
+                    )
+                else:
+                    await ctx.send(f"Command not found: {command_name}")
                 return
 
             # Build detailed command information

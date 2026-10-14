@@ -2,10 +2,12 @@
 
 import logging
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 import nextcord
 from nextcord.ext import commands
+
+from slash_commands import command_paths
 
 # Configure logging
 logger = logging.getLogger("plexbot.errors")
@@ -80,6 +82,40 @@ ERROR_STYLES: Dict[ErrorCategory, ErrorStyle] = {
 }
 
 
+# Prefix commands that became a slash command under a different name.
+SLASH_RENAMES: Dict[str, str] = {"killstream": "watchers"}
+
+
+def slash_equivalent(invoked: Optional[str], slash_paths: Iterable[str]) -> Optional[str]:
+    """Return the slash command replacing a removed prefix command, e.g. "status" -> "/plex status".
+
+    Matches the first word under each group, so a nested group like "/plex chart hours"
+    answers for "chart" with "/plex chart".
+    """
+    if not invoked:
+        return None
+    name = invoked.lower()
+    name = SLASH_RENAMES.get(name, name)
+    for path in slash_paths:
+        parts = path.lstrip("/").split()
+        head = parts[:2] if len(parts) > 1 else parts
+        if head[-1] == name:
+            return "/" + " ".join(head)
+    return None
+
+
+def invoked_command_path(interaction: nextcord.Interaction) -> str:
+    """The full invoked slash command, e.g. "/plex status", from the interaction payload."""
+    data = interaction.data or {}
+    parts = [data.get("name", "command")]
+    options = data.get("options", [])
+    # Subcommand (type 1) and subcommand-group (type 2) options carry the nested name.
+    while options and options[0].get("type") in (1, 2):
+        parts.append(options[0]["name"])
+        options = options[0].get("options", [])
+    return "/" + " ".join(parts)
+
+
 class ErrorHandler:
     """Centralized error handling for PlexBot."""
 
@@ -134,8 +170,14 @@ class ErrorHandler:
         # Log the error with the appropriate level
         self.log_error(error, category, style)
 
-        # If it's a CommandNotFound error, we typically don't respond
+        # Unknown commands get no reply, except ones that moved to a slash command.
         if category == ErrorCategory.COMMAND_NOT_FOUND:
+            replacement = slash_equivalent(ctx.invoked_with, self.slash_command_paths())
+            if replacement:
+                await ctx.send(
+                    f"`{ctx.prefix}{ctx.invoked_with}` is now `{replacement}` — "
+                    "type `/plex` to see all commands."
+                )
             return
 
         # Create an appropriate error message
@@ -180,12 +222,45 @@ class ErrorHandler:
 
         await self.handle_error(ctx, error)
 
+    def slash_command_paths(self) -> list:
+        return [path for path, _ in command_paths(self.bot)]
+
+    async def application_error_handler(
+        self, interaction: nextcord.Interaction, error: nextcord.ApplicationError
+    ) -> None:
+        """Log a failed slash command and tell the user privately, instead of a silent timeout."""
+        if isinstance(error, nextcord.ApplicationInvokeError):
+            error = error.original
+        category = self.categorize_error(error)
+        style = ERROR_STYLES.get(category, ERROR_STYLES[ErrorCategory.UNCATEGORIZED])
+        self.log_error(error, category, style)
+
+        path = invoked_command_path(interaction)
+        embed = nextcord.Embed(
+            title=f"{style.emoji} {style.title}",
+            description=f"Something went wrong running `{path}`. The error has been logged.",
+            color=style.color,
+        )
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+        except nextcord.HTTPException as e:
+            logger.warning(f"Could not send error reply for {path}: {e}")
+
     def setup(self) -> None:
         """Set up the error handler with the bot."""
 
         @self.bot.event
         async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
             await self.global_error_handler(ctx, error)
+
+        @self.bot.event
+        async def on_application_command_error(
+            interaction: nextcord.Interaction, error: nextcord.ApplicationError
+        ) -> None:
+            await self.application_error_handler(interaction, error)
 
 
 # Custom exception classes for better error categorization

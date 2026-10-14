@@ -157,7 +157,8 @@ class Tautulli:
             error_msg = "Either session_key or session_id is required."
             logger.error(error_msg)
             return 400
-        params = {"message": message}
+        # Omit an absent message: aiohttp/yarl reject None query values outright.
+        params = {"message": message} if message else {}
         if session_key is not None:
             params["session_key"] = session_key
         else:

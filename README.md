@@ -77,7 +77,8 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
            "server_id": "<Your Discord Server ID>",
            "top_role_id": 123456789,
            "second_role_id": 123456789,
-           "third_role_id": 123456789
+           "third_role_id": 123456789,
+           "stream_manager_ids": []
        },
        "qbittorrent": {
            "ip": "localhost",
@@ -92,6 +93,8 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
    ```
 
    *Note: `top_role_id`, `second_role_id`, and `third_role_id` are role IDs which you've created to highlight the top 3 media watchers on your server.*
+
+   *`server_id` registers slash commands to your server so they appear instantly; if left blank they register globally, which can take up to an hour. `stream_manager_ids` lists Discord user or role IDs (besides admins) allowed to stop streams from `/plex watchers`. If slash commands never appear, re-invite the bot with the `applications.commands` scope.*
 
 4. Run the bot:
 
@@ -211,6 +214,8 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 
 ## Commands
 
+Commands are moving to slash commands: type `/plex` in Discord to see them all. Admin-only commands live under `/plexadmin`, which only admins can see. Commands still listed with the `plex ` prefix haven't moved yet.
+
 | Command | Description |
 |---------|-------------|
 | `plex top` | Shows the top Plex users and assigns roles |
@@ -218,7 +223,6 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 | `plex tv <show name>` | Looks up a TV show in your library with watch stats |
 | `plex movie <movie name>` | Looks up a movie in your library with watch stats |
 | `plex recommend [@user]` | Recommends media based on watch history |
-| `plex watchers` | Shows who's currently watching Plex |
 | `plex downloading` | Shows current qBittorrent downloads |
 | `plex recent [amount]` | Shows recently added media |
 | `plex stats [days]` | Shows server statistics for the specified time period |
@@ -231,9 +235,9 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 | `plex chart users [days]` | Shows most active users |
 | `plex chart media [@user] [days]` | Shows media types watched per day |
 | `plex chart months [@user] [days]` | Shows activity by month |
-| `plex status` | Shows server status information |
-| `plex killstream [session_key] [message]` | Terminates a user's stream (admin only) |
-| `plex logs [level] [search]` | DMs you recent log records plus the full log file (admin only) |
+| `/plex status` | Shows server status information |
+| `/plex watchers [stop] [message]` | Shows who's currently watching, with Refresh and Manage streams buttons; stream managers can stop a stream from the buttons or with `stop:` |
+| `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
 | `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
 | `plex ignore [plex_username]` | Toggles ignoring a user in stats (admin only) |
 | `plex refresh_cache` | Manually refreshes the media cache (admin only) |
@@ -254,7 +258,7 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 
 The bot logs information to both the console and `plexbot.log`. If you're experiencing issues, check these logs for details. `plexbot.log` rotates at 4 MB, keeping three older files (`plexbot.log.1`–`.3`).
 
-Admins can also run `plex logs` in Discord: the bot DMs the most recent records plus the full log file, with tokens, API keys and passwords redacted. Filter by minimum level and/or search text, e.g. `plex logs error`, `plex logs tautulli`, `plex logs warn timed out`; quote text to search for a level word itself (`plex logs "error"`).
+Admins can also run `/plexadmin logs` in Discord: the bot replies privately with the most recent records plus the full log file, with tokens, API keys and passwords redacted. Optionally pick a minimum `level` and/or a `search` text.
 
 ## Technical Details
 

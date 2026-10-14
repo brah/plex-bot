@@ -4,10 +4,10 @@ import logging
 from pathlib import Path
 
 from cogs.server_commands import (
+    _build_logs_reply,
     _filter_records,
     _find_log_path,
     _fit_tail,
-    _parse_logs_query,
     _record_level,
     _redact,
     _split_records,
@@ -23,38 +23,6 @@ ERROR_REC = (
 )
 CRIT_REC = "2026-10-14 17:54:00 CRITICAL plexbot: Tautulli timed out completely"
 LOG_TEXT = "\n".join([INFO_REC, WARN_REC, ERROR_REC, CRIT_REC]) + "\n"
-
-
-class TestParseLogsQuery:
-    def test_none(self):
-        assert _parse_logs_query(None) == (None, None)
-
-    def test_blank(self):
-        assert _parse_logs_query("   ") == (None, None)
-
-    def test_level_only(self):
-        assert _parse_logs_query("error") == (logging.ERROR, None)
-
-    def test_level_case_insensitive(self):
-        assert _parse_logs_query("WARNING") == (logging.WARNING, None)
-
-    def test_warn_alias(self):
-        assert _parse_logs_query("warn") == (logging.WARNING, None)
-
-    def test_search_only(self):
-        assert _parse_logs_query("tautulli timed out") == (None, "tautulli timed out")
-
-    def test_level_and_search(self):
-        assert _parse_logs_query("error tautulli") == (logging.ERROR, "tautulli")
-
-    def test_level_and_quoted_search(self):
-        assert _parse_logs_query('error "timed out"') == (logging.ERROR, "timed out")
-
-    def test_quoted_level_word_is_search(self):
-        assert _parse_logs_query('"error"') == (None, "error")
-
-    def test_single_quoted_search(self):
-        assert _parse_logs_query("'info'") == (None, "info")
 
 
 class TestSplitRecords:
@@ -155,3 +123,40 @@ class TestFindLogPath:
         log = logging.getLogger("test_logs_none")
         log.propagate = False
         assert _find_log_path(log) is None
+
+
+class TestBuildLogsReply:
+    def test_unfiltered(self):
+        content, files = _build_logs_reply(LOG_TEXT, None, None)
+        assert content.startswith("Last 4 of 4 log records")
+        assert CRIT_REC in content
+        assert [name for name, _ in files] == ["plexbot.log"]
+        assert files[0][1] == LOG_TEXT.encode("utf-8")
+
+    def test_level_filter_header(self):
+        content, files = _build_logs_reply(LOG_TEXT, logging.ERROR, None)
+        assert content.startswith("**ERROR+** · 2 matches, showing last 2")
+        assert INFO_REC not in content
+        assert [name for name, _ in files] == ["plexbot.log"]
+
+    def test_no_matches(self):
+        content, files = _build_logs_reply(LOG_TEXT, None, "nothing like this")
+        assert content.startswith('No log records **matching "nothing like this"**')
+        assert "```" not in content
+        assert [name for name, _ in files] == ["plexbot.log"]
+
+    def test_overflow_attaches_matches_file(self):
+        text = "".join(f"2026-10-14 10:00:00 INFO plexbot: routine {i}\n" for i in range(200))
+        content, files = _build_logs_reply(text, None, "routine")
+        assert len(content) <= 2000
+        assert [name for name, _ in files] == ["plexbot.log", "plexbot-matches.log"]
+        assert files[1][1].decode("utf-8").count("routine") == 200
+
+    def test_code_fences_escaped_in_preview(self):
+        text = "2026-10-14 10:00:00 INFO plexbot: has ``` fence\n"
+        content, _ = _build_logs_reply(text, None, None)
+        assert content.count("```") == 2  # only the preview block's own fences
+
+    def test_long_search_truncated_in_header(self):
+        content, _ = _build_logs_reply(LOG_TEXT, None, "x" * 200)
+        assert "x" * 60 not in content
