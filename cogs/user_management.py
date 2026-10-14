@@ -13,6 +13,8 @@ logger.setLevel(logging.INFO)
 
 
 class UserManagement(commands.Cog):
+    help_category = "admin"
+
     def __init__(self, bot):
         self.bot = bot
 

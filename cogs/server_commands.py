@@ -397,6 +397,8 @@ def build_status_reply(server: dict, libraries, activity: Optional[dict], update
 
 
 class ServerCommands(commands.Cog):
+    help_category = "watching"
+
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
@@ -456,7 +458,7 @@ class ServerCommands(commands.Cog):
                 activity_text = f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
                 activity_type = nextcord.ActivityType.playing
             else:
-                activity_text = ": plex help"
+                activity_text = "/plex help"
                 activity_type = nextcord.ActivityType.listening
 
             await self.bot.change_presence(

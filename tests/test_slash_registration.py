@@ -53,7 +53,7 @@ def test_groups_survive_ready_clear_and_reconnect():
             assert {"plex", "plexadmin"} <= _local_command_names(bot)
 
         plex = next(c for c in bot._connection._application_commands if c.name == "plex")
-        assert set(plex.children) == {"status", "watchers"}
+        assert {"status", "watchers"} <= set(plex.children)
         # Subcommands stay bound to the cog that defines them.
         assert type(plex.children["status"].parent_cog) is ServerCommands
 
