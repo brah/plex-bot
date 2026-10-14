@@ -6,6 +6,7 @@ import nextcord
 from nextcord.ext import commands
 
 from config import config
+from errors import LoggedView
 from utilities import UserMappings, prepare_thumbnail_for_embed
 from tautulli_wrapper import Tautulli
 from media_cache import MediaCache
@@ -16,7 +17,7 @@ logger = logging.getLogger("plexbot.recommendations")
 logger.setLevel(logging.INFO)
 
 
-class RecommendationView(nextcord.ui.View):
+class RecommendationView(LoggedView):
     """Interactive recommendation browser: numbered buttons drill into each pick."""
 
     def __init__(self, ctx, member, recommendations: list, user_counts: list, plex_username: str, cog, timeout: float = 180):

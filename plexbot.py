@@ -19,7 +19,7 @@ from nextcord.ext import commands
 # Import our new configuration and error handling systems
 from config import config
 from errors import ErrorHandler
-from slash_commands import register_groups
+from slash_commands import SlashGroups
 
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
@@ -122,6 +122,16 @@ async def load_cogs(bot):
             logger.exception(f"Failed to load cog {cog_name}: {e}")
 
 
+def install_slash_groups(bot) -> None:
+    """Add the cog owning the /plex and /plexadmin roots.
+
+    Subcommands bind to their own cogs when those are instantiated, so this can run
+    before or after load_cogs; being a cog is what keeps the groups registered
+    across nextcord's READY state reset and every reconnect.
+    """
+    bot.add_cog(SlashGroups())
+
+
 class PlexBot(commands.Bot):
     """Bot subclass that owns one-time async initialization and graceful teardown.
 
@@ -136,15 +146,22 @@ class PlexBot(commands.Bot):
         because nextcord — unlike discord.py — never calls setup_hook() itself."""
         self.shared_resources = await initialize_resources()
         logger.info("Shared resources initialized")
+        install_slash_groups(self)
         await load_cogs(self)
-        # After the cogs: they bind the /plex and /plexadmin subcommands as they load.
-        register_groups(self)
 
     async def start(self, *args, **kwargs) -> None:
         # nextcord (unlike discord.py) never invokes setup_hook(); call it
         # ourselves so shared resources + cogs initialize once before connecting.
         await self.setup_hook()
         await super().start(*args, **kwargs)
+
+    async def on_error(self, event_method: str, *args, **kwargs) -> None:
+        """Log exceptions from event handlers, such as the command sync on connect.
+
+        nextcord's default prints them to stderr, so they never reach plexbot.log.
+        Called from inside the failing handler's except block, so the traceback is live.
+        """
+        logger.exception(f"Unhandled exception in {event_method}")
 
     async def close(self) -> None:
         """Shut down the gateway first, then close shared aiohttp sessions.

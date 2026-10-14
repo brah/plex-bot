@@ -5,6 +5,7 @@ import difflib
 import logging
 import random
 from config import config
+from errors import LoggedView
 
 import nextcord
 from nextcord.ext import commands
@@ -74,7 +75,7 @@ def _format_torrent_field(dl) -> str:
     return f"`{bar}` {pct:.1f}%\n{speed_str}  \u2022  {size_str}  \u2022  ETA {eta_str}{seed_str}"
 
 
-class RecentlyAddedView(nextcord.ui.View):
+class RecentlyAddedView(LoggedView):
     """Paginated view of recently added media \u2014 one item per page with Prev/Next buttons."""
 
     def __init__(self, ctx, items: list, tautulli_ip: str, embed_color: int, use_https: bool = False, api_key: str = "", timeout: float = 120):
@@ -188,7 +189,7 @@ class RecentlyAddedView(nextcord.ui.View):
                 pass
 
 
-class RandomMediaView(nextcord.ui.View):
+class RandomMediaView(LoggedView):
     """Interactive view with a 'Roll Again' button for the random command."""
 
     def __init__(self, ctx, items: list, tautulli_ip: str, embed_color: int, use_https: bool = False, api_key: str = "", timeout: float = 120):

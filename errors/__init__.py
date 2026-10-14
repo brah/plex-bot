@@ -263,6 +263,39 @@ class ErrorHandler:
             await self.application_error_handler(interaction, error)
 
 
+_COMPONENT_ERROR_TEXT = "Something went wrong with that. The error has been logged."
+
+
+async def _reply_privately(interaction: nextcord.Interaction, text: str) -> None:
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(text, ephemeral=True)
+        else:
+            await interaction.response.send_message(text, ephemeral=True)
+    except nextcord.HTTPException as e:
+        logger.warning(f"Could not send error reply: {e}")
+
+
+class LoggedView(nextcord.ui.View):
+    """View whose callback errors are logged and answered privately.
+
+    nextcord's default prints them to stderr, so they never reach plexbot.log and the
+    user just sees "This interaction failed".
+    """
+
+    async def on_error(self, error: Exception, item: nextcord.ui.Item, interaction: nextcord.Interaction):
+        logger.error(f"Error in {type(self).__name__} ({type(item).__name__}): {error}", exc_info=error)
+        await _reply_privately(interaction, _COMPONENT_ERROR_TEXT)
+
+
+class LoggedModal(nextcord.ui.Modal):
+    """Modal whose submit errors are logged and answered privately (see LoggedView)."""
+
+    async def on_error(self, error: Exception, interaction: nextcord.Interaction):
+        logger.error(f"Error in {type(self).__name__}: {error}", exc_info=error)
+        await _reply_privately(interaction, _COMPONENT_ERROR_TEXT)
+
+
 # Custom exception classes for better error categorization
 class PlexBotError(Exception):
     """Base exception class for PlexBot errors."""

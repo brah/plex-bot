@@ -11,6 +11,7 @@ import nextcord
 from nextcord.ext import commands, tasks
 
 from config import config
+from errors import LoggedModal, LoggedView
 from utilities import (
     UserMappings,
     get_git_revision_short_hash,
@@ -286,7 +287,7 @@ def _format_session_field(session: dict) -> tuple:
     return user, "\n".join(lines)
 
 
-class StopStreamModal(nextcord.ui.Modal):
+class StopStreamModal(LoggedModal):
     """Asks for an optional message to the viewer, then stops the chosen stream."""
 
     def __init__(self, cog: "ServerCommands", session_id: str, label: str, watchers_view: "WatchersView"):
@@ -326,7 +327,7 @@ class StreamSelect(nextcord.ui.StringSelect):
         )
 
 
-class StopStreamPanel(nextcord.ui.View):
+class StopStreamPanel(LoggedView):
     """Private (ephemeral) panel listing streams a manager can stop."""
 
     def __init__(self, cog: "ServerCommands", choices: dict[str, str], watchers_view: "WatchersView"):
@@ -336,7 +337,7 @@ class StopStreamPanel(nextcord.ui.View):
         self.add_item(StreamSelect(choices))
 
 
-class WatchersView(nextcord.ui.View):
+class WatchersView(LoggedView):
     """Buttons under the public /plex watchers message: Refresh for anyone, Manage for stream managers."""
 
     def __init__(self, cog: "ServerCommands", timeout: float = 600):

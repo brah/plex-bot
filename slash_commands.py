@@ -18,37 +18,36 @@ the cog whose class defines it::
 """
 
 import nextcord
+from nextcord.ext import commands
 
 
-@nextcord.slash_command(name="plex", description="PlexBot commands")
-async def plex(interaction: nextcord.Interaction):
-    """Group root; Discord only ever invokes its subcommands."""
+class SlashGroups(commands.Cog):
+    """Owns the /plex and /plexadmin group roots.
 
-
-@nextcord.slash_command(
-    name="plexadmin",
-    description="PlexBot admin commands",
-    default_member_permissions=nextcord.Permissions(administrator=True),
-    # Guild-only: member permissions don't apply in DMs, so DM use would be open to anyone.
-    contexts=[nextcord.InteractionContextType.guild],
-)
-async def plexadmin(interaction: nextcord.Interaction):
-    """Group root; Discord only ever invokes its subcommands."""
-
-
-GROUPS = (plex, plexadmin)
-
-
-def register_groups(bot) -> None:
-    """Register the groups with the bot.
-
-    Call after the cogs are loaded: each cog binds its subcommands when it is
-    instantiated, and a group with no subcommands isn't registered at all.
+    The roots must live in a cog: on gateway READY nextcord clears its application
+    command state, and each connect re-adds only commands defined on the bot or in a
+    cog. A group registered any other way is dropped, and the following sync then
+    deletes it from Discord.
     """
-    for group in GROUPS:
-        if group.children:
-            group.from_callback(group.callback, call_children=False)
-            bot.add_application_command(group, use_rollout=True)
+
+    @nextcord.slash_command(name="plex", description="PlexBot commands")
+    async def plex(self, interaction: nextcord.Interaction):
+        """Group root; Discord only ever invokes its subcommands."""
+
+    @nextcord.slash_command(
+        name="plexadmin",
+        description="PlexBot admin commands",
+        default_member_permissions=nextcord.Permissions(administrator=True),
+        # Guild-only: member permissions don't apply in DMs, so DM use would be open to anyone.
+        contexts=[nextcord.InteractionContextType.guild],
+    )
+    async def plexadmin(self, interaction: nextcord.Interaction):
+        """Group root; Discord only ever invokes its subcommands."""
+
+
+# Shorthands for cogs attaching subcommands: @plex.subcommand(...)
+plex = SlashGroups.plex
+plexadmin = SlashGroups.plexadmin
 
 
 def command_paths(bot) -> list:
