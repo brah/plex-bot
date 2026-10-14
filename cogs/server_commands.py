@@ -1,7 +1,10 @@
 # cogs/server_commands.py
 
 import asyncio
+import io
 import logging
+import re
+from pathlib import Path
 
 import aiohttp
 import nextcord
@@ -17,6 +20,127 @@ from tautulli_wrapper import Tautulli
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
 logger.setLevel(logging.INFO)
+
+# --- `plex logs` helpers ---------------------------------------------------
+
+# A record starts with the "YYYY-MM-DD HH:MM:SS LEVEL " prefix from plexbot.py's log
+# format; lines without it (traceback lines) belong to the record above.
+_RECORD_START = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (DEBUG|INFO|WARNING|ERROR|CRITICAL) ")
+_LEVEL_WORDS = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "warn": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
+# Secrets embedded in logged URLs — aiohttp errors include the full request URL,
+# and Tautulli/TMDB keys travel as query parameters.
+_SECRET_PARAM = re.compile(r"((?:apikey|api_key|token|password)=)[^&\s'\"]+", re.IGNORECASE)
+_REDACTED = "[REDACTED]"
+# Leaves room in Discord's 2000-char message limit for the header and code fences.
+_PREVIEW_BUDGET = 1800
+_HEADER_SEARCH_MAX = 60
+
+
+def _strip_quotes(text: str) -> str:
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        return text[1:-1]
+    return text
+
+
+def _parse_logs_query(query: str | None) -> tuple[int | None, str | None]:
+    """Split `plex logs` input into (minimum level, search text).
+
+    A leading level word (`error`, `warn`, ...) is a minimum-level filter; the rest
+    is a case-insensitive search. Quoted input is always search text.
+    """
+    query = (query or "").strip()
+    if not query:
+        return None, None
+    min_level = None
+    if query[0] not in "\"'":
+        first, *rest = query.split(maxsplit=1)
+        if first.lower() in _LEVEL_WORDS:
+            min_level = _LEVEL_WORDS[first.lower()]
+            query = rest[0] if rest else ""
+    return min_level, _strip_quotes(query.strip()) or None
+
+
+def _split_records(text: str) -> list[str]:
+    """Group log lines into records, keeping traceback lines with their record."""
+    records: list[str] = []
+    for line in text.splitlines():
+        if _RECORD_START.match(line) or not records:
+            records.append(line)
+        else:
+            records[-1] += "\n" + line
+    return records
+
+
+def _record_level(record: str) -> int | None:
+    match = _RECORD_START.match(record)
+    return _LEVEL_WORDS[match.group(1).lower()] if match else None
+
+
+def _filter_records(records: list[str], min_level: int | None, search: str | None) -> list[str]:
+    needle = search.lower() if search else None
+    matches = []
+    for record in records:
+        if min_level is not None:
+            level = _record_level(record)
+            if level is None or level < min_level:
+                continue
+        if needle and needle not in record.lower():
+            continue
+        matches.append(record)
+    return matches
+
+
+def _redact(text: str, secrets) -> str:
+    """Replace configured secret values and secret-looking URL parameters."""
+    values = {str(s) for s in secrets if s not in (None, "")}
+    # Longest first, so a secret containing another is replaced whole.
+    for value in sorted(values, key=len, reverse=True):
+        text = text.replace(value, _REDACTED)
+    return _SECRET_PARAM.sub(rf"\g<1>{_REDACTED}", text)
+
+
+def _fit_tail(records: list[str], budget: int) -> list[str]:
+    """Return the most recent records whose newline-joined length fits in budget.
+
+    If even the newest record is too long, it is cut short rather than dropped.
+    """
+    shown: list[str] = []
+    used = 0
+    for record in reversed(records):
+        cost = len(record) + (1 if shown else 0)
+        if used + cost > budget:
+            if not shown:
+                shown.append(record[: budget - 1] + "…")
+            break
+        shown.append(record)
+        used += cost
+    return shown[::-1]
+
+
+def _find_log_path(log: logging.Logger | None = None) -> Path | None:
+    """Locate the file the bot logs to, from the first FileHandler up the logger tree."""
+    current = log or logging.getLogger()
+    while current:
+        for handler in current.handlers:
+            if isinstance(handler, logging.FileHandler):
+                return Path(handler.baseFilename)
+        if not current.propagate:
+            break
+        current = current.parent
+    return None
+
+
+def _format_file_size(size: int) -> str:
+    if size >= 1_000_000:
+        return f"{size / 1_000_000:.1f} MB"
+    return f"{max(size / 1000, 0.1):.1f} KB"
 
 
 class ServerCommands(commands.Cog):
@@ -174,6 +298,83 @@ class ServerCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Exception occurred while terminating session {session_key}: {e}")
             await ctx.send("Failed to terminate the session due to an error.")
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def logs(self, ctx, *, query: str = None):
+        """DMs you the most recent bot log records plus the full log file.
+
+        Optionally filter: `plex logs [level] [search text]`, e.g. `plex logs error`,
+        `plex logs tautulli`, `plex logs warn timed out`. Quote text to search for a
+        level word itself: `plex logs "error"`.
+        """
+        min_level, search = _parse_logs_query(query)
+
+        log_path = _find_log_path()
+        if log_path is None or not log_path.exists():
+            await ctx.send("No log file found.")
+            return
+        raw = await asyncio.to_thread(log_path.read_text, encoding="utf-8", errors="replace")
+        text = _redact(raw, self._log_secrets())
+        records = _split_records(text)
+        if not records:
+            await ctx.send("The log file is empty.")
+            return
+
+        filtered = min_level is not None or search is not None
+        matches = _filter_records(records, min_level, search)
+        # Escape code fences so a logged ``` can't break out of the preview block.
+        shown = _fit_tail([r.replace("```", "``​`") for r in matches], _PREVIEW_BUDGET)
+
+        full_log = text.encode("utf-8")
+        files = [nextcord.File(io.BytesIO(full_log), filename="plexbot.log")]
+        attached = f"full log attached ({_format_file_size(len(full_log))})"
+        if filtered:
+            parts = []
+            if min_level is not None:
+                parts.append(f"{logging.getLevelName(min_level)}+")
+            if search:
+                shown_search = search
+                if len(search) > _HEADER_SEARCH_MAX:
+                    shown_search = search[: _HEADER_SEARCH_MAX - 1] + "…"
+                parts.append(f'matching "{shown_search}"')
+            description = " ".join(parts)
+            if not matches:
+                header = f"No log records **{description}** · {attached}"
+            else:
+                header = (
+                    f"**{description}** · {len(matches)} matches, showing last {len(shown)} · {attached}"
+                )
+            if len(matches) > len(shown):
+                matches_log = ("\n".join(matches) + "\n").encode("utf-8")
+                files.append(nextcord.File(io.BytesIO(matches_log), filename="plexbot-matches.log"))
+        else:
+            header = f"Last {len(shown)} of {len(records)} log records · {attached}"
+
+        content = header + ("\n```\n" + "\n".join(shown) + "\n```" if shown else "")
+        try:
+            await ctx.author.send(content, files=files)
+        except nextcord.Forbidden:
+            await ctx.send("I couldn't DM you the logs — allow DMs from server members and try again.")
+            return
+        except nextcord.HTTPException as e:
+            logger.error(f"Failed to DM logs to {ctx.author}: {e}")
+            await ctx.send("Failed to send the logs — check the bot's console output.")
+            return
+
+        try:
+            await ctx.message.add_reaction("✅")
+        except nextcord.HTTPException:
+            await ctx.send("Sent the logs to your DMs.")
+
+    @staticmethod
+    def _log_secrets():
+        return [
+            config.get("core", "token"),
+            config.get("tautulli", "apikey"),
+            config.get("tmdb", "apikey"),
+            config.get("qbittorrent", "password"),
+        ]
 
 
 def setup(bot):

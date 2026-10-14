@@ -233,6 +233,7 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 | `plex chart months [@user] [days]` | Shows activity by month |
 | `plex status` | Shows server status information |
 | `plex killstream [session_key] [message]` | Terminates a user's stream (admin only) |
+| `plex logs [level] [search]` | DMs you recent log records plus the full log file (admin only) |
 | `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
 | `plex ignore [plex_username]` | Toggles ignoring a user in stats (admin only) |
 | `plex refresh_cache` | Manually refreshes the media cache (admin only) |
@@ -251,7 +252,9 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 
 ### Logs
 
-The bot logs information to both the console and `plexbot.log`. If you're experiencing issues, check these logs for details.
+The bot logs information to both the console and `plexbot.log`. If you're experiencing issues, check these logs for details. `plexbot.log` rotates at 4 MB, keeping three older files (`plexbot.log.1`–`.3`).
+
+Admins can also run `plex logs` in Discord: the bot DMs the most recent records plus the full log file, with tokens, API keys and passwords redacted. Filter by minimum level and/or search text, e.g. `plex logs error`, `plex logs tautulli`, `plex logs warn timed out`; quote text to search for a level word itself (`plex logs "error"`).
 
 ## Technical Details
 
