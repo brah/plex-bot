@@ -243,6 +243,8 @@ def main():
         logger.info("Bot shutdown requested by user.")
     except Exception as e:
         logger.exception(f"Failed to run the bot: {e}")
+        # Non-zero exit so systemd's Restart=on-failure (and Docker's restart policy) bring it back.
+        sys.exit(1)
 
 
 if __name__ == "__main__":

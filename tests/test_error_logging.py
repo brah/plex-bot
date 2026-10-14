@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 import nextcord
+import pytest
 
 from errors import LoggedModal, LoggedView
 from plexbot import PlexBot
@@ -86,3 +87,36 @@ def test_modal_errors_are_logged_and_answered_privately(caplog):
     record = next(r for r in caplog.records if "LoggedModal" in r.getMessage())
     assert record.exc_info and "form broke" in str(record.exc_info[1])
     assert interaction.response.sent[0][1] is True
+
+
+def _patch_main_config(monkeypatch):
+    import plexbot
+
+    values = {("core", "token"): "token", ("core", "prefix"): "plex ", ("discord", "server_id"): ""}
+    monkeypatch.setattr(plexbot.config, "initialize", lambda: True)
+    monkeypatch.setattr(
+        plexbot.config, "get", lambda section, key, default=None: values.get((section, key), default)
+    )
+    return plexbot
+
+
+def test_crash_exits_non_zero_so_supervisors_restart(monkeypatch):
+    plexbot = _patch_main_config(monkeypatch)
+
+    def crash(self, token):
+        raise TypeError("gateway handler blew up")
+
+    monkeypatch.setattr(plexbot.PlexBot, "run", crash)
+    with pytest.raises(SystemExit) as exc:
+        plexbot.main()
+    assert exc.value.code == 1
+
+
+def test_ctrl_c_still_exits_cleanly(monkeypatch):
+    plexbot = _patch_main_config(monkeypatch)
+
+    def interrupt(self, token):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(plexbot.PlexBot, "run", interrupt)
+    plexbot.main()  # no SystemExit
