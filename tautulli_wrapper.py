@@ -92,13 +92,15 @@ class Tautulli:
         """Get the homepage watch statistics."""
         return await self.api_call("get_home_stats", params)
 
-    async def get_recently_added(self, count: int) -> Optional[Dict[str, Any]]:
-        """Get all items that were recently added to Plex."""
+    async def get_recently_added(self, count: int, media_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get all items that were recently added to Plex (media_type: movie, show, artist)."""
         if count is None:
             error_msg = "count is required; see Tautulli API Reference."
             logger.error(error_msg)
             return {"response": {"result": "error", "message": error_msg}}
         params = {"count": count}
+        if media_type:
+            params["media_type"] = media_type
         return await self.api_call("get_recently_added", params)
 
     async def get_collections_table(self, section_id: str) -> Optional[Dict[str, Any]]:

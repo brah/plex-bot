@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
@@ -513,6 +514,55 @@ class MediaCache:
         except Exception as e:
             logger.error(f"Error processing library {library.get('section_name', 'unknown')}: {e}")
             return library_items
+
+    @staticmethod
+    def _types_for(media_type: Optional[str]) -> Set[str]:
+        if not media_type:
+            return set()
+        return {"tv": {"show", "episode"}, "movie": {"movie"}}.get(media_type.lower(), {media_type.lower()})
+
+    def suggest(self, query: str, media_type: Optional[str] = None, limit: int = 25) -> List[Dict]:
+        """Titles for autocomplete: prefix matches first, then titles containing the query.
+
+        Reads the cache as it is, without refreshing or logging: autocomplete runs on every
+        keystroke, and Discord drops an answer that takes longer than three seconds.
+        """
+        query = (query or "").strip().lower()
+        types = self._types_for(media_type)
+        prefix, inner = [], []
+        for item in self.media_items.values():
+            if types and item.get("media_type") not in types:
+                continue
+            title = (item.get("title") or "").lower()
+            if title.startswith(query):
+                prefix.append(item)
+            elif query in title:
+                inner.append(item)
+
+        def by_title(item):
+            return (item.get("title") or "").lower()
+
+        return (sorted(prefix, key=by_title) + sorted(inner, key=by_title))[:limit]
+
+    def genres(self, media_type: Optional[str] = None) -> List[str]:
+        """Every genre in the cache (lower-case), most common first."""
+        types = self._types_for(media_type)
+        counts = Counter(
+            genre
+            for item in self.media_items.values()
+            if not types or item.get("media_type") in types
+            for genre in item.get("genres") or []
+        )
+        return [genre for genre, _count in counts.most_common()]
+
+    async def refresh(self) -> None:
+        """Fetch the whole library again now, even if the cache is still fresh.
+
+        The current items stay in use until the new ones arrive.
+        """
+        async with self.cache_lock:
+            self.last_updated = None
+        await self.update_cache()
 
     async def search_by_prefix(self, query: str, limit: int = 10) -> List[Dict]:
         """

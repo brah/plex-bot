@@ -103,6 +103,19 @@ class Reply:
         await message.edit(**self.edit_payload())
 
 
+def bot_token_handle(interaction: nextcord.Interaction, message):
+    """A handle on a followup message that is edited with the bot token.
+
+    A WebhookMessage edits through the interaction token, which expires after 15 minutes
+    while the view can live on. A partial message from the channel doesn't expire. Falls back
+    to the original when the channel can't make one (voice channels, no channel).
+    """
+    get_partial = getattr(interaction.channel, "get_partial_message", None)
+    if message is None or get_partial is None:
+        return message
+    return get_partial(message.id)
+
+
 class ErrorKind(Enum):
     INPUT = "input"
     SERVICE_DOWN = "service_down"

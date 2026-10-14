@@ -27,7 +27,9 @@ from tautulli_wrapper import Tautulli
 from ui.cards import (
     plex_web_link, recent_viewer_line, session_title, session_user, stream_detail, stream_overview,
 )
-from ui.embeds import ErrorKind, Reply, card, empty_state, error_state, service_down, set_thumbnail, success
+from ui.embeds import (
+    ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail, success,
+)
 from ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
 from ui.images import current_frame, mascot, plex_image, poster_key, poster_strip
 from ui.theme import Colour
@@ -233,19 +235,6 @@ def _can_manage_streams(user, manager_ids) -> bool:
 
 def _find_session(activity: dict, session_id: str) -> dict | None:
     return next((s for s in activity.get("sessions", []) if str(s.get("session_id")) == session_id), None)
-
-
-def _bot_token_handle(interaction: nextcord.Interaction, message):
-    """A handle on a followup message that is edited with the bot token.
-
-    A WebhookMessage edits through the interaction token, which expires after 15 minutes
-    while the view can live on. A partial message from the channel doesn't expire. Falls back
-    to the original when the channel can't make one (voice channels, no channel).
-    """
-    get_partial = getattr(interaction.channel, "get_partial_message", None)
-    if message is None or get_partial is None:
-        return message
-    return get_partial(message.id)
 
 
 class StopStreamModal(LoggedModal):
@@ -730,7 +719,7 @@ class ServerCommands(commands.Cog):
             reply.view = StatusView(plex_status)
         message = await reply.send(interaction)
         if reply.view is not None:
-            reply.view.message = _bot_token_handle(interaction, message)
+            reply.view.message = bot_token_handle(interaction, message)
 
     # --- /plex watchers ----------------------------------------------------
 
@@ -891,7 +880,7 @@ class ServerCommands(commands.Cog):
             return
         view = WatchersView(self, [])
         reply = await self.render_watchers(activity, view)
-        view.message = _bot_token_handle(interaction, await reply.send(interaction))
+        view.message = bot_token_handle(interaction, await reply.send(interaction))
 
     @watchers.on_autocomplete("stop")
     async def _watchers_stop_autocomplete(self, interaction: nextcord.Interaction, stop: str):

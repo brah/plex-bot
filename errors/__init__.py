@@ -83,7 +83,12 @@ ERROR_STYLES: Dict[ErrorCategory, ErrorStyle] = {
 
 
 # Prefix commands that became a slash command under a different name.
-SLASH_RENAMES: Dict[str, str] = {"killstream": "watchers"}
+SLASH_RENAMES: Dict[str, str] = {
+    "killstream": "watchers",
+    "refresh_cache": "cache",
+    "force_refresh_cache": "cache",
+    "check_media_cache": "cache",
+}
 
 
 def slash_equivalent(invoked: Optional[str], slash_paths: Iterable[str]) -> Optional[str]:

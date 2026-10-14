@@ -201,17 +201,17 @@ def test_overview_message_handle_is_the_clicked_message_after_a_pick(monkeypatch
 
 
 def test_initial_overview_handle_is_a_bot_token_partial_message():
-    from cogs.server_commands import _bot_token_handle
+    from ui.embeds import bot_token_handle
 
     class Channel:
         def get_partial_message(self, message_id):
             return ("partial", message_id)
 
     webhook_message = SimpleNamespace(id=6666)
-    assert _bot_token_handle(SimpleNamespace(channel=Channel()), webhook_message) == ("partial", 6666)
+    assert bot_token_handle(SimpleNamespace(channel=Channel()), webhook_message) == ("partial", 6666)
     # No channel that can make one: keep the original handle rather than lose it.
-    assert _bot_token_handle(SimpleNamespace(channel=None), webhook_message) is webhook_message
-    assert _bot_token_handle(SimpleNamespace(channel=Channel()), None) is None
+    assert bot_token_handle(SimpleNamespace(channel=None), webhook_message) is webhook_message
+    assert bot_token_handle(SimpleNamespace(channel=Channel()), None) is None
 
 
 def test_stream_managers_get_stop_button(monkeypatch):

@@ -33,6 +33,10 @@ EXAMPLES = {
     "/plex watchers": "/plex watchers",
     "/plex status": "/plex status",
     "/plexadmin logs": "/plexadmin logs level:Error search:tautulli",
+    "/plex movie": "/plex movie title:The Godfather",
+    "/plex tv": "/plex tv title:Severance",
+    "/plex random": "/plex random type:TV show genre:Comedy",
+    "/plex recent": "/plex recent count:5 type:Movies",
 }
 
 
