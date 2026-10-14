@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512"
+     height="512" viewBox="0 0 512 512">
+  <defs>
+    <filter id="soft" x="-50%" y="-200%" width="200%" height="500%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <clipPath id="bucket">
+      <path d="M120 222 L392 222 L362 448 L150 448 Z"/>
+    </clipPath>
+    <!-- one popcorn piece: lumpy union of four puffs, outlined as a single shape -->
+    <g id="pop">
+      <g fill="#2B2D31">
+        <circle cx="-17" cy="6" r="36"/>
+        <circle cx="8" cy="-15" r="36"/>
+        <circle cx="19" cy="11" r="34"/>
+        <circle cx="-9" cy="-19" r="30"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- the same piece, buttered -->
+    <g id="pop-butter">
+      <use xlink:href="#pop"/>
+      <g fill="#FFE39A">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- Kernel without a face: popcorn heap over the striped bucket (bottom centre 256,448) -->
+    <g id="kernel">
+      <use xlink:href="#pop-butter" transform="translate(150 196) rotate(-20)"/>
+      <use xlink:href="#pop" transform="translate(362 196) rotate(150)"/>
+      <use xlink:href="#pop" transform="translate(204 148) rotate(40)"/>
+      <use xlink:href="#pop-butter" transform="translate(310 150) rotate(-60)"/>
+      <use xlink:href="#pop" transform="translate(258 104) rotate(10)"/>
+      <use xlink:href="#pop" transform="translate(218 200) rotate(100)"/>
+      <use xlink:href="#pop-butter" transform="translate(298 202) rotate(-130)"/>
+      <g clip-path="url(#bucket)">
+        <rect x="100" y="210" width="320" height="260" fill="#FFF4DC"/>
+        <g fill="#E5A00D">
+          <path d="M120 222 L174.4 222 L192.4 448 L150 448 Z"/>
+          <path d="M228.8 222 L283.2 222 L277.2 448 L234.8 448 Z"/>
+          <path d="M337.6 222 L392 222 L362 448 L319.6 448 Z"/>
+        </g>
+        <path d="M366 222 L400 222 L370 448 L340 448 Z" fill="#2B2D31" opacity="0.12"/>
+      </g>
+      <path d="M120 222 L392 222 L362 448 L150 448 Z" fill="none" stroke="#2B2D31" stroke-width="15"
+            stroke-linejoin="round"/>
+      <rect x="104" y="206" width="304" height="38" rx="18" fill="#E5A00D" stroke="#2B2D31"
+            stroke-width="15" stroke-linejoin="round"/>
+      <path d="M128 218 L240 218" stroke="#F5C04A" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <ellipse cx="222" cy="476" rx="112" ry="15" fill="#2B2D31" opacity="0.28" filter="url(#soft)"/>
+  <g transform="translate(222 468) rotate(0) scale(0.86) translate(-256 -448)">
+    <path d="M362 330 L448 284 L470 176" fill="none" stroke="#2B2D31" stroke-width="52"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M362 330 L448 284 L470 176" fill="none" stroke="#E5A00D" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <use xlink:href="#kernel"/>
+    <ellipse cx="210" cy="310" rx="23" ry="29" fill="#2B2D31"/>
+    <ellipse cx="302" cy="310" rx="23" ry="29" fill="#2B2D31"/>
+    <circle cx="218" cy="298" r="9" fill="#FFFFFF"/>
+    <circle cx="310" cy="298" r="9" fill="#FFFFFF"/>
+    <ellipse cx="180" cy="356" rx="19" ry="11" fill="#F2836B" opacity="0.75"/>
+    <ellipse cx="332" cy="356" rx="19" ry="11" fill="#F2836B" opacity="0.75"/>
+    <path d="M230 352 Q256 386 282 352 Z" fill="#2B2D31" stroke="#2B2D31" stroke-width="10"
+          stroke-linejoin="round"/>
+    <path d="M244 368 Q256 362 268 368 Q256 380 244 368 Z" fill="#F2836B"/>
+    <circle cx="470" cy="162" r="31" fill="#FFF4DC" stroke="#2B2D31" stroke-width="13"/>
+    <path d="M524 129 A62 62 0 0 1 524 195" fill="none" stroke="#2B2D31" stroke-width="36"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M524 129 A62 62 0 0 1 524 195" fill="none" stroke="#F5C04A" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M416 129 A62 62 0 0 0 416 195" fill="none" stroke="#2B2D31" stroke-width="36"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M416 129 A62 62 0 0 0 416 195" fill="none" stroke="#F5C04A" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

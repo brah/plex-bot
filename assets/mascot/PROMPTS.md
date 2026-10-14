@@ -1,0 +1,115 @@
+# Mascot prompts
+
+The bot's mascot is **Kernel**, a striped popcorn bucket. Each slot below is a PNG the bot sends as
+a small embed thumbnail (Discord shows it at about 80 px), drawn from the matching `<slot>.svg`
+source. Re-render the PNGs after editing an SVG with `python scripts/render_mascots.py`.
+
+**Swapping in your own art:** any slot can be replaced, with no code changes, by saving a square,
+transparent PNG (at most 1024 px, under 250 KB) over `<slot>.png` in this directory.
+
+Every prompt below is complete on its own: it repeats the shared style and character description,
+then adds the pose.
+
+## Shared style and character
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D) as the main accent, cream (#FFF4DC and
+> #FFF8E6), soft butter yellow (#FFE39A), coral blush (#F2836B), with a lighter amber highlight
+> (#F5C04A). Flat fills, a single soft blurred shadow ellipse under the character, no gradients,
+> no texture, no text. Transparent background. Centred, square 1:1 composition, with a big,
+> simple silhouette and a large face that stays readable at 80 px.
+>
+> The character, Kernel: a classic tapered popcorn bucket, wider at the top, with vertical
+> stripes alternating Plex amber and cream, a rounded amber rim band across the top, and a
+> slightly darker shaded strip down its right side. It is overflowing with a heap of lumpy,
+> cloud-shaped popcorn pieces, each a cluster of round puffs outlined as one shape, mostly cream
+> with a few buttered yellow ones. The face sits on the stripes, below the rim: two big glossy
+> oval black eyes with a white highlight dot, round coral blush cheeks, and a small open smile
+> with a coral tongue. When it needs arms it has short, chunky amber arms with dark outlines,
+> ending in round cream mitten hands. No legs.
+
+## mascot-wave
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the character, no gradients, no text. Transparent background. Centred,
+> square 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big friendly face
+> on the stripes with glossy oval black eyes, white highlight dots, coral blush cheeks and a small
+> open smile; short chunky amber arms with round cream mitten hands.
+> Pose: waving hello, cheerful and welcoming. Kernel stands slightly left of centre and raises one
+> arm high beside its popcorn, hand open in a wave, with two short curved amber motion marks on
+> either side of the hand. Eyes open and bright, smiling.
+
+## mascot-sleepy
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the scene, no gradients, no text. Transparent background. Centred, square
+> 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big friendly face
+> on the stripes with coral blush cheeks.
+> Pose: dozing on a small, chunky, rounded terracotta-red sofa (#D9644A, lighter cushion
+> #EC8466, little wooden legs). Kernel sits sunk into the seat cushion, tilted slightly to one
+> side; eyes closed as two gentle downward curves, a small calm round mouth, relaxed. Three white
+> round speech bubbles, each with a bold dark letter "z", rise diagonally from its head toward the
+> top-right corner, getting smaller.
+
+## mascot-server
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the scene, no gradients, no text. Transparent background. Centred, square
+> 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big friendly face
+> on the stripes with coral blush cheeks; short chunky amber arms with round cream mitten hands.
+> Pose: standing proudly beside a small server rack. The rack is a rounded slate-grey cabinet
+> (#6E7788) on the right, about as tall as Kernel, with three light-grey drive units (#A3ACBA),
+> each with a dark slot and one large, bright green status light (#3FDB78). Kernel rests one hand
+> on the rack, beaming: happy closed eyes as upward arcs and a wide open grin. Two small amber
+> four-point sparkles above the rack.
+
+## mascot-unplugged
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the scene, no gradients, no text. Transparent background. Centred, square
+> 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big face on the
+> stripes with coral blush cheeks; short chunky amber arms with round cream mitten hands.
+> Pose: tangled in a thick light-grey power cable (#9AA3B4, dark outline), the bucket tipped a
+> little to one side. The cable wraps across the rim, loops around the left side and across the
+> bottom of the bucket, then trails off to the floor. Kernel holds up the unplugged end in one
+> hand: a white plug (#F3F4F7) with two grey prongs. Dizzy expression: white round eyes with dark
+> spirals, a wobbly squiggle mouth. Two small amber sparkles circle above its head, and a few
+> popcorn kernels have spilled out, one mid-air and one on the floor.
+
+## mascot-oops
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the character, no gradients, no text. Transparent background. Centred,
+> square 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big face on the
+> stripes with strong coral blush cheeks; short chunky amber arms with round cream mitten hands.
+> Pose: sheepish and apologetic, tilted slightly. Kernel raises one arm with the elbow out and
+> scratches the top of its popcorn with its hand, with two short amber scratch marks beside the
+> hand. Eyes squeezed into happy upward arcs under small worried, slanted brows; an awkward wide
+> grin showing a strip of white teeth. One small light-blue sweat drop (#7CC8F4, white highlight)
+> on the opposite side of its head.

@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512"
+     height="512" viewBox="0 0 512 512">
+  <defs>
+    <filter id="soft" x="-50%" y="-200%" width="200%" height="500%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <clipPath id="bucket">
+      <path d="M120 222 L392 222 L362 448 L150 448 Z"/>
+    </clipPath>
+    <!-- one popcorn piece: lumpy union of four puffs, outlined as a single shape -->
+    <g id="pop">
+      <g fill="#2B2D31">
+        <circle cx="-17" cy="6" r="36"/>
+        <circle cx="8" cy="-15" r="36"/>
+        <circle cx="19" cy="11" r="34"/>
+        <circle cx="-9" cy="-19" r="30"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- the same piece, buttered -->
+    <g id="pop-butter">
+      <use xlink:href="#pop"/>
+      <g fill="#FFE39A">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- Kernel without a face: popcorn heap over the striped bucket (bottom centre 256,448) -->
+    <g id="kernel">
+      <use xlink:href="#pop-butter" transform="translate(150 196) rotate(-20)"/>
+      <use xlink:href="#pop" transform="translate(362 196) rotate(150)"/>
+      <use xlink:href="#pop" transform="translate(204 148) rotate(40)"/>
+      <use xlink:href="#pop-butter" transform="translate(310 150) rotate(-60)"/>
+      <use xlink:href="#pop" transform="translate(258 104) rotate(10)"/>
+      <use xlink:href="#pop" transform="translate(218 200) rotate(100)"/>
+      <use xlink:href="#pop-butter" transform="translate(298 202) rotate(-130)"/>
+      <g clip-path="url(#bucket)">
+        <rect x="100" y="210" width="320" height="260" fill="#FFF4DC"/>
+        <g fill="#E5A00D">
+          <path d="M120 222 L174.4 222 L192.4 448 L150 448 Z"/>
+          <path d="M228.8 222 L283.2 222 L277.2 448 L234.8 448 Z"/>
+          <path d="M337.6 222 L392 222 L362 448 L319.6 448 Z"/>
+        </g>
+        <path d="M366 222 L400 222 L370 448 L340 448 Z" fill="#2B2D31" opacity="0.12"/>
+      </g>
+      <path d="M120 222 L392 222 L362 448 L150 448 Z" fill="none" stroke="#2B2D31" stroke-width="15"
+            stroke-linejoin="round"/>
+      <rect x="104" y="206" width="304" height="38" rx="18" fill="#E5A00D" stroke="#2B2D31"
+            stroke-width="15" stroke-linejoin="round"/>
+      <path d="M128 218 L240 218" stroke="#F5C04A" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <ellipse cx="256" cy="478" rx="170" ry="15" fill="#2B2D31" opacity="0.28" filter="url(#soft)"/>
+  <use xlink:href="#pop" transform="translate(66 458) scale(0.48) rotate(30)"/>
+  <use xlink:href="#pop-butter" transform="translate(70 196) scale(0.4) rotate(-40)"/>
+  <g transform="translate(240 460) rotate(8) scale(0.8) translate(-256 -448)">
+    <path d="M84 268 Q40 340 112 398" fill="none" stroke="#2B2D31" stroke-width="44"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M84 268 Q40 340 112 398" fill="none" stroke="#9AA3B4" stroke-width="20"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M382 300 L452 282 L456 222" fill="none" stroke="#2B2D31" stroke-width="52"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M382 300 L452 282 L456 222" fill="none" stroke="#E5A00D" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <use xlink:href="#kernel"/>
+    <circle cx="210" cy="310" r="28" fill="#FFFFFF" stroke="#2B2D31" stroke-width="10"/>
+    <circle cx="302" cy="310" r="28" fill="#FFFFFF" stroke="#2B2D31" stroke-width="10"/>
+    <path d="M210 310 m-2 -4 a6 6 0 1 1 -4 10 a12 12 0 1 1 20 -14 a18 18 0 1 1 -32 22" fill="none"
+          stroke="#2B2D31" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M302 310 m-2 -4 a6 6 0 1 1 -4 10 a12 12 0 1 1 20 -14 a18 18 0 1 1 -32 22" fill="none"
+          stroke="#2B2D31" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <ellipse cx="180" cy="360" rx="19" ry="11" fill="#F2836B" opacity="0.6"/>
+    <ellipse cx="332" cy="360" rx="19" ry="11" fill="#F2836B" opacity="0.6"/>
+    <path d="M228 372 Q240 360 252 372 Q264 384 276 372 Q284 364 290 368" fill="none" stroke="#2B2D31"
+          stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M112 398 Q240 458 380 414 Q480 384 520 450 Q550 500 600 490" fill="none" stroke="#2B2D31"
+          stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M112 398 Q240 458 380 414 Q480 384 520 450 Q550 500 600 490" fill="none" stroke="#9AA3B4"
+          stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M452 214 Q300 190 200 232 Q120 262 84 268" fill="none" stroke="#2B2D31" stroke-width="44"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M452 214 Q300 190 200 232 Q120 262 84 268" fill="none" stroke="#9AA3B4" stroke-width="20"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="420" y="150" width="64" height="72" rx="16" fill="#F3F4F7" stroke="#2B2D31"
+          stroke-width="13"/>
+    <rect x="428" y="106" width="16" height="44" rx="5" fill="#C9CFD8" stroke="#2B2D31"
+          stroke-width="9"/>
+    <rect x="460" y="106" width="16" height="44" rx="5" fill="#C9CFD8" stroke="#2B2D31"
+          stroke-width="9"/>
+    <circle cx="440" cy="222" r="27" fill="#FFF4DC" stroke="#2B2D31" stroke-width="13"/>
+  </g>
+  <path d="M168 48 Q175 63 190 70 Q175 77 168 92 Q161 77 146 70 Q161 63 168 48 Z" fill="#F5C04A"
+        stroke="#2B2D31" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M352 33 Q357 45 369 50 Q357 55 352 67 Q347 55 335 50 Q347 45 352 33 Z" fill="#F5C04A"
+        stroke="#2B2D31" stroke-width="10" stroke-linejoin="round"/>
+</svg>
