@@ -66,8 +66,19 @@ class TestPlexImage:
         result = asyncio.run(plex_image(FakeTautulli(), "/library/1/thumb", filename="p.jpg"))
         assert result == Attachment("p.jpg", b"img")
         assert calls == dict(
-            ip="host:8181", key="/library/1/thumb", width=300, height=450, fallback="poster"
+            ip="host:8181", key="/library/1/thumb", width=300, height=450, fallback=None
         )
+
+    def test_explicit_fallback_is_passed_through(self, monkeypatch):
+        seen = []
+
+        async def fake_fetch(ip, key, width, height, *, use_https, api_key, fallback):
+            seen.append(fallback)
+            return io.BytesIO(b"img")
+
+        monkeypatch.setattr(images, "fetch_plex_image", fake_fetch)
+        asyncio.run(plex_image(FakeTautulli(), "/x", filename="p.jpg", fallback="poster"))
+        assert seen == ["poster"]
 
     def test_missing_key_or_failed_fetch_is_none(self, monkeypatch):
         async def failed(*args, **kwargs):
