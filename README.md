@@ -220,12 +220,6 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | Command | Description |
 |---------|-------------|
 | `plex recommend [@user]` | Recommends media based on watch history |
-| `plex chart` | Shows options for visualized data/charts |
-| `plex chart hours [@user] [days]` | Shows most active hours |
-| `plex chart days [@user] [days]` | Shows most active days of week |
-| `plex chart users [days]` | Shows most active users |
-| `plex chart media [@user] [days]` | Shows media types watched per day |
-| `plex chart months [@user] [days]` | Shows activity by month |
 | `/plex help` | Shows what the bot can do, by category (private) |
 | `/plex status` | Server health: version and update status, library totals and sizes, activity, and plex.tv service status (the **Plex services** button lists every service privately) |
 | `/plex watchers [stop] [message]` | Shows every current stream with a poster strip; pick one for private details (current frame, quality, device). Stream managers can stop streams from the details card or with `stop:` |
@@ -239,6 +233,11 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `/plex shows` | Top TV watchers of all time |
 | `/plex history [user]` | Recent plays on the server, or one person's (names are suggested as you type) |
 | `/plex hot [days]` | What's been popular lately: trending titles, new hits, most active, binges |
+| `/plex chart hours [user] [days]` | Which hours of the day people watch, in the Tautulli server's timezone |
+| `/plex chart days [user] [days]` | Which days of the week people watch |
+| `/plex chart users [days]` | Who watches the most |
+| `/plex chart media [user] [days]` | Movies, TV and other plays per day |
+| `/plex chart months [user] [days]` | Plays per month (default: the last year) |
 | `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
 | `/plexadmin cache` | Shows the media cache behind `/plex random` and title suggestions, with a **Refresh now** button (admin only) |
 | `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
@@ -256,7 +255,7 @@ The redesigned commands use posters, avatars and a mascot instead of a fixed log
 - **No data from Tautulli**: Double-check your Tautulli API key and IP address settings.
 - **qBittorrent integration issues**: Verify qBittorrent WebUI is enabled and credentials are correct.
 - **Missing roles**: Make sure the bot has permission to manage roles and the role IDs are correctly configured.
-- **Chart generation errors**: Ensure matplotlib and seaborn are correctly installed.
+- **Chart generation errors**: Ensure matplotlib is correctly installed (`pip install -r requirements.txt`).
 
 ### Logs
 

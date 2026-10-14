@@ -91,10 +91,8 @@ async def load_cogs(bot):
     """Load all cogs from the cogs directory with proper dependency ordering."""
     logger.info("Starting to load cogs with prioritized ordering")
 
-    # Priority loading order - these cogs must be loaded first
-    priority_cogs = [
-        "cogs.plex_data",  # Load this first as it's a dependency
-    ]
+    # Priority loading order - these cogs must be loaded first (none at the moment)
+    priority_cogs = []
 
     # Load priority cogs first
     for cog_name in priority_cogs:

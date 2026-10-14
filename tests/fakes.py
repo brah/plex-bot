@@ -162,6 +162,11 @@ class FakeTautulli:
     async def get_users(self):
         return self._ok(self.users)
 
+    settings: dict = {"default_timezone": "UTC"}
+
+    async def get_settings(self):
+        return self._ok(self.settings)
+
     async def get_recently_added(self, count, media_type=None):
         self.recent_calls = self.recent_calls + [(count, media_type)]
         return self._ok({"recently_added": self.recently_added[:count]})
