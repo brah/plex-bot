@@ -11,6 +11,7 @@ from cogs.utility_commands import (
     HelpEntry, collect_help_entries, help_category_page, help_overview, visible_entries,
 )
 from fakes import FakeTautulli, build_bot
+from ui.images import Attachment
 
 ENTRIES = [
     HelpEntry("/plex watchers [stop] [message]", "See who's watching", "watching", "/plex watchers"),
@@ -114,3 +115,64 @@ def test_help_command_without_guild_permissions_hides_admin(monkeypatch):
     assert "Admin" not in sent["embeds"][0].description
     select = next(c for c in sent["view"].children if isinstance(c, nextcord.ui.StringSelect))
     assert "admin" not in [o.value for o in select.options]
+
+
+def _choose(entries, value):
+    """Run the dropdown's callback with `value` chosen; returns (view, kwargs passed to edit_message)."""
+    edited = {}
+
+    class Response:
+        async def edit_message(self, **kwargs):
+            edited.update(kwargs)
+
+    async def run():
+        view = help_module.HelpView(entries)
+        select = view.children[0]
+        select._selected_values = [value]
+        await select.callback(SimpleNamespace(response=Response()))
+        return view
+
+    return asyncio.run(run()), edited
+
+
+def test_choosing_a_category_edits_to_its_page():
+    view, edited = _choose(ENTRIES, "watching")
+    assert "Watching" in edited["embeds"][0].title
+    assert "plex movie" not in edited["embeds"][0].description
+    assert edited["view"] is view
+    assert edited["attachments"] == []
+    assert "files" not in edited
+
+
+def test_choosing_overview_returns_to_the_overview_with_its_mascot(monkeypatch):
+    art = Attachment("mascot-wave.png", b"png")
+    monkeypatch.setattr(help_module, "mascot", lambda slot: art)
+    view, edited = _choose(ENTRIES, "overview")
+    assert "**Watching**" in edited["embeds"][0].description
+    assert [f.filename for f in edited["files"]] == ["mascot-wave.png"]
+    assert edited["view"] is view
+
+
+def test_admins_get_the_admin_category(monkeypatch):
+    monkeypatch.setattr(help_module, "mascot", lambda slot: None)
+    sent = {}
+
+    class Response:
+        def is_done(self):
+            return False
+
+        async def send_message(self, **kwargs):
+            sent.update(kwargs)
+
+    async def run():
+        bot, _cog = build_bot(FakeTautulli([]))
+        utility = help_module.UtilityCommands(bot)
+        bot.add_cog(utility)
+        user = SimpleNamespace(id=1, guild_permissions=SimpleNamespace(administrator=True))
+        interaction = SimpleNamespace(user=user, response=Response())
+        await help_module.UtilityCommands.help.callback(utility, interaction)
+
+    asyncio.run(run())
+    assert "Admin" in sent["embeds"][0].description
+    select = next(c for c in sent["view"].children if isinstance(c, nextcord.ui.StringSelect))
+    assert "admin" in [o.value for o in select.options]
