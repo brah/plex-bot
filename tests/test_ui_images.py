@@ -160,3 +160,49 @@ class TestDominantColour:
 @pytest.mark.parametrize("slot", images.MASCOT_SLOTS)
 def test_mascot_slots_are_named_consistently(slot):
     assert slot.startswith("mascot-")
+
+
+class FakeImageSession:
+    """Stands in for aiohttp.ClientSession; records the params of the image request."""
+
+    requests = []
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def get(self, url, params=None):
+        FakeImageSession.requests.append(dict(params or {}))
+
+        class Response:
+            status = 200
+            content_type = "image/jpeg"
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def read(self):
+                return b"jpeg"
+
+        return Response()
+
+
+@pytest.mark.parametrize("kwargs, expected", [({}, "poster"), ({"fallback": None}, None)])
+def test_fetch_plex_image_fallback_param(monkeypatch, kwargs, expected):
+    import utilities
+
+    FakeImageSession.requests = []
+    monkeypatch.setattr(utilities.aiohttp, "ClientSession", FakeImageSession)
+    result = asyncio.run(utilities.fetch_plex_image("host:8181", "/library/x", api_key="key", **kwargs))
+    assert result is not None and result.read() == b"jpeg"
+    (params,) = FakeImageSession.requests
+    assert params.get("fallback") == expected
+    assert ("fallback" in params) is (expected is not None)
