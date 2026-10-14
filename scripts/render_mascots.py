@@ -1,0 +1,67 @@
+"""Render mascot SVGs to transparent PNGs with a headless Chromium browser. Dev-only.
+
+Discord can't display SVG, so the bot ships PNGs; this regenerates them from the
+SVG sources. Needs Edge or Chrome (set CHROME_PATH to override).
+
+Usage: python scripts/render_mascots.py [slot ...] [--src assets/mascot] [--out assets/mascot] [--size 512]
+"""
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DIR = ROOT / "assets" / "mascot"
+
+
+def find_browser() -> str:
+    candidates = [
+        os.environ.get("CHROME_PATH"),
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        shutil.which("microsoft-edge"),
+        shutil.which("google-chrome"),
+        shutil.which("chromium"),
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return candidate
+    sys.exit("No Edge/Chrome found; set CHROME_PATH.")
+
+
+def render(browser: str, svg: Path, png: Path, size: int) -> None:
+    subprocess.run(
+        [
+            browser, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+            "--default-background-color=00000000", f"--window-size={size},{size}",
+            f"--screenshot={png.resolve()}", svg.resolve().as_uri(),
+        ],
+        check=True, capture_output=True, timeout=60,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("slots", nargs="*", help="slot names (default: every SVG in --src)")
+    parser.add_argument("--src", type=Path, default=DEFAULT_DIR)
+    parser.add_argument("--out", type=Path, default=DEFAULT_DIR)
+    parser.add_argument("--size", type=int, default=512)
+    args = parser.parse_args()
+
+    browser = find_browser()
+    if args.slots:
+        svgs = [args.src / f"{slot}.svg" for slot in args.slots]
+    else:
+        svgs = sorted(args.src.glob("*.svg"))
+    args.out.mkdir(parents=True, exist_ok=True)
+    for svg in svgs:
+        png = args.out / f"{svg.stem}.png"
+        render(browser, svg, png, args.size)
+        print(f"{svg.name} -> {png}")
+
+
+if __name__ == "__main__":
+    main()
