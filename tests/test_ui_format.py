@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from ui.format import format_ms, is_truthy, join, plural, progress_bar, timestamp, to_int, truncate
+from ui.format import file_size, format_ms, is_truthy, join, plural, progress_bar, timestamp, to_int, truncate
 from ui.theme import Colour, Limits, media_colour
 
 
@@ -87,3 +87,11 @@ class TestTheme:
 
     def test_limits(self):
         assert Limits.DESCRIPTION == 4096 and Limits.SELECT_OPTIONS == 25
+
+
+def test_file_size_uses_drive_label_units():
+    assert file_size(8_100_000_000_000) == "8.1 TB"
+    assert file_size(12_449_000_000_000) == "12.4 TB"
+    assert file_size(512_000_000_000) == "512 GB"
+    assert file_size(999) == "999 B"
+    assert file_size(2_500_000_000_000_000) == "2.5 PB"

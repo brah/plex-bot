@@ -236,13 +236,15 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `plex chart media [@user] [days]` | Shows media types watched per day |
 | `plex chart months [@user] [days]` | Shows activity by month |
 | `/plex help` | Shows what the bot can do, by category (private) |
-| `/plex status` | Server health: library totals, activity, Plex service status and available updates |
+| `/plex status` | Server health: version and update status, library totals and sizes, activity, and plex.tv service status (the **Plex services** button lists every service privately) |
 | `/plex watchers [stop] [message]` | Shows every current stream with a poster strip; pick one for private details (current frame, quality, device). Stream managers can stop streams from the details card or with `stop:` |
 | `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
 | `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
 | `plex ignore [plex_username]` | Toggles ignoring a user in stats (admin only) |
 | `plex refresh_cache` | Manually refreshes the media cache (admin only) |
 | `plex force_refresh_cache` | Fully invalidates and rebuilds the media cache (admin only) |
+
+Library sizes on `/plex status` come from Tautulli. Movie sizes appear on their own; for TV and music, run **Calculate Total File Sizes** on the library's Media Info tab in Tautulli once.
 
 The redesigned commands use posters, avatars and a mascot instead of a fixed logo; mascot art lives in `assets/mascot/` (see `PROMPTS.md` to swap in your own).
 

@@ -3,12 +3,13 @@
 import asyncio
 import io
 import logging
+import random
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import aiohttp
 import nextcord
 from nextcord.ext import commands, tasks
 
@@ -19,11 +20,12 @@ from utilities import (
     get_git_revision_short_hash,
     get_git_revision_short_hash_latest,
 )
+from plex_status import PlexStatus, card_summary, fetch_status, services_card
 from slash_commands import plex, plexadmin
 from tautulli_wrapper import Tautulli
 from ui.cards import plex_web_link, session_title, session_user, stream_detail, stream_overview
 from ui.embeds import ErrorKind, Reply, card, empty_state, error_state, service_down, set_thumbnail, success
-from ui.format import is_truthy, join, plural, to_int, truncate
+from ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
 from ui.images import current_frame, mascot, plex_image, poster_key, poster_strip
 from ui.theme import Colour
 
@@ -369,26 +371,146 @@ def library_totals(rows) -> dict:
     return totals
 
 
+# Library sizes: Tautulli's media info is slow to build the first time, so wait briefly and
+# remember what came back. A library that timed out is asked again next time.
+_SIZE_WAIT = 4
+_SIZE_TTL = 6 * 3600
+_SIZED_KINDS = ("movie", "show", "artist")
+
+
+def _version_number(version) -> str:
+    """"1.43.4.10903-e5521bd8c" -> "1.43.4.10903": the build hash is noise."""
+    return str(version or "").split("-")[0]
+
+
+def version_line(current, update: Optional[dict]) -> Optional[str]:
+    """Whether the server is up to date, from Tautulli's check against plex.tv's releases."""
+    if not update or not update.get("version"):
+        return None
+    released = to_int(update.get("release_date"))
+    latest = _version_number(update["version"])
+    if is_truthy(update.get("update_available")):
+        return join([f"⬆️ Update available: {latest}", f"released {timestamp(released)}" if released else None])
+    # Only the latest release's date is known; a newer (beta) server isn't that release.
+    same = latest == _version_number(current)
+    return join(["✅ Up to date", f"released {timestamp(released, 'D')}" if released and same else None])
+
+
+# Size comparisons for the status footer, with real-world figures. One is picked at random
+# on every /plex status.
+_FLOPPY_BYTES, _FLOPPY_MM, _FLOPPY_LONG_M, _FLOPPY_G = 1_474_560, 3.3, 0.09, 20  # 3.5" HD floppy
+_CD_BYTES, _DISC_MM = 734_003_200, 1.2  # a 700 MB CD; CDs, DVDs and Blu-rays are all 1.2 mm thick
+_DVD_BYTES, _BLURAY_BYTES = 4_700_000_000, 25_000_000_000  # single-layer discs
+_PHONE_BYTES = 128_000_000_000
+_ELEPHANT_KG = 6_000
+_CONNECTIONS = [
+    (0.056, "on a 56k dial-up modem"),
+    (8, "on 8 Mbps ADSL"),
+    (100, "at 100 Mbps"),
+    (1_000, "on gigabit fibre"),
+]
+_EDGE_OF_SPACE_M = 100_000  # the Kármán line
+_LANDMARKS = [(8_849, "Mount Everest"), (828, "the Burj Khalifa"), (330, "the Eiffel Tower"),
+              (96, "Big Ben"), (46, "the Statue of Liberty"), (5.5, "a giraffe"), (1.7, "a person")]
+
+
+def _count(n: float) -> str:
+    return f"{n / 1e6:.1f} million" if n >= 1e6 else f"{n:,.0f}"
+
+
+def _distance(metres: float) -> str:
+    if metres >= 10_000:
+        return f"{metres / 1000:,.0f} km"
+    return f"{metres:,.0f} m" if metres >= 10 else f"{metres:.1f} m"
+
+
+def _stacked(metres: float) -> str:
+    if metres >= _EDGE_OF_SPACE_M:
+        return f"stacked {_distance(metres)} high, past the edge of space"
+    for height, name in _LANDMARKS:
+        if metres >= height:
+            times = metres / height
+            return f"stacked {_distance(metres)} high, " + (
+                f"taller than {name}" if times < 2 else f"{times:,.0f}× the height of {name}"
+            )
+    return f"stacked {_distance(metres)} high"
+
+
+def _weight(kg: float) -> str:
+    if kg < _ELEPHANT_KG:
+        return f"{kg:,.0f} kg of floppy disks"
+    return f"{kg / 1000:,.0f} tonnes of floppy disks, as heavy as {kg / _ELEPHANT_KG:,.0f} elephants"
+
+
+def _download(num_bytes: int, mbps: float, connection: str) -> str:
+    seconds = num_bytes * 8 / (mbps * 1_000_000)
+    if seconds < 3600:
+        span = plural(max(round(seconds / 60), 1), "minute")
+    elif seconds < 48 * 3600:
+        span = plural(round(seconds / 3600), "hour")
+    elif seconds < 365 * 86400:
+        span = f"{seconds / 86400:,.1f} days"
+    else:
+        span = f"{seconds / (365 * 86400):,.1f} years"
+    return f"{span} of non-stop downloading {connection}"
+
+
+def _discs(n: float, kind: str) -> Optional[str]:
+    if n < 2:
+        return None
+    height = n * _DISC_MM / 1000
+    return f"about {_count(n)} {kind}" + (f", {_stacked(height)}" if height >= _LANDMARKS[-1][0] else "")
+
+
+def size_comparisons(total: int) -> list:
+    """Every comparison for this size, as text: what /plex status picks from."""
+    floppies, phones = total / _FLOPPY_BYTES, total / _PHONE_BYTES
+    lines = [
+        f"about {_count(floppies)} floppy disks, {_stacked(floppies * _FLOPPY_MM / 1000)}",
+        f"about {_count(floppies)} floppy disks, laid end to end for {_distance(floppies * _FLOPPY_LONG_M)}",
+        _weight(floppies * _FLOPPY_G / 1000),
+        _discs(total / _CD_BYTES, "CDs"),
+        _discs(total / _DVD_BYTES, "DVDs"),
+        _discs(total / _BLURAY_BYTES, "Blu-rays"),
+        f"enough to fill {_count(phones)} phones with 128 GB each" if phones >= 2 else None,
+    ]
+    lines += [_download(total, mbps, connection) for mbps, connection in _CONNECTIONS]
+    return [line for line in lines if line]
+
+
+def size_comparison(total: int, pick=random.choice) -> Optional[str]:
+    """"8.1 TB of media: about 5.5 million floppy disks, stacked 18 km high, …" (one at random)."""
+    if not total or total <= 0:
+        return None
+    return f"{file_size(total)} of media: " + pick(size_comparisons(total))
+
+
 def build_status_reply(server: dict, libraries, activity: Optional[dict], update: Optional[dict],
-                       plex_service: Optional[dict], *, now: datetime) -> Reply:
-    incident = plex_service is not None and (plex_service.get("indicator") or "none") != "none"
-    plex_pass = " · Plex Pass" if to_int(server.get("pms_plexpass")) else ""
+                       plex_status: Optional[PlexStatus], *, now: datetime,
+                       sizes: Optional[dict] = None, pick=random.choice) -> Reply:
+    sizes = sizes or {}
+    plex_pass = " · \U0001F39F\ufe0f Plex Pass" if to_int(server.get("pms_plexpass")) else ""
+    version = server.get("pms_version")
     embed = card(
         title=server.get("pms_name") or "Plex Media Server",
-        description=(
-            f"Plex Media Server {server.get('pms_version') or 'unknown version'} "
-            f"on {server.get('pms_platform') or 'unknown platform'}{plex_pass}"
-        ),
-        colour=Colour.WARNING if incident else Colour.PLAYING,
+        description=join([
+            f"Plex Media Server {_version_number(version) or 'unknown version'} "
+            f"on {server.get('pms_platform') or 'unknown platform'}{plex_pass}",
+            version_line(version, update),
+        ], sep="\n"),
+        colour=Colour.WARNING if plex_status is not None and plex_status.degraded else Colour.PLAYING,
     )
+
+    def size(kind):
+        return file_size(sizes[kind]) if sizes.get(kind) else None
 
     totals = library_totals(libraries)
     library = [
-        f"\U0001F3AC {plural(totals['movies'], 'movie')}" if totals["movies"] else None,
-        f"\U0001F4FA {plural(totals['shows'], 'show')} · {plural(totals['episodes'], 'episode')}"
-        if totals["shows"] else None,
-        f"\U0001F3B5 {plural(totals['artists'], 'artist')} · {plural(totals['tracks'], 'track')}"
-        if totals["artists"] else None,
+        join([f"\U0001F3AC {plural(totals['movies'], 'movie')}", size("movie")]) if totals["movies"] else None,
+        join([f"\U0001F4FA {plural(totals['shows'], 'show')}", plural(totals['episodes'], 'episode'),
+              size("show")]) if totals["shows"] else None,
+        join([f"\U0001F3B5 {plural(totals['artists'], 'artist')}", plural(totals['tracks'], 'track'),
+              size("artist")]) if totals["artists"] else None,
     ]
     library = [line for line in library if line]
     if library:
@@ -404,19 +526,39 @@ def build_status_reply(server: dict, libraries, activity: Optional[dict], update
             if streams else "Nobody's watching"
         )
     embed.add_field(name="Activity", value=watching, inline=True)
+    embed.add_field(name="Plex services", value=card_summary(plex_status), inline=False)
 
-    service = plex_service.get("description") if plex_service else "Status unavailable"
-    embed.add_field(name="Plex services", value=("⚠️ " if incident else "") + service, inline=False)
-
-    if update and is_truthy(update.get("update_available")):
-        embed.add_field(
-            name="Update available", value=f"Plex Media Server {update.get('version')}", inline=False
-        )
-
+    fun = size_comparison(sum(sizes.values()), pick=pick)
+    if fun:
+        embed.set_footer(text=fun)
     embed.timestamp = now
     art = mascot("mascot-server")
     set_thumbnail(embed, art)
     return Reply([embed], [art] if art else [])
+
+
+class StatusView(LoggedView):
+    """Under the public /plex status card: the full list of plex.tv services, privately."""
+
+    def __init__(self, plex_status: PlexStatus, timeout: float = 600):
+        super().__init__(timeout=timeout)
+        self.plex_status = plex_status
+        self.message = None
+
+    @nextcord.ui.button(label="Plex services", emoji="\U0001F4E1", style=nextcord.ButtonStyle.secondary)
+    async def services_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await interaction.response.defer(ephemeral=True, with_message=True)
+        latest = await fetch_status()
+        if latest is not None:
+            self.plex_status = latest
+        await services_card(self.plex_status, now=nextcord.utils.utcnow()).send(interaction, ephemeral=True)
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except nextcord.HTTPException:
+                pass
 
 
 class ServerCommands(commands.Cog):
@@ -426,6 +568,7 @@ class ServerCommands(commands.Cog):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self._pms_identifier: str | None = None  # cached by _server_id()
+        self._section_sizes: dict[str, tuple[float, int]] = {}  # section_id -> (fetched at, bytes)
         self._display_streams = True  # presence alternates between stream stats and a help hint
         self.status_task.start()  # type: ignore[attr-defined]
 
@@ -499,29 +642,57 @@ class ServerCommands(commands.Cog):
 
     # --- /plex status ------------------------------------------------------
 
-    async def _plex_service_status(self) -> Optional[dict]:
-        """plex.tv's own service status (Statuspage format), or None if it can't be fetched."""
+    async def _section_size(self, section_id: str) -> Optional[int]:
+        # total_file_size sums the sizes Tautulli has cached. Movie sizes come with its scan; TV and
+        # music sizes only after "Calculate Total File Sizes" on the library's Media Info tab.
         try:
-            timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get("https://status.plex.tv/api/v2/status.json") as response:
-                    if response.status != 200:
-                        return None
-                    status = (await response.json()).get("status", {})
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
-            logger.warning(f"Could not fetch Plex service status: {e}")
+            response = await asyncio.wait_for(
+                self.tautulli.get_library_media_info(section_id=section_id, length=1), _SIZE_WAIT
+            )
+        except asyncio.TimeoutError:
+            logger.info(f"Library {section_id} size not ready yet (Tautulli is still scanning it)")
             return None
-        return {"indicator": status.get("indicator"), "description": status.get("description") or "Unknown"}
+        if not Tautulli.check_response(response):
+            return None
+        return to_int(Tautulli.get_response_data(response, {}).get("total_file_size"))
+
+    async def _library_sizes(self, rows) -> dict:
+        """Bytes per library kind, counting only libraries Tautulli has sized."""
+        now = time.monotonic()
+        sections = [(str(row["section_id"]), row.get("section_type")) for row in rows or []
+                    if row.get("section_type") in _SIZED_KINDS and row.get("section_id") not in (None, "")]
+        stale = [sid for sid, _ in sections
+                 if sid not in self._section_sizes or now - self._section_sizes[sid][0] > _SIZE_TTL]
+        if stale:
+            for sid, size in zip(stale, await asyncio.gather(*(self._section_size(sid) for sid in stale))):
+                if size is not None:
+                    self._section_sizes[sid] = (now, size)
+        totals: dict = {}
+        for sid, kind in sections:
+            size = self._section_sizes.get(sid, (0, 0))[1]
+            if size:
+                totals[kind] = totals.get(kind, 0) + size
+        return totals
 
     @plex.subcommand(description="Show how the Plex server is doing: library, activity, updates")
     async def status(self, interaction: nextcord.Interaction):
         await interaction.response.defer()
-        server_r, libraries_r, activity_r, update_r, plex_service = await asyncio.gather(
+
+        def data(response, default):
+            if Tautulli.check_response(response):
+                return Tautulli.get_response_data(response, default)
+            return default
+
+        async def libraries_and_sizes():
+            rows = data(await self.tautulli.get_libraries(), [])
+            return rows, await self._library_sizes(rows)
+
+        server_r, (libraries, sizes), activity_r, update_r, plex_status = await asyncio.gather(
             self.tautulli.get_server_info(),
-            self.tautulli.get_libraries(),
+            libraries_and_sizes(),
             self.tautulli.get_activity(),
             self.tautulli.get_pms_update(),
-            self._plex_service_status(),
+            fetch_status(),
         )
         if not Tautulli.check_response(server_r):
             logger.error("Failed to retrieve server info from Tautulli.")
@@ -530,16 +701,15 @@ class ServerCommands(commands.Cog):
         server = Tautulli.get_response_data(server_r, {})
         self._pms_identifier = server.get("pms_identifier") or self._pms_identifier
 
-        def data(response, default):
-            if Tautulli.check_response(response):
-                return Tautulli.get_response_data(response, default)
-            return default
-
         reply = build_status_reply(
-            server, data(libraries_r, []), data(activity_r, None), data(update_r, None), plex_service,
-            now=nextcord.utils.utcnow(),
+            server, libraries, data(activity_r, None), data(update_r, None), plex_status,
+            now=nextcord.utils.utcnow(), sizes=sizes,
         )
-        await reply.send(interaction)
+        if plex_status is not None:
+            reply.view = StatusView(plex_status)
+        message = await reply.send(interaction)
+        if reply.view is not None:
+            reply.view.message = _bot_token_handle(interaction, message)
 
     # --- /plex watchers ----------------------------------------------------
 
