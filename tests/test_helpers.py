@@ -15,7 +15,7 @@ from cogs.media_commands import (
     _format_size,
     _format_bytes_speed,
 )
-from cogs.server_commands import _format_ms
+from ui.format import format_ms as _format_ms
 
 
 class TestCheckResponse:
