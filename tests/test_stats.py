@@ -36,19 +36,15 @@ TOP_USERS = [
 
 class TestRenderers:
     def test_top_card_ranks_with_medals(self):
-        embed = top_card(TOP_USERS[1:], days=7, by="duration", name=name)
+        embed = top_card(TOP_USERS[1:], days=7, name=name)
         lines = embed.description.split("\n")
         assert lines[0] == "-# Last 7 days · by watch time"
-        assert lines[1] == "🥇 **Alice** · 12h 30m · 12 plays"
+        assert lines[1] == "🥇 **Alice** · 12h 30m"
         assert lines[2] == "-# Last watched Severance"
-        assert lines[3] == "🥈 **\\_Bob\\_** · 1h · 2 plays"
-        assert lines[5] == "🥉 **Cara** · 1m · 1 play"
-        assert lines[6] == "`4.` **Dan** · 0m · 1 play"
+        assert lines[3] == "🥈 **\\_Bob\\_** · 1h"
+        assert lines[5] == "🥉 **Cara** · 1m"
+        assert lines[6] == "`4.` **Dan** · 0m"
         assert embed.footer.text == "Together: 13h 31m"
-
-    def test_top_card_by_plays_leads_with_plays(self):
-        embed = top_card(TOP_USERS[1:2], days=1, by="plays", name=name)
-        assert embed.description.split("\n")[:2] == ["-# Last 1 day · by plays", "🥇 **Alice** · 12 plays · 12h 30m"]
 
     def test_library_line_and_popular(self):
         rows = [{"section_type": "movie", "count": "1866", "duration": "360000"},
@@ -118,8 +114,8 @@ class TestCommands:
         recorder = Recorder(monkeypatch)
         tautulli = FakeTautulli([])
         tautulli.home_stats = {"top_users": TOP_USERS}
-        _run(lambda bot, cog: PlexStats.top.callback(cog, interaction(bot), days=30, by="plays"), tautulli)
-        assert tautulli.home_stats_calls[0]["stats_type"] == "plays"
+        _run(lambda bot, cog: PlexStats.top.callback(cog, interaction(bot), days=30), tautulli)
+        assert tautulli.home_stats_calls[0]["stats_type"] == "duration"
         assert tautulli.home_stats_calls[0]["time_range"] == 30
         embed = recorder.last("followup")["embeds"][0]
         assert "Mallory" not in embed.description
@@ -140,15 +136,15 @@ class TestCommands:
             guild = object()
             ix = interaction(bot)
             monkeypatch.setattr(type(ix), "guild", property(lambda self: guild))
-            await PlexStats.top.callback(cog, ix, days=None, by=None)
-            await PlexStats.top.callback(cog, ix, days=1, by=None)
+            await PlexStats.top.callback(cog, ix, days=None)
+            await PlexStats.top.callback(cog, ix, days=1)
 
         _run(run, tautulli)
         assert assigned == [["alice", "bob", "cara"]]
 
     def test_top_tautulli_down(self, monkeypatch):
         recorder = Recorder(monkeypatch)
-        _run(lambda bot, cog: PlexStats.top.callback(cog, interaction(bot), days=None, by=None),
+        _run(lambda bot, cog: PlexStats.top.callback(cog, interaction(bot), days=None),
              FakeTautulli([], reachable=False))
         assert recorder.last("followup")["ephemeral"] is True
 
@@ -237,6 +233,6 @@ def test_stats_commands_registered_in_help():
     entries = _run(run, FakeTautulli([]))
     stats = {e.usage for e in entries if e.category == "stats"}
     assert stats == {
-        "/plex top [days] [by]", "/plex stats [days]", "/plex shows", "/plex history [user]", "/plex hot [days]",
+        "/plex top [days]", "/plex stats [days]", "/plex shows", "/plex history [user]", "/plex hot [days]",
     }
     assert not any(e.usage.startswith("plex ") for e in entries)  # no prefix stats commands left
