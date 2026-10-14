@@ -88,6 +88,10 @@ class Tautulli:
         """Get the Tautulli history."""
         return await self.api_call("get_history", params)
 
+    async def get_users(self) -> Optional[Dict[str, Any]]:
+        """Get every Plex user Tautulli knows (user_id, username, friendly_name, thumb, ...)."""
+        return await self.api_call("get_users")
+
     async def get_home_stats(self, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Get the homepage watch statistics."""
         return await self.api_call("get_home_stats", params)

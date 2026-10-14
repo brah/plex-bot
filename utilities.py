@@ -61,6 +61,48 @@ class UserMappings:
         return next((m for m in mappings if m.get("plex_username") == plex_username), None)
 
 
+# --- Plex viewers as the Discord server knows them ---------------------------
+# Tautulli names the Plex username "username" in sessions and user stats, but "user" in
+# history and home-stats rows; these helpers accept either.
+
+
+def plex_username(row: Dict[str, Any]) -> Optional[str]:
+    return row.get("username") or row.get("user")
+
+
+def ignored_usernames() -> set:
+    """Plex users an admin marked as ignored (plex ignore): left out of stats and lists."""
+    return {m["plex_username"] for m in UserMappings.load_user_mappings() if m.get("ignore", False)}
+
+
+def mapped_discord_user(bot, username: Optional[str]):
+    """The Discord user mapped to a Plex username, if the bot can see them."""
+    mapping = UserMappings.get_mapping_by_plex_username(username) if username else None
+    if not mapping or not mapping.get("discord_id"):
+        return None
+    try:
+        return bot.get_user(int(mapping["discord_id"]))
+    except (TypeError, ValueError):
+        return None
+
+
+def viewer_name(bot, row: Dict[str, Any]) -> str:
+    """Their Discord name when mapped (who people recognise here), else their Plex name."""
+    member = mapped_discord_user(bot, plex_username(row))
+    if member:
+        return member.display_name
+    return row.get("friendly_name") or plex_username(row) or "Unknown"
+
+
+def viewer_avatar(bot, row: Dict[str, Any]) -> Optional[str]:
+    """Their Discord avatar when mapped, else their Plex one."""
+    member = mapped_discord_user(bot, plex_username(row))
+    if member:
+        return member.display_avatar.url
+    thumb = row.get("user_thumb") or row.get("thumb") or ""
+    return thumb if thumb.startswith("http") else None
+
+
 def format_duration(seconds: int) -> str:
     """Format a number of seconds into a compact duration like '2d 5h 30m'.
 

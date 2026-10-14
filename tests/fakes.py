@@ -136,6 +136,32 @@ class FakeTautulli:
             rows = [r for r in rows if search.lower() in r.get("title", "").lower()]
         return self._ok({"data": rows[:length]})
 
+    # Stats data: home stats by stat_id, library tables and users.
+    home_stats: dict = {}
+    home_stats_calls: list = []
+    libraries_table: list = []
+    library_user_stats: dict = {}  # section_id -> rows
+    users: list = []
+
+    async def get_home_stats(self, params=None):
+        self.home_stats_calls = self.home_stats_calls + [params]
+        return self._ok({"rows": self.home_stats.get(params["stat_id"], [])})
+
+    async def get_most_watched_movies(self, time_range):
+        return await self.get_home_stats({"stat_id": "popular_movies", "time_range": time_range})
+
+    async def get_most_watched_shows(self, time_range):
+        return await self.get_home_stats({"stat_id": "popular_tv", "time_range": time_range})
+
+    async def get_libraries_table(self):
+        return self._ok({"data": self.libraries_table})
+
+    async def get_library_user_stats(self, section_id=None):
+        return self._ok(self.library_user_stats.get(str(section_id), []))
+
+    async def get_users(self):
+        return self._ok(self.users)
+
     async def get_recently_added(self, count, media_type=None):
         self.recent_calls = self.recent_calls + [(count, media_type)]
         return self._ok({"recently_added": self.recently_added[:count]})
@@ -247,6 +273,21 @@ def build_media_bot(tautulli, items=()):
     bot._connection.application_id = 999
     install_slash_groups(bot)
     cog = MediaCommands(bot)
+    bot.add_cog(cog)
+    return bot, cog
+
+
+def build_stats_bot(tautulli):
+    """A PlexBot with PlexStats loaded."""
+    from cogs.plex_stats import PlexStats
+    from plexbot import PlexBot, install_slash_groups
+
+    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+                  default_guild_ids=[GUILD_ID])
+    bot.shared_resources = {"tautulli": tautulli}
+    bot._connection.application_id = 999
+    install_slash_groups(bot)
+    cog = PlexStats(bot)
     bot.add_cog(cog)
     return bot, cog
 

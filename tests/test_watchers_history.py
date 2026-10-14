@@ -2,6 +2,8 @@
 
 import asyncio
 
+import utilities
+
 from fakes import FakeTautulli, build_bot, patch_images
 from cogs.server_commands import WatchersView, last_viewers
 from ui.cards import recent_viewer_line
@@ -43,7 +45,7 @@ def _render(monkeypatch, *, enabled, history=None, reachable=True):
     patch_images(monkeypatch)
     monkeypatch.setattr(server_commands.config, "get", lambda section, key, default=None:
                         enabled if (section, key) == ("discord", "show_recent_viewers") else default)
-    monkeypatch.setattr(server_commands.UserMappings, "load_user_mappings",
+    monkeypatch.setattr(utilities.UserMappings, "load_user_mappings",
                         staticmethod(lambda: [{"plex_username": "mallory", "ignore": True}]))
     tautulli = FakeTautulli([])
     tautulli.history = history if history is not None else [MOVIE, IGNORED, EPISODE]

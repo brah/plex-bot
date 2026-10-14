@@ -26,7 +26,7 @@ from ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, err
 from ui.format import file_size, join, plural, progress_bar, timestamp, to_int, truncate
 from ui.images import mascot, plex_image, poster_key, poster_strip
 from ui.theme import Colour, Limits, brand_colour
-from utilities import UserMappings, format_duration
+from utilities import format_duration, ignored_usernames, viewer_name
 
 logger = logging.getLogger("plexbot.media_commands")
 logger.setLevel(logging.INFO)
@@ -363,16 +363,6 @@ class MediaCommands(commands.Cog):
                 self._pms_identifier = Tautulli.get_response_data(response, {}).get("pms_identifier") or ""
         return self._pms_identifier or None
 
-    def _display_name(self, row: dict) -> str:
-        """A viewer as the server knows them: their Discord name when mapped, else their Plex name."""
-        name = row.get("friendly_name") or row.get("username") or "Unknown"
-        mapping = UserMappings.get_mapping_by_plex_username(row.get("username"))
-        if mapping and mapping.get("discord_id"):
-            member = self.bot.get_user(to_int(mapping["discord_id"]))
-            if member:
-                return member.display_name
-        return name
-
     async def render_item(self, rating_key: str, footer: Optional[str] = None) -> Optional[Reply]:
         """The card for one library item with its watch stats; None when Tautulli has no such item."""
         metadata_r, users_r, time_r, server_id = await asyncio.gather(
@@ -390,8 +380,8 @@ class MediaCommands(commands.Cog):
         def data(response):
             return Tautulli.get_response_data(response, []) if Tautulli.check_response(response) else []
 
-        ignored = {u["plex_username"] for u in UserMappings.load_user_mappings() if u.get("ignore", False)}
-        stats = watch_stats(data(users_r), data(time_r), self._display_name, ignored)
+        stats = watch_stats(data(users_r), data(time_r), lambda row: viewer_name(self.bot, row),
+                            ignored_usernames())
         poster, art = await asyncio.gather(
             plex_image(self.tautulli, poster_key(item), filename="poster.jpg"),
             plex_image(self.tautulli, item.get("art") or item.get("grandparent_art"), filename="art.jpg",
