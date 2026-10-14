@@ -38,7 +38,8 @@ def _our_ui_classes():
 
 def test_finds_our_ui_classes():
     names = {cls.__name__ for cls in _our_ui_classes()}
-    assert {"WatchersView", "StopStreamModal", "StreamSelect", "LoggedView"} <= names
+    expected = {"WatchersView", "StreamDetailsSelect", "StreamDetailView", "StopStreamModal", "LoggedView"}
+    assert expected <= names
 
 
 @pytest.mark.parametrize("cls", _our_ui_classes(), ids=lambda cls: cls.__name__)
@@ -56,11 +57,11 @@ def test_editing_a_watchers_message_does_not_crash():
 
     async def run():
         bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None)
-        view = WatchersView(object.__new__(ServerCommands))
+        view = WatchersView(object.__new__(ServerCommands), [])
         bot._connection.store_view(view, 5555)
         assert bot._connection._view_store.is_message_tracked(5555)
         # What parse_message_update does with the components Discord echoes back.
         bot._connection._view_store.update_from_message(5555, view.to_components())
-        assert [child.label for child in view.children] == ["Refresh", "Manage streams"]
+        assert [child.label for child in view.children] == ["Refresh"]
 
     asyncio.run(run())

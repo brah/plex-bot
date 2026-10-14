@@ -19,7 +19,10 @@ from utilities import (
 )
 from slash_commands import plex, plexadmin
 from tautulli_wrapper import Tautulli
-from ui.format import format_ms, truncate
+from ui.cards import plex_web_link, session_title, session_user, stream_detail, stream_overview
+from ui.embeds import ErrorKind, Reply, empty_state, error_state, service_down, success
+from ui.format import to_int, truncate
+from ui.images import current_frame, plex_image, poster_key, poster_strip
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
@@ -156,23 +159,15 @@ def _build_logs_reply(text: str, min_level: int | None, search: str | None):
 
 # --- /plex watchers helpers -----------------------------------------------------
 
-_NO_STREAM_PERMISSION = "You don't have permission to stop streams."
+_NO_STREAM_PERMISSION = "Only stream managers can stop streams."
 # Discord caps autocomplete results and select options at 25, and their labels at 100 chars.
 _MAX_CHOICES = 25
 _MAX_LABEL = 100
 
 
-def _session_user(session: dict) -> str:
-    return session.get("friendly_name") or session.get("username") or "Unknown"
-
-
-def _session_title(session: dict) -> str:
-    return session.get("full_title") or session.get("title") or "Unknown"
-
-
 def _session_label(session: dict, suffix: str = "") -> str:
     """One-line "user — title" label for a stream, within Discord's label limit."""
-    label = f"{_session_user(session)} — {_session_title(session)}"
+    label = f"{session_user(session)} — {session_title(session)}"
     return truncate(label, _MAX_LABEL - len(suffix)) + suffix
 
 
@@ -213,69 +208,12 @@ def _can_manage_streams(user, manager_ids) -> bool:
     return any(role.id in ids for role in getattr(user, "roles", []))
 
 
-def _format_session_field(session: dict) -> tuple:
-    """Format a single Tautulli session into an embed field (name, value)."""
-    user = _session_user(session)
-    title = _session_title(session)
-
-    # State indicator
-    state = session.get("state", "unknown").lower()
-    state_icons = {"playing": "▶", "paused": "⏸", "buffering": "⏳"}
-    state_icon = state_icons.get(state, "•")
-
-    # Progress bar
-    progress_bar = ""
-    try:
-        view_offset = int(session.get("view_offset", 0))
-        duration = int(session.get("duration", 0))
-        if duration > 0:
-            pct = min(100, (view_offset / duration) * 100)
-            filled = round(pct / 10)
-            bar = "█" * filled + "░" * (10 - filled)
-            elapsed = format_ms(view_offset)
-            total = format_ms(duration)
-            progress_bar = f"`{bar}` {elapsed} / {total}"
-        else:
-            elapsed = format_ms(view_offset)
-            progress_bar = f"{elapsed}"
-    except (ValueError, TypeError):
-        pass
-
-    # Transcode vs direct
-    decision = session.get("transcode_decision", "").lower()
-    if decision == "transcode":
-        stream_type = "Transcode"
-    elif decision == "copy":
-        stream_type = "Direct Stream"
-    elif decision == "direct play":
-        stream_type = "Direct Play"
-    else:
-        stream_type = session.get("quality_profile", "")
-
-    # Player info
-    player = session.get("player", "")
-    platform = session.get("platform_name") or session.get("platform", "")
-    device_parts = [p for p in [player, platform] if p]
-    device = " • ".join(device_parts) if device_parts else None
-
-    # Build value lines
-    lines = [f"{state_icon}  **{title}**"]
-    if progress_bar:
-        lines.append(progress_bar)
-
-    detail_parts = []
-    if stream_type:
-        detail_parts.append(stream_type)
-    if device:
-        detail_parts.append(device)
-    if detail_parts:
-        lines.append("  •  ".join(detail_parts))
-
-    return user, "\n".join(lines)
+def _find_session(activity: dict, session_id: str) -> dict | None:
+    return next((s for s in activity.get("sessions", []) if str(s.get("session_id")) == session_id), None)
 
 
 class StopStreamModal(LoggedModal):
-    """Asks for an optional message to the viewer, then stops the chosen stream."""
+    """Asks for an optional message to the viewer, then stops the stream."""
 
     def __init__(self, cog: "ServerCommands", session_id: str, label: str, watchers_view: "WatchersView"):
         super().__init__(title=truncate(f"Stop: {label}", 45), timeout=300)
@@ -292,91 +230,96 @@ class StopStreamModal(LoggedModal):
         self.add_item(self.message_input)
 
     async def callback(self, interaction: nextcord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        reply = await self.cog.stop_stream(interaction.user, self.session_id, self.message_input.value)
-        await interaction.followup.send(reply, ephemeral=True)
+        # Opened from the private detail card: acknowledge without a new message, then
+        # edit that card into the result.
+        await interaction.response.defer()
+        ok, text = await self.cog.stop_stream(interaction.user, self.session_id, self.message_input.value)
+        reply = success(text) if ok else error_state(ErrorKind.INPUT, text)
+        await reply.edit(interaction)
         # Plex takes a moment to drop a stopped session from its activity list.
         await asyncio.sleep(2)
         await self.watchers_view.rerender()
 
 
-class StreamSelect(nextcord.ui.StringSelect):
-    def __init__(self, choices: dict[str, str]):
-        self.labels = {session_id: label for label, session_id in choices.items()}
-        options = [nextcord.SelectOption(label=label, value=sid) for label, sid in choices.items()]
-        super().__init__(placeholder="Choose a stream to stop…", options=options)
+class StreamDetailView(LoggedView):
+    """Controls on a private stream detail card: Stop, for stream managers only."""
 
-    async def callback(self, interaction: nextcord.Interaction):
-        panel: StopStreamPanel = self.view
-        session_id = self.values[0]
+    def __init__(self, cog: "ServerCommands", session_id: str, label: str, watchers_view: "WatchersView",
+                 can_stop: bool):
+        super().__init__(timeout=600)
+        self.cog = cog
+        self.session_id = session_id
+        self.label = label
+        self.watchers_view = watchers_view
+        if not can_stop:
+            self.remove_item(self.stop_button)
+
+    @nextcord.ui.button(label="Stop this stream", emoji="\U0001F6D1", style=nextcord.ButtonStyle.danger)
+    async def stop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if not self.cog.can_manage(interaction.user):
+            await error_state(ErrorKind.PERMISSION, _NO_STREAM_PERMISSION).send(interaction, ephemeral=True)
+            return
         await interaction.response.send_modal(
-            StopStreamModal(panel.cog, session_id, self.labels[session_id], panel.watchers_view)
+            StopStreamModal(self.cog, self.session_id, self.label, self.watchers_view)
         )
 
 
-class StopStreamPanel(LoggedView):
-    """Private (ephemeral) panel listing streams a manager can stop."""
+class StreamDetailsSelect(nextcord.ui.StringSelect):
+    def __init__(self, choices: dict[str, str]):
+        options = [nextcord.SelectOption(label=label, value=sid) for label, sid in choices.items()]
+        super().__init__(placeholder="Stream details…", options=options, row=0)
 
-    def __init__(self, cog: "ServerCommands", choices: dict[str, str], watchers_view: "WatchersView"):
-        super().__init__(timeout=300)
-        self.cog = cog
-        self.watchers_view = watchers_view
-        self.add_item(StreamSelect(choices))
+    async def callback(self, interaction: nextcord.Interaction):
+        watchers_view: WatchersView = self.view
+        await watchers_view.cog.show_stream_detail(interaction, self.values[0], watchers_view)
 
 
 class WatchersView(LoggedView):
-    """Buttons under the public /plex watchers message: Refresh for anyone, Manage for stream managers."""
+    """Controls under the public /plex watchers overview: stream details (anyone) and Refresh."""
 
-    def __init__(self, cog: "ServerCommands", timeout: float = 600):
+    def __init__(self, cog: "ServerCommands", sessions: list, timeout: float = 600):
         super().__init__(timeout=timeout)
         self.cog = cog
         self.message = None
+        self.set_sessions(sessions)
+
+    def set_sessions(self, sessions: list) -> None:
+        for item in [child for child in self.children if isinstance(child, StreamDetailsSelect)]:
+            self.remove_item(item)
+        choices = _session_choices(sessions, "")
+        if choices:
+            self.add_item(StreamDetailsSelect(choices))
 
     # Not named refresh(): nextcord calls View.refresh(components) itself when the
     # message is edited, and overriding it crashed the gateway connection.
     async def rerender(self):
-        """Re-render the public message, e.g. after a stream was stopped from the panel."""
+        """Re-render the public overview, e.g. after a stream was stopped or ended."""
         if self.message is None:
             return
-        embed = self.cog.build_watchers_embed(await self.cog.fetch_activity())
+        activity = await self.cog.fetch_activity()
+        if activity is None:
+            return
+        reply = await self.cog.render_watchers(activity, self)
         try:
-            await self.message.edit(embed=embed, view=self)
+            await reply.edit_message(self.message)
         except nextcord.HTTPException as e:
             logger.warning(f"Could not refresh /plex watchers message: {e}")
 
-    @nextcord.ui.button(label="Refresh", emoji="\U0001F504", style=nextcord.ButtonStyle.secondary)
+    @nextcord.ui.button(label="Refresh", emoji="\U0001F504", style=nextcord.ButtonStyle.secondary, row=1)
     async def refresh_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         await interaction.response.defer()
-        embed = self.cog.build_watchers_embed(await self.cog.fetch_activity())
-        await interaction.edit_original_message(embed=embed, view=self)
-
-    @nextcord.ui.button(label="Manage streams", emoji="\U0001F6D1", style=nextcord.ButtonStyle.secondary)
-    async def manage_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        if not self.cog.can_manage(interaction.user):
-            await interaction.response.send_message(_NO_STREAM_PERMISSION, ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True, with_message=True)
         activity = await self.cog.fetch_activity()
         if activity is None:
-            await interaction.followup.send(
-                "Couldn't reach Tautulli — try again in a moment.", ephemeral=True
-            )
+            await service_down("Tautulli").send(interaction, ephemeral=True)
             return
-        # Managers see every stream, including users hidden from the public list.
-        choices = _session_choices(activity.get("sessions", []), "")
-        if not choices:
-            await interaction.followup.send("No one is streaming right now.", ephemeral=True)
-            return
-        await interaction.followup.send(
-            "Pick a stream to stop:", view=StopStreamPanel(self.cog, choices, self), ephemeral=True
-        )
+        reply = await self.cog.render_watchers(activity, self)
+        await reply.edit(interaction)
 
     async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
+        # Expired controls are removed; the embed's "updated" time shows its age.
         if self.message:
             try:
-                await self.message.edit(view=self)
+                await self.message.edit(view=None)
             except nextcord.HTTPException:
                 pass
 
@@ -387,6 +330,7 @@ class ServerCommands(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
         self.plex_image = config.get("ui", "plex_image")
+        self._pms_identifier: str | None = None  # cached by _server_id()
         self._display_streams = True  # presence alternates between stream stats and a help hint
         self.status_task.start()  # type: ignore[attr-defined]
 
@@ -509,51 +453,104 @@ class ServerCommands(commands.Cog):
             return None
         return Tautulli.get_response_data(response, {})
 
-    def build_watchers_embed(self, activity: dict | None) -> nextcord.Embed:
-        embed = nextcord.Embed(title="Plex Activity", color=self.plex_embed_color)
-        embed.set_thumbnail(url=self.plex_image)
-        embed.timestamp = nextcord.utils.utcnow()
-        if activity is None:
-            embed.description = "Couldn't reach Tautulli for current activity. Try **Refresh** in a moment."
-            return embed
-
+    def _visible_sessions(self, activity: dict) -> list:
         mappings = UserMappings.load_user_mappings()
-        ignored_users = {u["plex_username"] for u in mappings if u.get("ignore", False)}
-        sessions = activity.get("sessions", [])
-        visible_sessions = [s for s in sessions if s.get("username") not in ignored_users]
-        if not visible_sessions:
-            embed.description = "No one is currently watching."
-            return embed
+        ignored = {u["plex_username"] for u in mappings if u.get("ignore", False)}
+        return [s for s in activity.get("sessions", []) if s.get("username") not in ignored]
 
-        stream_count = activity.get("stream_count", len(visible_sessions))
-        total_bw = activity.get("total_bandwidth", 0)
-        header_parts = [f"{stream_count} active stream{'s' if int(stream_count) != 1 else ''}"]
-        if total_bw:
-            header_parts.append(f"{round(int(total_bw) / 1000, 1)} Mbps")
-        embed.description = "  •  ".join(header_parts)
-        for session in visible_sessions:
-            name, value = _format_session_field(session)
-            embed.add_field(name=name, value=value, inline=False)
-        return embed
+    async def render_watchers(self, activity: dict, view: "WatchersView") -> Reply:
+        """The public overview for the current activity, with its controls rebuilt to match."""
+        sessions = self._visible_sessions(activity)
+        view.set_sessions(sessions)
+        if not sessions:
+            reply = empty_state("Nobody's watching right now.", hint="Hit Refresh to check again.")
+            reply.view = view
+            return reply
+        posters = await asyncio.gather(*(
+            plex_image(self.tautulli, poster_key(s), filename=f"poster-{i}.jpg", width=200, height=300)
+            for i, s in enumerate(sessions[:6])
+        ))
+        strip = await asyncio.to_thread(
+            poster_strip, [p.data for p in posters if p], extra=max(0, len(sessions) - 6)
+        )
+        embed = stream_overview(
+            sessions, bandwidth_kbps=to_int(activity.get("total_bandwidth")), strip=strip,
+            updated=nextcord.utils.utcnow(),
+        )
+        return Reply([embed], [strip] if strip else [], view=view)
 
-    async def stop_stream(self, actor, session_id: str, message: str | None) -> str:
-        """Stop a stream and return the reply for the manager who asked."""
+    async def _server_id(self) -> str | None:
+        """The Plex server's machine identifier, for app.plex.tv links (cached)."""
+        if self._pms_identifier is None:
+            response = await self.tautulli.get_server_info()
+            if Tautulli.check_response(response):
+                self._pms_identifier = Tautulli.get_response_data(response, {}).get("pms_identifier") or ""
+        return self._pms_identifier or None
+
+    def _avatar_url(self, session: dict) -> str | None:
+        """The viewer's Discord avatar when mapped (recognisable in the server), else their Plex one."""
+        mapping = UserMappings.get_mapping_by_plex_username(session.get("username"))
+        if mapping and mapping.get("discord_id"):
+            user = self.bot.get_user(to_int(mapping["discord_id"]))
+            if user:
+                return user.display_avatar.url
+        thumb = session.get("user_thumb") or ""
+        return thumb if thumb.startswith("http") else None
+
+    async def show_stream_detail(self, interaction: nextcord.Interaction, session_id: str,
+                                 watchers_view: "WatchersView") -> None:
+        await interaction.response.defer(ephemeral=True, with_message=True)
         activity = await self.fetch_activity()
         if activity is None:
-            return "Couldn't reach Tautulli to stop that stream — try again in a moment."
-        sessions = activity.get("sessions", [])
-        session = next((s for s in sessions if str(s.get("session_id")) == session_id), None)
+            await service_down("Tautulli").send(interaction, ephemeral=True)
+            return
+        session = _find_session(activity, session_id)
         if session is None:
-            return "That stream isn't running anymore — run `/plex watchers` to see current streams."
+            await empty_state("That stream has ended.", hint="The list has been refreshed.").send(
+                interaction, ephemeral=True
+            )
+            await watchers_view.rerender()
+            return
+
+        frame, poster = await asyncio.gather(
+            current_frame(self.tautulli, session, filename="frame.jpg"),
+            plex_image(self.tautulli, poster_key(session), filename="poster.jpg"),
+        )
+        if frame is None:
+            frame = await plex_image(
+                self.tautulli, session.get("art"), filename="art.jpg", width=640, height=360, fallback=None
+            )
+        embed = stream_detail(
+            session,
+            avatar_url=self._avatar_url(session),
+            link=plex_web_link(await self._server_id(), session.get("rating_key")),
+            frame=frame,
+            poster=poster,
+            now=nextcord.utils.utcnow(),
+        )
+        view = StreamDetailView(self, session_id, _session_label(session), watchers_view,
+                                can_stop=self.can_manage(interaction.user))
+        await Reply([embed], [a for a in (frame, poster) if a], view=view).send(interaction, ephemeral=True)
+
+    async def stop_stream(self, actor, session_id: str, message: str | None) -> tuple[bool, str]:
+        """Stop a stream; returns (stopped, text for the manager who asked)."""
+        activity = await self.fetch_activity()
+        if activity is None:
+            return False, "Couldn't reach Tautulli to stop that stream. Try again in a moment."
+        session = _find_session(activity, session_id)
+        if session is None:
+            return False, "That stream isn't running anymore. Run `/plex watchers` to see current streams."
 
         label = _session_label(session)
         status = await self.tautulli.terminate_session(session_id=session_id, message=message or None)
         if status == 200:
             note = f" with message: {message}" if message else ""
             logger.info(f"{actor} stopped stream {session_id} ({label}){note}")
-            return f"Stopped **{_session_user(session)}**'s stream of **{_session_title(session)}**."
+            return True, f"Stopped **{session_user(session)}**'s stream of **{session_title(session)}**."
         logger.warning(f"{actor} failed to stop stream {session_id} ({label}): Tautulli returned an error")
-        return "Tautulli couldn't stop that stream. An admin can check `/plexadmin logs` for details."
+        return False, (
+            "Tautulli couldn't stop that stream. An admin can check `/plexadmin logs` for details."
+        )
 
     @plex.subcommand(description="See who's watching on Plex. Stream managers can also stop streams.")
     async def watchers(
@@ -570,17 +567,24 @@ class ServerCommands(commands.Cog):
     ):
         if stop:
             if not self.can_manage(interaction.user):
-                await interaction.response.send_message(_NO_STREAM_PERMISSION, ephemeral=True)
+                await error_state(ErrorKind.PERMISSION, _NO_STREAM_PERMISSION).send(
+                    interaction, ephemeral=True
+                )
                 return
             await interaction.response.defer(ephemeral=True)
-            reply = await self.stop_stream(interaction.user, stop, message)
-            await interaction.followup.send(reply, ephemeral=True)
+            ok, text = await self.stop_stream(interaction.user, stop, message)
+            reply = success(text) if ok else error_state(ErrorKind.INPUT, text)
+            await reply.send(interaction, ephemeral=True)
             return
 
         await interaction.response.defer()
-        view = WatchersView(self)
-        embed = self.build_watchers_embed(await self.fetch_activity())
-        view.message = await interaction.followup.send(embed=embed, view=view, wait=True)
+        activity = await self.fetch_activity()
+        if activity is None:
+            await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
+            return
+        view = WatchersView(self, [])
+        reply = await self.render_watchers(activity, view)
+        view.message = await reply.send(interaction)
 
     @watchers.on_autocomplete("stop")
     async def _watchers_stop_autocomplete(self, interaction: nextcord.Interaction, stop: str):
