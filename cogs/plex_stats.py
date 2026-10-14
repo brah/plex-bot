@@ -65,13 +65,11 @@ def _last_watched(row: dict) -> Optional[str]:
     return row.get("grandchild_title") or row.get("title")
 
 
-def top_card(rows, *, days: int, by: str, name: Callable[[dict], str]) -> nextcord.Embed:
-    lines = [f"-# Last {plural(days, 'day')} · by {'plays' if by == 'plays' else 'watch time'}"]
+def top_card(rows, *, days: int, name: Callable[[dict], str]) -> nextcord.Embed:
+    lines = [f"-# Last {plural(days, 'day')} · by watch time"]
     for rank, row in enumerate(rows[:_RANKED], 1):
         watched = format_duration(to_int(row.get("total_duration")))
-        plays = plural(to_int(row.get("total_plays")), "play")
-        figures = [plays, watched] if by == "plays" else [watched, plays]
-        lines.append(join([f"{rank_prefix(rank)} **{escape_markdown(name(row))}**", *figures]))
+        lines.append(f"{rank_prefix(rank)} **{escape_markdown(name(row))}** · {watched}")
         last = _last_watched(row)
         if last:
             lines.append(f"-# Last watched {_escaped(last)}")
@@ -293,7 +291,7 @@ class PlexStats(commands.Cog):
 
     # --- /plex top ---------------------------------------------------------------
 
-    @plex.subcommand(description="Top watchers on the server, by watch time or plays")
+    @plex.subcommand(description="Top watchers on the server, by watch time")
     async def top(
         self,
         interaction: nextcord.Interaction,
@@ -301,16 +299,12 @@ class PlexStats(commands.Cog):
             description="How many days back (default: the server's setting)", required=False,
             min_value=1, max_value=3650,
         ),
-        by: str = nextcord.SlashOption(
-            description="What to rank by (default: watch time)", required=False,
-            choices={"Watch time": "duration", "Plays": "plays"},
-        ),
     ):
         await interaction.response.defer()
         default_days = to_int(config.get("defaults", "stats_duration", 7), 7)
-        days, by = days or default_days, by or "duration"
+        days = days or default_days
         response = await self.tautulli.get_home_stats(params={
-            "stats_type": by, "stat_id": "top_users", "stats_count": str(_RANKED + 10), "time_range": days,
+            "stats_type": "duration", "stat_id": "top_users", "stats_count": str(_RANKED + 10), "time_range": days,
         })
         rows = self._rows(response)
         if rows is None:
@@ -321,13 +315,13 @@ class PlexStats(commands.Cog):
         if not ranked:
             await empty_state(f"Nobody's watched anything in the last {plural(days, 'day')}.").send(interaction)
             return
-        embed = top_card(ranked, days=days, by=by, name=self._name)
+        embed = top_card(ranked, days=days, name=self._name)
         avatar = viewer_avatar(self.bot, ranked[0])
         if avatar:
             embed.set_thumbnail(url=avatar)
         await Reply([embed]).send(interaction)
         # Roles follow the server's standard ranking, not whatever window someone asked for.
-        if interaction.guild and days == default_days and by == "duration":
+        if interaction.guild and days == default_days:
             await self._assign_top_roles(interaction.guild, ranked[:3])
 
     async def _assign_top_roles(self, guild: nextcord.Guild, top_rows: list) -> None:
