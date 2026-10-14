@@ -34,7 +34,7 @@ def test_last_viewers_keeps_each_viewers_latest_play_and_skips_ignored():
     rows = [MOVIE, IGNORED, OLDER_ALICE, EPISODE]
     assert last_viewers(rows, {"mallory"}) == [MOVIE, EPISODE]
     many = [dict(MOVIE, user=f"u{i}") for i in range(8)]
-    assert len(last_viewers(many, set())) == 5
+    assert len(last_viewers(many, set())) == 3
 
 
 def _render(monkeypatch, *, enabled, history=None, reachable=True):

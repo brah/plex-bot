@@ -3,6 +3,7 @@
 import asyncio
 import io
 import logging
+import os
 import random
 import re
 import time
@@ -170,7 +171,7 @@ _NO_STREAM_PERMISSION = "Only stream managers can stop streams."
 # Discord caps autocomplete results and select options at 25, and their labels at 100 chars.
 _MAX_CHOICES = 25
 _MAX_LABEL = 100
-_LAST_VIEWERS = 5
+_LAST_VIEWERS = 3
 
 
 def last_viewers(rows: list[dict], ignored: set, limit: int = _LAST_VIEWERS) -> list[dict]:
@@ -302,7 +303,10 @@ class StreamDetailView(LoggedView):
 class StreamDetailsSelect(nextcord.ui.StringSelect):
     def __init__(self, choices: dict[str, str]):
         options = [nextcord.SelectOption(label=label, value=sid) for label, sid in choices.items()]
-        super().__init__(placeholder="Stream details…", options=options, row=0)
+        # nextcord 3.2 StringSelect never generates a custom_id (MISSING, not None), and Discord
+        # rejects a select without one.
+        super().__init__(custom_id=os.urandom(16).hex(), placeholder="Stream details…",
+                         options=options, row=0)
 
     async def callback(self, interaction: nextcord.Interaction):
         watchers_view: WatchersView = self.view

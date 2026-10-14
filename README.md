@@ -95,7 +95,7 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
 
    *Note: `top_role_id`, `second_role_id`, and `third_role_id` are role IDs which you've created to highlight the top 3 media watchers on your server.*
 
-   *`server_id` registers slash commands to your server so they appear instantly; if left blank they register globally, which can take up to an hour. `stream_manager_ids` lists Discord user or role IDs (besides admins) allowed to stop streams from `/plex watchers`. Set `show_recent_viewers` to `true` to have `/plex watchers` list the last five viewers and what they watched when nobody's streaming; it's off by default because that card is public. If slash commands never appear, re-invite the bot with the `applications.commands` scope.*
+   *`server_id` registers slash commands to your server so they appear instantly; if left blank they register globally, which can take up to an hour. `stream_manager_ids` lists Discord user or role IDs (besides admins) allowed to stop streams from `/plex watchers`. Set `show_recent_viewers` to `true` to have `/plex watchers` list the last three viewers and what they watched when nobody's streaming; it's off by default because that card is public. If slash commands never appear, re-invite the bot with the `applications.commands` scope.*
 
 4. Run the bot:
 

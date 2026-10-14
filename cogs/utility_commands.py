@@ -1,6 +1,7 @@
 # cogs/utility_commands.py
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -142,7 +143,9 @@ class HelpCategorySelect(nextcord.ui.StringSelect):
             nextcord.SelectOption(label=name, value=key, emoji=emoji, description=truncate(summary, 100))
             for key, emoji, name, summary in _categories_with(entries)
         ]
-        super().__init__(placeholder="Choose a category…", options=options)
+        # See StreamDetailsSelect: nextcord 3.2 never generates the custom_id itself.
+        super().__init__(custom_id=os.urandom(16).hex(), placeholder="Choose a category…",
+                         options=options)
 
     async def callback(self, interaction: nextcord.Interaction):
         view: HelpView = self.view

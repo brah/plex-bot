@@ -16,7 +16,8 @@ import pytest
 
 import cogs
 import errors
-from cogs.server_commands import ServerCommands, WatchersView
+from cogs.server_commands import ServerCommands, StreamDetailsSelect, WatchersView
+from cogs.utility_commands import HelpEntry, HelpView
 from plexbot import PlexBot
 
 # Methods nextcord documents as meant to be overridden.
@@ -53,6 +54,29 @@ def test_ui_class_does_not_replace_nextcord_methods(cls):
             continue
         clashes = [base.__name__ for base in nextcord_bases if name in vars(base)]
         assert not clashes, f"{cls.__name__}.{name} replaces nextcord's {clashes[0]}.{name}"
+
+
+def _custom_ids(view):
+    return [
+        component.get("custom_id")
+        for row in view.to_components()
+        for component in row["components"]
+    ]
+
+
+def test_selects_send_a_custom_id():
+    """nextcord 3.2's StringSelect defaults custom_id to MISSING, not None, so it never generates
+    one; Discord then rejects the whole message (400: custom_id is required)."""
+
+    async def run():
+        help_view = HelpView([HelpEntry("/plex status", "Server health", "watching")])
+        watchers_view = WatchersView(object.__new__(ServerCommands), [])
+        watchers_view.add_item(StreamDetailsSelect({"Alice - The Matrix": "abc"}))
+        return _custom_ids(help_view) + _custom_ids(watchers_view)
+
+    ids = asyncio.run(run())
+    assert ids and all(ids), ids
+    assert len(set(ids)) == len(ids)
 
 
 def test_editing_a_watchers_message_does_not_crash():
