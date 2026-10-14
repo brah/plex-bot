@@ -310,7 +310,7 @@ class StopStreamModal(LoggedModal):
         await interaction.followup.send(reply, ephemeral=True)
         # Plex takes a moment to drop a stopped session from its activity list.
         await asyncio.sleep(2)
-        await self.watchers_view.refresh()
+        await self.watchers_view.rerender()
 
 
 class StreamSelect(nextcord.ui.StringSelect):
@@ -345,7 +345,9 @@ class WatchersView(LoggedView):
         self.cog = cog
         self.message = None
 
-    async def refresh(self):
+    # Not named refresh(): nextcord calls View.refresh(components) itself when the
+    # message is edited, and overriding it crashed the gateway connection.
+    async def rerender(self):
         """Re-render the public message, e.g. after a stream was stopped from the panel."""
         if self.message is None:
             return
