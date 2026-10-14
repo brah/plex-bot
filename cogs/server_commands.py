@@ -425,7 +425,6 @@ class ServerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
-        self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
         self._pms_identifier: str | None = None  # cached by _server_id()
         self._display_streams = True  # presence alternates between stream stats and a help hint
         self.status_task.start()  # type: ignore[attr-defined]
