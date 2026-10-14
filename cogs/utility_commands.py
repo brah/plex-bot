@@ -49,6 +49,11 @@ def _slash_usage(path: str, command) -> str:
     return " ".join(parts)
 
 
+def _requires_admin(command) -> bool:
+    # The bot only uses has_permissions(administrator=True), so any such check means admin-only.
+    return any(check.__qualname__.startswith("has_permissions.") for check in command.checks)
+
+
 def collect_help_entries(bot, prefix: str) -> list:
     """Help text generated from the commands themselves, so it can't drift out of date."""
     entries = []
@@ -69,7 +74,10 @@ def collect_help_entries(bot, prefix: str) -> list:
                 continue
             usage = f"{prefix}{command.name} {command.signature}".strip()
             description = (command.help or "").strip().split("\n")[0]
-            entries.append(HelpEntry(usage, description, category, EXAMPLES.get(f"{prefix}{command.name}")))
+            entry_category = "admin" if _requires_admin(command) else category
+            entries.append(
+                HelpEntry(usage, description, entry_category, EXAMPLES.get(f"{prefix}{command.name}"))
+            )
     return entries
 
 

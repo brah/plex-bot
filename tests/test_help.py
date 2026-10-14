@@ -34,6 +34,11 @@ def _build_with_prefix_cog():
         async def secret(self, ctx):
             """Hidden."""
 
+        @commands.command()
+        @commands.has_permissions(administrator=True)
+        async def refresh(self, ctx):
+            """Refresh the cache."""
+
     async def run():
         bot, _cog = build_bot(FakeTautulli([]))
         bot.add_cog(Library())
@@ -52,6 +57,15 @@ def test_entries_come_from_slash_and_prefix_metadata():
     assert movie.category == "library" and movie.description == "Lookup a movie in your Plex library."
     assert not any(usage.startswith("plex secret") for usage in entries)
     assert not any(usage.startswith("/plex help") for usage in entries)  # help doesn't list itself
+
+
+def test_admin_only_prefix_command_in_a_public_cog_is_admin():
+    entries = _build_with_prefix_cog()
+    refresh = next(e for e in entries if e.usage.startswith("plex refresh"))
+    assert refresh.category == "admin"
+    assert next(e for e in entries if e.usage.startswith("plex movie")).category == "library"
+    assert refresh not in visible_entries(entries, is_admin=False)
+    assert refresh in visible_entries(entries, is_admin=True)
 
 
 def test_admin_hidden_from_non_admins():
