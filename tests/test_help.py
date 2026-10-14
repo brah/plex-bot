@@ -69,6 +69,43 @@ def test_admin_only_prefix_command_in_a_public_cog_is_admin():
     assert refresh in visible_entries(entries, is_admin=True)
 
 
+def test_group_subcommands_are_listed_instead_of_the_group():
+    class Charts(commands.Cog):
+        help_category = "charts"
+
+        @commands.group(invoke_without_command=True)
+        async def chart(self, ctx):
+            """Create various charts."""
+
+        @chart.command(name="hours")
+        async def chart_hours(self, ctx, *args):
+            """
+            Chart of the most-watched hours.
+
+            More detail that should not appear.
+            """
+
+        @chart.command(name="users")
+        @commands.has_permissions(administrator=True)
+        async def chart_users(self, ctx, *args):
+            """Chart of the most active users."""
+
+        @chart.command(name="secret", hidden=True)
+        async def chart_secret(self, ctx):
+            """Hidden."""
+
+    async def run():
+        bot, _cog = build_bot(FakeTautulli([]))
+        bot.add_cog(Charts())
+        return collect_help_entries(bot, "plex ")
+
+    entries = {e.usage: e for e in asyncio.run(run()) if "chart" in e.usage}
+    assert sorted(entries) == ["plex chart hours [args...]", "plex chart users [args...]"]
+    hours = entries["plex chart hours [args...]"]
+    assert hours.category == "charts" and hours.description == "Chart of the most-watched hours."
+    assert entries["plex chart users [args...]"].category == "admin"  # checked per subcommand
+
+
 def test_admin_hidden_from_non_admins():
     assert [e.category for e in visible_entries(ENTRIES, is_admin=False)] == [
         "watching", "watching", "library"

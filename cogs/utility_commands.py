@@ -54,6 +54,22 @@ def _requires_admin(command) -> bool:
     return any(check.__qualname__.startswith("has_permissions.") for check in command.checks)
 
 
+def _runnable_commands(commands_):
+    """Visible prefix commands, with a group replaced by its own subcommands.
+
+    cog.get_commands() returns only top-level commands, so a group such as `plex chart`
+    would otherwise show up as one line and hide hours, days, users, ... The group itself
+    is dropped: it is just the umbrella its subcommands are listed under.
+    """
+    for command in commands_:
+        if command.hidden:
+            continue
+        if isinstance(command, commands.Group):
+            yield from _runnable_commands(sorted(command.commands, key=lambda c: c.name))
+        else:
+            yield command
+
+
 def collect_help_entries(bot, prefix: str) -> list:
     """Help text generated from the commands themselves, so it can't drift out of date."""
     entries = []
@@ -69,14 +85,13 @@ def collect_help_entries(bot, prefix: str) -> list:
         category = getattr(cog, "help_category", None)
         if category is None:
             continue
-        for command in cog.get_commands():
-            if command.hidden:
-                continue
-            usage = f"{prefix}{command.name} {command.signature}".strip()
+        for command in _runnable_commands(cog.get_commands()):
+            usage = f"{prefix}{command.qualified_name} {command.signature}".strip()
             description = (command.help or "").strip().split("\n")[0]
             entry_category = "admin" if _requires_admin(command) else category
             entries.append(
-                HelpEntry(usage, description, entry_category, EXAMPLES.get(f"{prefix}{command.name}"))
+                HelpEntry(usage, description, entry_category,
+                          EXAMPLES.get(f"{prefix}{command.qualified_name}"))
             )
     return entries
 
