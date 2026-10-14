@@ -38,6 +38,23 @@ def session_title(session: dict) -> str:
     return f"{title} ({year})" if year else title
 
 
+_MEDIA_ICONS = {"movie": "\U0001F3AC", "episode": "\U0001F4FA", "track": "\U0001F3B5"}
+_FINISHED_PERCENT = 90  # below this, a play reads as "stopped at 45%"
+
+
+def recent_viewer_line(row: dict) -> str:
+    """One past play (a Tautulli history row) for the "nobody's watching" card."""
+    percent = to_int(row.get("percent_complete"), 100)
+    when = to_int(row.get("stopped")) or to_int(row.get("date"))
+    return join([
+        f"{_MEDIA_ICONS.get(row.get('media_type'), Emoji.PLAYING)} **{escape_markdown(session_user(row))}**",
+        escape_markdown(truncate(session_title(row), 80)),
+        f"stopped at {percent}%" if percent < _FINISHED_PERCENT else None,
+        f"on {escape_markdown(str(row['platform']))}" if row.get("platform") else None,
+        timestamp(when) if when else None,
+    ])
+
+
 def _state(session: dict) -> str:
     return str(session.get("state") or "").lower()
 
