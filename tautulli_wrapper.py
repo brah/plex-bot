@@ -149,6 +149,10 @@ class Tautulli:
         """Get the PMS server information."""
         return await self.api_call("get_server_info")
 
+    async def get_pms_update(self) -> Optional[Dict[str, Any]]:
+        """Check whether a Plex Media Server update is available."""
+        return await self.api_call("get_pms_update")
+
     async def terminate_session(
         self, session_key: int = None, session_id: str = None, message: str = None
     ) -> int:
