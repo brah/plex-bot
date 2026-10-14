@@ -27,6 +27,8 @@ _MSG_CHART_FAILED = "Failed to generate chart."
 class Visualizations(commands.Cog):
     """Commands for creating visual charts and graphs from Plex/Tautulli data."""
 
+    help_category = "charts"
+
     def __init__(self, bot):
         """Initialize the Visualizations cog."""
         self.bot = bot

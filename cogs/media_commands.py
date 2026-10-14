@@ -305,6 +305,8 @@ class RandomMediaView(LoggedView):
 
 
 class MediaCommands(commands.Cog):
+    help_category = "library"
+
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")

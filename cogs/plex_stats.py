@@ -18,6 +18,8 @@ logger.setLevel(logging.INFO)
 class PlexStats(commands.Cog):
     """Commands for displaying Plex server statistics and user activity."""
 
+    help_category = "stats"
+
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
