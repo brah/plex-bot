@@ -518,7 +518,7 @@ class ServerCommands(commands.Cog):
         )
         if frame is None:
             frame = await plex_image(
-                self.tautulli, session.get("art"), filename="art.jpg", width=640, height=360, fallback=None
+                self.tautulli, session.get("art"), filename="art.jpg", width=640, height=360
             )
         embed = stream_detail(
             session,

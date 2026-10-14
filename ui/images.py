@@ -59,9 +59,13 @@ def mascot(slot: str) -> Optional[Attachment]:
 
 async def plex_image(
     tautulli, key: Optional[str], *, filename: str, width: int = 300, height: int = 450,
-    fallback: Optional[str] = "poster",
+    fallback: Optional[str] = None,
 ) -> Optional[Attachment]:
-    """Fetch a Plex image (poster, art, preview frame) through Tautulli's image proxy."""
+    """Fetch a Plex image (poster, art, preview frame) through Tautulli's image proxy.
+
+    A missing or failed image means no image, never a placeholder, so callers opt into a
+    Tautulli substitute (fallback="poster") only deliberately.
+    """
     if not key:
         return None
     try:
@@ -93,7 +97,7 @@ async def current_frame(tautulli, session: dict, *, filename: str = "frame.jpg")
     key = session.get("bif_thumb")
     if not key or not is_truthy(session.get("indexes")):
         return None
-    return await plex_image(tautulli, key, filename=filename, width=640, height=360, fallback=None)
+    return await plex_image(tautulli, key, filename=filename, width=640, height=360)
 
 
 def poster_strip(
