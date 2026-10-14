@@ -10,6 +10,7 @@ This version uses the new unified configuration and error handling systems.
 import asyncio
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import nextcord
@@ -27,7 +28,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(), logging.FileHandler("plexbot.log")],
+    handlers=[
+        logging.StreamHandler(),
+        # Capped so `plex logs` can always DM the full file within Discord's 10 MB
+        # upload limit (alongside a matches file that is at most as large).
+        RotatingFileHandler("plexbot.log", maxBytes=4_000_000, backupCount=3, encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger("plexbot")
 
