@@ -1,4 +1,11 @@
-"""Shared test fakes: Tautulli session payloads (and, from Task 5, dispatch helpers)."""
+"""Shared test fakes: Tautulli session payloads and nextcord dispatch helpers."""
+
+import asyncio
+import io
+from types import SimpleNamespace
+
+import nextcord
+from PIL import Image
 
 MOVIE_PLAYING = {
     "session_id": "abc", "session_key": "1", "media_type": "movie", "state": "playing",
@@ -53,3 +60,170 @@ def many_sessions(n: int) -> list:
              title=f"Film {i}")
         for i in range(n)
     ]
+
+
+GUILD_ID = 123
+MESSAGE_ID = 5555
+
+
+def _png() -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", (20, 30), (200, 30, 30)).save(out, format="PNG")
+    return out.getvalue()
+
+
+class FakeTautulli:
+    """Stands in for tautulli_wrapper.Tautulli; responses use Tautulli's envelope."""
+
+    tautulli_ip, use_https, api_key = "host:8181", False, "key"
+
+    def __init__(self, sessions=None, reachable=True):
+        self.sessions = list(sessions or [])
+        self.reachable = reachable
+        self.terminated = []
+
+    def _ok(self, data):
+        return {"response": {"result": "success", "data": data}} if self.reachable else None
+
+    def initialize(self):
+        pass
+
+    async def get_activity(self):
+        bandwidth = sum(int(s.get("bandwidth") or 0) for s in self.sessions)
+        return self._ok({"sessions": self.sessions, "stream_count": len(self.sessions),
+                         "total_bandwidth": bandwidth})
+
+    async def get_server_info(self):
+        return self._ok({"pms_identifier": "srv1", "pms_name": "Home", "pms_version": "1.41.0",
+                         "pms_platform": "Linux", "pms_plexpass": 1})
+
+    async def terminate_session(self, session_key=None, session_id=None, message=None):
+        self.terminated.append((session_id, message))
+        self.sessions = [s for s in self.sessions if s.get("session_id") != session_id]
+        return 200
+
+
+def patch_images(monkeypatch):
+    """Make every Plex image fetch return a tiny valid PNG instead of hitting the network."""
+    import ui.images
+
+    async def fake_fetch(*args, **kwargs):
+        return io.BytesIO(_png())
+
+    monkeypatch.setattr(ui.images, "fetch_plex_image", fake_fetch)
+
+
+class FakeMessage:
+    def __init__(self, recorder, message_id=MESSAGE_ID):
+        self.id = message_id
+        self.recorder = recorder
+
+    async def edit(self, **kwargs):
+        self.recorder.calls.append(("message.edit", kwargs))
+
+
+class Recorder:
+    """Replaces Discord-facing interaction methods and records what the bot sent."""
+
+    def __init__(self, monkeypatch):
+        self.calls = []
+        recorder = self
+
+        async def defer(self, *, ephemeral=False, with_message=False):
+            recorder.calls.append(("defer", {"ephemeral": ephemeral, "with_message": with_message}))
+
+        def is_done(self):
+            return any(kind in ("defer", "send_message", "edit_message", "send_modal")
+                       for kind, _ in recorder.calls)
+
+        async def send_message(self, content=None, **kwargs):
+            recorder.calls.append(("send_message", dict(kwargs, content=content)))
+
+        async def edit_message(self, **kwargs):
+            recorder.calls.append(("edit_message", kwargs))
+
+        async def send_modal(self, modal):
+            recorder.calls.append(("send_modal", {"modal": modal}))
+
+        async def edit_original_message(self, **kwargs):
+            recorder.calls.append(("edit_original_message", kwargs))
+
+        async def delete_original_message(self, **kwargs):
+            recorder.calls.append(("delete_original_message", {}))
+
+        class Followup:
+            async def send(self, content=None, **kwargs):
+                recorder.calls.append(("followup", dict(kwargs, content=content)))
+                return FakeMessage(recorder, message_id=6666)
+
+        monkeypatch.setattr(nextcord.InteractionResponse, "defer", defer)
+        monkeypatch.setattr(nextcord.InteractionResponse, "is_done", is_done)
+        monkeypatch.setattr(nextcord.InteractionResponse, "send_message", send_message)
+        monkeypatch.setattr(nextcord.InteractionResponse, "edit_message", edit_message)
+        monkeypatch.setattr(nextcord.InteractionResponse, "send_modal", send_modal)
+        monkeypatch.setattr(nextcord.Interaction, "edit_original_message", edit_original_message)
+        monkeypatch.setattr(nextcord.Interaction, "delete_original_message", delete_original_message)
+        monkeypatch.setattr(nextcord.Interaction, "followup", property(lambda self: Followup()))
+
+    def kinds(self):
+        return [kind for kind, _ in self.calls]
+
+    def last(self, kind):
+        return next(kwargs for k, kwargs in reversed(self.calls) if k == kind)
+
+
+def build_bot(tautulli):
+    """A PlexBot with ServerCommands loaded the way setup_hook does, without connecting."""
+    from cogs.server_commands import ServerCommands
+    from plexbot import PlexBot, install_slash_groups
+
+    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+                  default_guild_ids=[GUILD_ID])
+    bot.shared_resources = {"tautulli": tautulli}
+    bot._connection.application_id = 999
+    install_slash_groups(bot)
+    cog = ServerCommands(bot)
+    cog.status_task.cancel()
+    bot.add_cog(cog)
+    return bot, cog
+
+
+def member_payload(user_id=42, permissions="0", roles=()):
+    return {
+        "user": {"id": str(user_id), "username": f"user{user_id}", "discriminator": "0", "avatar": None},
+        "roles": [str(r) for r in roles], "joined_at": "2020-01-01T00:00:00+00:00",
+        "deaf": False, "mute": False, "permissions": permissions, "flags": 0,
+    }
+
+
+def component_payload(custom_id, *, component_type=2, values=None, member=None, message_id=MESSAGE_ID):
+    """A button (type 2) or select (type 3) click as Discord sends it over the gateway."""
+    data = {"custom_id": custom_id, "component_type": component_type}
+    if values is not None:
+        data["values"] = values
+    return {
+        "id": "1", "application_id": "999", "type": 3, "token": "tok", "version": 1,
+        "guild_id": str(GUILD_ID), "channel_id": "777", "locale": "en-US", "app_permissions": "0",
+        "entitlements": [], "authorizing_integration_owners": {},
+        "member": member or member_payload(),
+        "message": {
+            "id": str(message_id), "channel_id": "777", "type": 0, "content": "",
+            "author": {"id": "999", "username": "bot", "discriminator": "0", "avatar": None},
+            "attachments": [], "embeds": [], "mentions": [], "mention_roles": [], "pinned": False,
+            "mention_everyone": False, "tts": False, "timestamp": "2026-10-14T00:00:00+00:00",
+            "edited_timestamp": None, "flags": 0, "components": [],
+        },
+        "data": data,
+    }
+
+
+async def settle():
+    """Let nextcord's dispatched view/modal callback tasks run."""
+    for _ in range(5):
+        await asyncio.sleep(0.01)
+
+
+# Re-exported for tests that need a plain object with guild permissions.
+def permissions_user(admin=False, user_id=42, role_ids=()):
+    return SimpleNamespace(id=user_id, roles=[SimpleNamespace(id=r) for r in role_ids],
+                           guild_permissions=SimpleNamespace(administrator=admin))
