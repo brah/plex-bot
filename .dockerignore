@@ -20,6 +20,7 @@ venv/
 tests/
 .github/
 deploy/
+scripts/
 Dockerfile
 .dockerignore
 docker-compose.yml
