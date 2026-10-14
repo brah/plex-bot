@@ -234,7 +234,7 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `/plex random [type] [genre]` | A random movie or show, optionally of one genre (suggested as you type); **Roll again** for another |
 | `/plex recent [count] [type]` | What was added recently, with a poster strip; pick one for its details (private) |
 | `/plex downloading` | What qBittorrent is downloading, with progress and time left |
-| `/plex top [days]` | Top watchers by watch time, with medals. The standard ranking (the server's default days) also updates the top-three roles |
+| `/plex top [days]` | Top watchers by watch time, with medals. Defaults to the last 7 days; that default ranking also updates the top-three roles |
 | `/plex stats [days]` | Library totals and the most popular movies and shows, with posters |
 | `/plex shows` | Top TV watchers of all time |
 | `/plex history [user]` | Recent plays on the server, or one person's (names are suggested as you type) |
