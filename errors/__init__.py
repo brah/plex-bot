@@ -235,17 +235,19 @@ class ErrorHandler:
         style = ERROR_STYLES.get(category, ERROR_STYLES[ErrorCategory.UNCATEGORIZED])
         self.log_error(error, category, style)
 
+        from ui.embeds import ErrorKind, error_state, unexpected_error
+
         path = invoked_command_path(interaction)
-        embed = nextcord.Embed(
-            title=f"{style.emoji} {style.title}",
-            description=f"Something went wrong running `{path}`. The error has been logged.",
-            color=style.color,
-        )
+        if category in (ErrorCategory.API_ERROR, ErrorCategory.NETWORK_ERROR):
+            reply = error_state(
+                ErrorKind.SERVICE_DOWN,
+                f"Couldn't reach a service `{path}` depends on.",
+                hint="Try again in a minute.",
+            )
+        else:
+            reply = unexpected_error(path)
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+            await reply.send(interaction, ephemeral=True)
         except nextcord.HTTPException as e:
             logger.warning(f"Could not send error reply for {path}: {e}")
 
@@ -263,15 +265,9 @@ class ErrorHandler:
             await self.application_error_handler(interaction, error)
 
 
-_COMPONENT_ERROR_TEXT = "Something went wrong with that. The error has been logged."
-
-
-async def _reply_privately(interaction: nextcord.Interaction, text: str) -> None:
+async def _reply_privately(interaction: nextcord.Interaction, reply) -> None:
     try:
-        if interaction.response.is_done():
-            await interaction.followup.send(text, ephemeral=True)
-        else:
-            await interaction.response.send_message(text, ephemeral=True)
+        await reply.send(interaction, ephemeral=True)
     except nextcord.HTTPException as e:
         logger.warning(f"Could not send error reply: {e}")
 
@@ -284,16 +280,20 @@ class LoggedView(nextcord.ui.View):
     """
 
     async def on_error(self, error: Exception, item: nextcord.ui.Item, interaction: nextcord.Interaction):
+        from ui.embeds import unexpected_error
+
         logger.error(f"Error in {type(self).__name__} ({type(item).__name__}): {error}", exc_info=error)
-        await _reply_privately(interaction, _COMPONENT_ERROR_TEXT)
+        await _reply_privately(interaction, unexpected_error())
 
 
 class LoggedModal(nextcord.ui.Modal):
     """Modal whose submit errors are logged and answered privately (see LoggedView)."""
 
     async def on_error(self, error: Exception, interaction: nextcord.Interaction):
+        from ui.embeds import unexpected_error
+
         logger.error(f"Error in {type(self).__name__}: {error}", exc_info=error)
-        await _reply_privately(interaction, _COMPONENT_ERROR_TEXT)
+        await _reply_privately(interaction, unexpected_error())
 
 
 # Custom exception classes for better error categorization
