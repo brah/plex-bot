@@ -163,3 +163,27 @@ def test_slash_error_names_the_command(monkeypatch):
 
     asyncio.run(run())
     assert sent["ephemeral"] is True and "`/plex status`" in sent["embeds"][0].description
+
+
+def test_slash_error_after_public_defer_replaces_the_placeholder(monkeypatch):
+    import ui.embeds
+    from errors import ErrorHandler
+
+    monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+    deleted = []
+
+    async def delete_original_message():
+        deleted.append(True)
+
+    async def run():
+        bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None)
+        interaction = FakeInteraction(responded=True)
+        interaction.delete_original_message = delete_original_message
+        interaction.data = {"name": "plex", "options": [{"type": 1, "name": "status"}]}
+        error = nextcord.ApplicationInvokeError(RuntimeError("boom"))
+        await ErrorHandler(bot).application_error_handler(interaction, error)
+        return interaction
+
+    interaction = asyncio.run(run())
+    assert deleted == [True]
+    assert len(interaction.followup.sent) == 1 and interaction.followup.sent[0][1] is True
