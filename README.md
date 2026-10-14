@@ -219,12 +219,7 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 
 | Command | Description |
 |---------|-------------|
-| `plex top` | Shows the top Plex users and assigns roles |
 | `plex recommend [@user]` | Recommends media based on watch history |
-| `plex stats [days]` | Shows server statistics for the specified time period |
-| `plex shows` | Shows top users by TV show watch time |
-| `plex history [@user/username]` | Shows watch history for a user |
-| `plex hot [days]` | Shows trending content and activity insights |
 | `plex chart` | Shows options for visualized data/charts |
 | `plex chart hours [@user] [days]` | Shows most active hours |
 | `plex chart days [@user] [days]` | Shows most active days of week |
@@ -239,6 +234,11 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `/plex random [type] [genre]` | A random movie or show, optionally of one genre (suggested as you type); **Roll again** for another |
 | `/plex recent [count] [type]` | What was added recently, with a poster strip; pick one for its details (private) |
 | `/plex downloading` | What qBittorrent is downloading, with progress and time left |
+| `/plex top [days] [by]` | Top watchers by watch time or plays, with medals. The standard ranking (the server's default days, by watch time) also updates the top-three roles |
+| `/plex stats [days]` | Library totals and the most popular movies and shows, with posters |
+| `/plex shows` | Top TV watchers of all time |
+| `/plex history [user]` | Recent plays on the server, or one person's (names are suggested as you type) |
+| `/plex hot [days]` | What's been popular lately: trending titles, new hits, most active, binges |
 | `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
 | `/plexadmin cache` | Shows the media cache behind `/plex random` and title suggestions, with a **Refresh now** button (admin only) |
 | `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |

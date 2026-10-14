@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 import cogs.media_commands as media_commands
+import utilities
 from cogs.media_commands import (
     CacheView, DownloadsView, MediaCommands, RandomView, RecentDetailsSelect, RecentView,
 )
@@ -29,7 +30,7 @@ CACHE = [
 
 @pytest.fixture(autouse=True)
 def no_mappings(monkeypatch):
-    monkeypatch.setattr(media_commands.UserMappings, "load_user_mappings",
+    monkeypatch.setattr(utilities.UserMappings, "load_user_mappings",
                         staticmethod(lambda: [{"plex_username": "mallory", "ignore": True}]))
     patch_images(monkeypatch)
 

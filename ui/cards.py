@@ -57,13 +57,19 @@ def media_icon(media_type) -> str:
     return _MEDIA_ICONS.get(media_type or "", Emoji.PLAYING)
 
 
-def recent_viewer_line(row: dict) -> str:
-    """One past play (a Tautulli history row) for the "nobody's watching" card."""
+def recent_viewer_line(row: dict, *, user: Optional[str] = None, show_user: bool = True) -> str:
+    """One past play (a Tautulli history row): who, what, how far, where, when.
+
+    user: the name to show (e.g. their Discord name); show_user=False leads with the title instead,
+    for a list that is all one person's.
+    """
     percent = to_int(row.get("percent_complete"), 100)
     when = to_int(row.get("stopped")) or to_int(row.get("date"))
+    title = escape_markdown(truncate(session_title(row), 80))
+    who = escape_markdown(user or session_user(row))
     return join([
-        f"{media_icon(row.get('media_type'))} **{escape_markdown(session_user(row))}**",
-        escape_markdown(truncate(session_title(row), 80)),
+        f"{media_icon(row.get('media_type'))} **{who if show_user else title}**",
+        title if show_user else None,
         f"stopped at {percent}%" if percent < _FINISHED_PERCENT else None,
         f"on {escape_markdown(str(row['platform']))}" if row.get("platform") else None,
         timestamp(when) if when else None,

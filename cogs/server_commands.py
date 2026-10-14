@@ -17,9 +17,10 @@ from nextcord.ext import commands, tasks
 from config import config
 from errors import LoggedModal, LoggedView
 from utilities import (
-    UserMappings,
     get_git_revision_short_hash,
     get_git_revision_short_hash_latest,
+    ignored_usernames,
+    viewer_avatar,
 )
 from plex_status import PlexStatus, card_summary, fetch_status, services_card
 from slash_commands import plex, plexadmin
@@ -733,12 +734,8 @@ class ServerCommands(commands.Cog):
             return None
         return Tautulli.get_response_data(response, {})
 
-    @staticmethod
-    def _ignored_usernames() -> set:
-        return {u["plex_username"] for u in UserMappings.load_user_mappings() if u.get("ignore", False)}
-
     def _visible_sessions(self, activity: dict) -> list:
-        ignored = self._ignored_usernames()
+        ignored = ignored_usernames()
         return [s for s in activity.get("sessions", []) if s.get("username") not in ignored]
 
     async def _nobody_watching(self) -> str:
@@ -749,7 +746,7 @@ class ServerCommands(commands.Cog):
         response = await self.tautulli.get_history({"length": 25, "order_column": "date", "order_dir": "desc"})
         if not Tautulli.check_response(response):
             return message
-        rows = last_viewers(Tautulli.get_response_data(response, {}).get("data") or [], self._ignored_usernames())
+        rows = last_viewers(Tautulli.get_response_data(response, {}).get("data") or [], ignored_usernames())
         if not rows:
             return message
         return f"{message}\n\nOur last viewers were:\n" + "\n".join(recent_viewer_line(row) for row in rows)
@@ -783,16 +780,6 @@ class ServerCommands(commands.Cog):
                 self._pms_identifier = Tautulli.get_response_data(response, {}).get("pms_identifier") or ""
         return self._pms_identifier or None
 
-    def _avatar_url(self, session: dict) -> str | None:
-        """The viewer's Discord avatar when mapped (recognisable in the server), else their Plex one."""
-        mapping = UserMappings.get_mapping_by_plex_username(session.get("username"))
-        if mapping and mapping.get("discord_id"):
-            user = self.bot.get_user(to_int(mapping["discord_id"]))
-            if user:
-                return user.display_avatar.url
-        thumb = session.get("user_thumb") or ""
-        return thumb if thumb.startswith("http") else None
-
     async def show_stream_detail(self, interaction: nextcord.Interaction, session_id: str,
                                  watchers_view: "WatchersView") -> None:
         await interaction.response.defer(ephemeral=True, with_message=True)
@@ -818,7 +805,7 @@ class ServerCommands(commands.Cog):
             )
         embed = stream_detail(
             session,
-            avatar_url=self._avatar_url(session),
+            avatar_url=viewer_avatar(self.bot, session),
             link=plex_web_link(await self._server_id(), session.get("rating_key")),
             frame=frame,
             poster=poster,
