@@ -14,7 +14,8 @@
         "top_role_id": 0,
         "second_role_id": 0,
         "third_role_id": 0,
-        "stream_manager_ids": []
+        "stream_manager_ids": [],
+        "show_recent_viewers": false
     },
     "qbittorrent": {
         "ip": "localhost",

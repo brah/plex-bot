@@ -81,6 +81,7 @@ class FakeTautulli:
         self.sessions = list(sessions or [])
         self.reachable = reachable
         self.terminated = []
+        self.history, self.history_reachable, self.history_calls = [], True, []
 
     def _ok(self, data):
         return {"response": {"result": "success", "data": data}} if self.reachable else None
@@ -96,6 +97,12 @@ class FakeTautulli:
     async def get_server_info(self):
         return self._ok({"pms_identifier": "srv1", "pms_name": "Home", "pms_version": "1.41.0",
                          "pms_platform": "Linux", "pms_plexpass": 1})
+
+    async def get_history(self, params=None):
+        self.history_calls.append(params)
+        if not self.history_reachable:
+            return None
+        return self._ok({"data": self.history})
 
     async def terminate_session(self, session_key=None, session_id=None, message=None):
         self.terminated.append((session_id, message))

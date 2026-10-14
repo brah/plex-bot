@@ -23,7 +23,9 @@ from utilities import (
 from plex_status import PlexStatus, card_summary, fetch_status, services_card
 from slash_commands import plex, plexadmin
 from tautulli_wrapper import Tautulli
-from ui.cards import plex_web_link, session_title, session_user, stream_detail, stream_overview
+from ui.cards import (
+    plex_web_link, recent_viewer_line, session_title, session_user, stream_detail, stream_overview,
+)
 from ui.embeds import ErrorKind, Reply, card, empty_state, error_state, service_down, set_thumbnail, success
 from ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
 from ui.images import current_frame, mascot, plex_image, poster_key, poster_strip
@@ -168,6 +170,21 @@ _NO_STREAM_PERMISSION = "Only stream managers can stop streams."
 # Discord caps autocomplete results and select options at 25, and their labels at 100 chars.
 _MAX_CHOICES = 25
 _MAX_LABEL = 100
+_LAST_VIEWERS = 5
+
+
+def last_viewers(rows: list[dict], ignored: set, limit: int = _LAST_VIEWERS) -> list[dict]:
+    """Each viewer's latest play from newest-first history, skipping ignored users."""
+    seen, picked = set(), []
+    for row in rows:
+        user = row.get("user") or row.get("friendly_name")
+        if not user or user in ignored or user in seen:
+            continue
+        seen.add(user)
+        picked.append(row)
+        if len(picked) == limit:
+            break
+    return picked
 
 
 def _session_label(session: dict, suffix: str = "") -> str:
@@ -723,17 +740,33 @@ class ServerCommands(commands.Cog):
             return None
         return Tautulli.get_response_data(response, {})
 
+    @staticmethod
+    def _ignored_usernames() -> set:
+        return {u["plex_username"] for u in UserMappings.load_user_mappings() if u.get("ignore", False)}
+
     def _visible_sessions(self, activity: dict) -> list:
-        mappings = UserMappings.load_user_mappings()
-        ignored = {u["plex_username"] for u in mappings if u.get("ignore", False)}
+        ignored = self._ignored_usernames()
         return [s for s in activity.get("sessions", []) if s.get("username") not in ignored]
+
+    async def _nobody_watching(self) -> str:
+        """The empty overview's text, with recent viewers when discord.show_recent_viewers is on."""
+        message = "Nobody's watching right now."
+        if not is_truthy(config.get("discord", "show_recent_viewers", False)):
+            return message
+        response = await self.tautulli.get_history({"length": 25, "order_column": "date", "order_dir": "desc"})
+        if not Tautulli.check_response(response):
+            return message
+        rows = last_viewers(Tautulli.get_response_data(response, {}).get("data") or [], self._ignored_usernames())
+        if not rows:
+            return message
+        return f"{message}\n\nOur last viewers were:\n" + "\n".join(recent_viewer_line(row) for row in rows)
 
     async def render_watchers(self, activity: dict, view: "WatchersView") -> Reply:
         """The public overview for the current activity, with its controls rebuilt to match."""
         sessions = self._visible_sessions(activity)
         view.set_sessions(sessions)
         if not sessions:
-            reply = empty_state("Nobody's watching right now.", hint="Hit Refresh to check again.")
+            reply = empty_state(await self._nobody_watching(), hint="Hit Refresh to check again.")
             reply.view = view
             return reply
         posters = await asyncio.gather(*(

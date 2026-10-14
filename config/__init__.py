@@ -218,6 +218,11 @@ def setup_default_config():
         [],
         "Discord user or role IDs allowed to stop streams via /watchers (admins always can)",
     )
+    discord.add(
+        "show_recent_viewers",
+        False,
+        "When nobody's watching, list the last viewers and what they watched on /plex watchers (public)",
+    )
 
     # qBittorrent settings
     qbit = config.add_section("qbittorrent", "qBittorrent settings")
