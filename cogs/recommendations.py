@@ -1,163 +1,146 @@
+# cogs/recommendations.py
+
+"""/plex recommend: unwatched picks from the library in someone's favourite genres."""
+
+import asyncio
 import logging
 import random
 from collections import Counter
+from typing import List
 
 import nextcord
 from nextcord.ext import commands
+from nextcord.utils import escape_markdown
 
 from config import config
 from errors import LoggedView
-from utilities import UserMappings, prepare_thumbnail_for_embed
-from tautulli_wrapper import Tautulli
 from media_cache import MediaCache
+from media_details import MediaDetails, TautulliUnavailable
+from slash_commands import plex
+from tautulli_wrapper import Tautulli
+from ui.cards import media_icon, session_title
+from ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down
+from ui.format import join, plural, to_int, truncate
+from ui.images import plex_image, poster_key, poster_strip
+from ui.theme import Limits, brand_colour
+from utilities import UserMappings, ignored_usernames
 
-
-# Configure logging for this module
 logger = logging.getLogger("plexbot.recommendations")
 logger.setLevel(logging.INFO)
 
+_PICKS = 3
+_TOP_GENRES = 3
+_SUMMARY = 150
+
+
+def _genre(name: str) -> str:
+    return name[:1].upper() + name[1:]
+
+
+def watched_keys(history: list) -> set:
+    """Every item a history touches: episodes bring their season and show along."""
+    return {str(entry[key]) for entry in history
+            for key in ("rating_key", "parent_rating_key", "grandparent_rating_key") if entry.get(key)}
+
+
+def favourite_genres(history: list, item_for) -> List[str]:
+    """The top genres (lower-case, most first), counted once per watched item, show or season.
+
+    item_for(rating_key) returns the media cache item or None.
+    """
+    counts = Counter()
+    for key in sorted(watched_keys(history)):  # sorted, so ties break the same way every time
+        for genre in (item_for(key) or {}).get("genres") or []:
+            counts[genre.lower()] += 1
+    return [genre for genre, _count in counts.most_common(_TOP_GENRES)]
+
+
+def viewer_count(user_rows, ignored: set) -> int:
+    return sum(1 for row in user_rows or [] if to_int(row.get("total_plays")) and row.get("username") not in ignored)
+
+
+def overview_card(picks: list, counts: list, genres: List[str], *, strip) -> nextcord.Embed:
+    blocks = ["-# Based on their favourite genres: " + ", ".join(f"**{_genre(g)}**" for g in genres)]
+    for number, (item, count) in enumerate(zip(picks, counts), 1):
+        summary = truncate(item.get("summary") or "No description available.", _SUMMARY)
+        details = join([
+            ", ".join(_genre(g) for g in (item.get("genres") or [])[:3]),
+            f"watched by {plural(count, 'person', 'people')}" if count else "nobody's watched it yet",
+        ])
+        blocks.append(
+            f"**{number}. {escape_markdown(session_title(item))}** · {media_icon(item.get('media_type'))}\n"
+            f"-# {escape_markdown(details)}\n{escape_markdown(summary)}"
+        )
+    embed = card(title="🍿 Recommendations", description="\n\n".join(blocks), colour=brand_colour())
+    if strip:
+        embed.set_image(url=strip.url)
+    embed.set_footer(text="Pick a number for the details")
+    return embed
+
 
 class RecommendationView(LoggedView):
-    """Interactive recommendation browser: numbered buttons drill into each pick."""
+    """Numbered buttons open each pick's card in place; Back returns to the list.
 
-    def __init__(self, ctx, member, recommendations: list, user_counts: list, plex_username: str, cog, timeout: float = 180):
+    They change the shared message, so only the person who ran the command can use them.
+    """
+
+    def __init__(self, details: MediaDetails, author_id: int, picks: list, overview: Reply, timeout: float):
         super().__init__(timeout=timeout)
-        self.ctx = ctx
-        self.member = member
-        self.recommendations = recommendations
-        self.user_counts = user_counts
-        self.plex_username = plex_username
-        self.cog = cog
+        self.details = details
+        self.author_id = author_id
+        self.picks = picks
+        self.overview = overview
         self.message = None
-
-        # One numbered button per recommendation, plus a Back button for the detail view.
-        for i in range(len(recommendations)):
-            button = nextcord.ui.Button(label=str(i + 1), style=nextcord.ButtonStyle.primary)
-            button.callback = self._make_detail_callback(i)
+        for index in range(len(picks)):
+            button = nextcord.ui.Button(label=str(index + 1), style=nextcord.ButtonStyle.primary)
+            button.callback = self._detail_callback(index)
             self.add_item(button)
-        self.back_button = nextcord.ui.Button(label="Back to list", style=nextcord.ButtonStyle.secondary, disabled=True)
-        self.back_button.callback = self._on_back
+        self.back_button = nextcord.ui.Button(label="Back to list", style=nextcord.ButtonStyle.secondary,
+                                              disabled=True)
+        self.back_button.callback = self._back
         self.add_item(self.back_button)
 
-    def _make_detail_callback(self, index: int):
-        async def _callback(interaction: nextcord.Interaction):
-            await self._show_detail(interaction, index)
-        return _callback
-
-    async def _build_overview(self) -> tuple:
-        """Build the recommendations list embed and an optional thumbnail file."""
-        embed = nextcord.Embed(
-            title=f"Recommendations for {self.member.display_name}",
-            description="Use the buttons below to see more details.",
-            color=self.cog.plex_embed_color,
-        )
-        for idx, (item, user_count) in enumerate(zip(self.recommendations, self.user_counts), start=1):
-            title = item.get("title") or "Unknown Title"
-            overview = item.get("summary") or "No description available."
-            if len(overview) > 150:
-                overview = overview[:147] + "..."
-            year = item.get("year", "Unknown")
-            media_type = item.get("media_type", "movie").capitalize()
-            genres = ", ".join(genre.title() for genre in item.get("genres", []))
-            embed.add_field(
-                name=f"{idx}. {title} ({media_type}, {year})",
-                value=(
-                    f"**Summary**: {overview}\n"
-                    f"**Genres**: {genres}\n"
-                    f"**Watched by**: {user_count} user{'s' if user_count != 1 else ''}\n"
-                ),
-                inline=False,
-            )
-
-        # Thumbnail: first recommendation with a poster, else the bot's avatar.
-        file = None
-        for item in self.recommendations:
-            thumb = item.get("thumb")
-            if thumb and thumb.strip():
-                file, url = await prepare_thumbnail_for_embed(
-                    self.cog.tautulli.tautulli_ip, thumb, use_https=self.cog.tautulli.use_https, api_key=self.cog.tautulli.api_key
-                )
-                if file and url:
-                    embed.set_thumbnail(url=url)
-                    break
-                file = None
-        if file is None and self.cog.bot.user and self.cog.bot.user.display_avatar:
-            embed.set_thumbnail(url=self.cog.bot.user.display_avatar.url)
-        return embed, file
-
-    async def _build_detail(self, index: int) -> tuple:
-        """Build the detail embed and optional poster file for one recommendation."""
-        item = self.recommendations[index]
-        title = item.get("title") or "Unknown Title"
-        year = item.get("year", "Unknown")
-        media_type = item.get("media_type", "movie").capitalize()
-        embed = nextcord.Embed(title=f"{title} ({media_type}, {year})", color=self.cog.plex_embed_color)
-
-        overview = item.get("summary") or "No description available."
-        rating = item.get("rating") or "N/A"
-        genres = ", ".join(genre.title() for genre in item.get("genres", []))
-        watched_users = await self.cog.get_watched_users(item.get("rating_key"), exclude_user=self.plex_username)
-
-        field_value = f"**Summary**: {overview}\n**Genres**: {genres}\n**Rating**: {rating}\n"
-        field_value += f"**Watched by**: {', '.join(watched_users)}\n" if watched_users else "**Watched by**: No one yet!\n"
-        embed.description = field_value
-        embed.set_footer(text=f"Recommendation {index + 1} of {len(self.recommendations)}")
-
-        file = None
-        thumb = item.get("thumb")
-        if thumb and thumb.strip():
-            file, url = await prepare_thumbnail_for_embed(
-                self.cog.tautulli.tautulli_ip, thumb, use_https=self.cog.tautulli.use_https, api_key=self.cog.tautulli.api_key
-            )
-            if file and url:
-                embed.set_image(url=url)
-        return embed, file
-
-    async def _edit(self, interaction: nextcord.Interaction, embed: nextcord.Embed, file):
-        # attachments=[] clears the previous poster; pass the new file if any.
-        kwargs = {"embed": embed, "view": self, "attachments": []}
-        if file:
-            kwargs["file"] = file
-        try:
-            await interaction.edit_original_message(**kwargs)
-        except nextcord.HTTPException as e:
-            logger.warning(f"Failed to update recommendation view: {e}")
-            if file:
-                file.close()
-
-    async def send_initial(self):
-        embed, file = await self._build_overview()
-        if file:
-            self.message = await self.ctx.send(embed=embed, view=self, file=file)
-        else:
-            self.message = await self.ctx.send(embed=embed, view=self)
-
-    async def _show_detail(self, interaction: nextcord.Interaction, index: int):
-        # Ack first so the watcher/poster fetch can't blow the 3s interaction window.
-        await interaction.response.defer()
-        self.back_button.disabled = False
-        embed, file = await self._build_detail(index)
-        await self._edit(interaction, embed, file)
-
-    async def _on_back(self, interaction: nextcord.Interaction):
-        await interaction.response.defer()
-        self.back_button.disabled = True
-        embed, file = await self._build_overview()
-        await self._edit(interaction, embed, file)
-
     async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
-        if interaction.user != self.ctx.author:
-            await interaction.response.send_message("Only the command author can use these buttons.", ephemeral=True)
-            return False
-        return True
+        if interaction.user.id == self.author_id:
+            return True
+        await error_state(ErrorKind.PERMISSION, f"Only <@{self.author_id}> can browse these picks.",
+                          hint="Run /plex recommend for your own.").send(interaction, ephemeral=True)
+        return False
+
+    def _detail_callback(self, index: int):
+        async def callback(interaction: nextcord.Interaction):
+            await self.show_pick(interaction, index)
+        return callback
+
+    async def show_pick(self, interaction: nextcord.Interaction, index: int):
+        await interaction.response.defer()
+        self.message = interaction.message  # bot-token handle; the command's webhook expires
+        try:
+            reply = await self.details.render(str(self.picks[index]["rating_key"]),
+                                              footer=f"Recommendation {index + 1} of {len(self.picks)}")
+        except TautulliUnavailable:
+            await service_down("Tautulli").send(interaction, ephemeral=True)
+            return
+        if reply is None:
+            await error_state(ErrorKind.INPUT, "That's not in the library anymore.").send(interaction, ephemeral=True)
+            return
+        self.back_button.disabled = False
+        reply.view = self
+        await reply.edit(interaction)
+
+    async def _back(self, interaction: nextcord.Interaction):
+        await interaction.response.defer()
+        self.message = interaction.message
+        self.back_button.disabled = True
+        self.overview.view = self
+        await self.overview.edit(interaction)
 
     async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
+        # Expired controls are removed rather than greyed out.
         if self.message:
             try:
-                await self.message.edit(view=self)
-            except nextcord.NotFound:
+                await self.message.edit(view=None)
+            except nextcord.HTTPException:
                 pass
 
 
@@ -168,159 +151,83 @@ class Recommendations(commands.Cog):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.media_cache: MediaCache = bot.shared_resources.get("media_cache")
-        self.plex_embed_color = config.get("ui", "plex_embed_color", 0xE5A00D)
+        self.details = MediaDetails(bot, self.tautulli)
 
-    @commands.command()
-    async def recommend(self, ctx, member: nextcord.Member = None):
-        """Recommends movies or shows to a user based on their watch history.
-
-        Usage:
-        plex recommend [@member]
-
-        If no member is specified, recommends based on the invoking user's history.
-        """
-        try:
-            member = member or ctx.author
-            user_mapping = UserMappings.get_mapping_by_discord_id(str(member.id))
-
-            if not user_mapping:
-                await ctx.send(f"{member.display_name} is not mapped to a Plex user.")
-                logger.warning(f"{member.display_name} is not mapped to a Plex user.")
-                return
-
-            plex_username = user_mapping.get("plex_username")
-
-            # Let the user know we're working on it
-            processing_msg = await ctx.send(f"Analyzing watch history for {member.display_name}...")
-
-            # Fetch user's watch history
-            params = {
-                "user": plex_username,
-                "length": 10000,  # Fetch a large number of history entries
-                "order_column": "date",
-                "order_dir": "desc",
-            }
-            response = await self.tautulli.get_history(params=params)
-
-            if not Tautulli.check_response(response):
-                await ctx.send("Failed to retrieve watch history from Plex.")
-                logger.error("Failed to retrieve watch history from Tautulli.")
-                return
-
-            history_entries = (Tautulli.get_response_data(response, {}) or {}).get("data", [])
-
-            if not history_entries:
-                await ctx.send(f"No watch history found for {member.display_name}.")
-                return
-
-            # Collect all possible rating keys from the history entries
-            watched_rating_keys = set()
-            for entry in history_entries:
-                for key in ["rating_key", "parent_rating_key", "grandparent_rating_key"]:
-                    if entry.get(key):
-                        watched_rating_keys.add(str(entry[key]))
-
-            logger.debug(f"Found {len(watched_rating_keys)} watched rating keys")
-
-            # Analyze watched genres
-            await processing_msg.edit(
-                content=f"Analyzing {len(watched_rating_keys)} watched items for {member.display_name}..."
-            )
-            watched_genres = await self.analyze_watched_genres(watched_rating_keys)
-
-            if not watched_genres:
-                await ctx.send(f"Could not determine watched genres for {member.display_name}.")
-                return
-
-            # Get the top genres
-            top_genres = [genre.title() for genre, _ in watched_genres[:3]]  # Capitalize genres
-
-            if not top_genres:
-                await ctx.send("No genres found in your watch history.")
-                return
-
-            # Inform the user about their top genres
-            genres_formatted = ", ".join(top_genres)
-            await processing_msg.edit(
-                content=f"Based on your favorite genres: **{genres_formatted}**\nFinding recommendations..."
-            )
-
-            # Find recommendations based on top genres and unwatched items
-            recommendations = await self.get_recommendations(top_genres, watched_rating_keys)
-
-            if not recommendations:
-                await ctx.send("No recommendations available at this time.")
-                return
-
-            # Shuffle and select up to 3 recommendations
-            random.shuffle(recommendations)
-            selected_recommendations = recommendations[:3]
-
-            # Get the number of unique users who watched each recommendation
-            user_counts = []
-            for item in selected_recommendations:
-                rating_key = item.get("rating_key")
-                watched_users = await self.get_watched_users(rating_key, return_count=True)
-                user_counts.append(watched_users)
-
-            # Replace the processing message with an interactive recommendations browser.
-            await processing_msg.delete()
-            timeout = config.get("commands", "recommendation_timeout", 180)
-            view = RecommendationView(
-                ctx, member, selected_recommendations, user_counts, plex_username, self, timeout=timeout
-            )
-            await view.send_initial()
-
-        except Exception as e:
-            logger.error(f"Error in recommend command: {e}", exc_info=True)
-            await ctx.send(f"An error occurred while generating recommendations: {type(e).__name__}")
-
-    async def analyze_watched_genres(self, watched_rating_keys):
-        """Analyze the genres from user's watch history."""
-        genre_counter = Counter()
-        for rating_key in watched_rating_keys:
-            item = await self.media_cache.get_item(rating_key)
-            if item and item.get("genres"):
-                for genre in item.get("genres", []):
-                    genre_counter[genre.lower()] += 1
-        return genre_counter.most_common()
-
-    async def get_recommendations(self, top_genres, watched_rating_keys):
-        """Get recommendations based on top genres and unwatched items."""
-        top_genres_lower = [genre.lower() for genre in top_genres]
-        recommendations = await self.media_cache.get_items(
-            genres=top_genres_lower, exclude_rating_keys=watched_rating_keys, limit=50, random_sort=True
+    async def pick(self, history: list) -> tuple:
+        """(favourite genres, up to three unwatched picks in them) for a watch history."""
+        keys = watched_keys(history)
+        await self.media_cache.ensure_cache_valid()
+        cached = self.media_cache.media_items
+        genres = favourite_genres(history, lambda key: cached.get(key))
+        if not genres:
+            return genres, []
+        candidates = await self.media_cache.get_items(
+            genres=genres, exclude_rating_keys=keys, limit=50, random_sort=True,
         )
-        return recommendations
+        random.shuffle(candidates)
+        return genres, candidates[:_PICKS]
 
-    async def get_watched_users(self, rating_key, exclude_user=None, return_count=False):
-        """Retrieve a list of Discord usernames who have watched the media item."""
-        user_stats_response = await self.tautulli.get_item_user_stats(rating_key)
+    async def _viewer_counts(self, picks: list) -> list:
+        responses = await asyncio.gather(*(self.tautulli.get_item_user_stats(p["rating_key"]) for p in picks))
+        ignored = ignored_usernames()
+        return [viewer_count(Tautulli.get_response_data(r, []) if Tautulli.check_response(r) else [], ignored)
+                for r in responses]
 
-        if not Tautulli.check_response(user_stats_response):
-            logger.error(f"Failed to retrieve user stats for rating_key {rating_key}.")
-            return 0 if return_count else []
+    @plex.subcommand(description="Recommend unwatched movies and shows from someone's favourite genres")
+    async def recommend(
+        self,
+        interaction: nextcord.Interaction,
+        member: nextcord.Member = nextcord.SlashOption(
+            description="Who to recommend for (default: you)", required=False,
+        ),
+    ):
+        await interaction.response.defer()
+        member = member or interaction.user
+        name = escape_markdown(member.display_name)
+        mapping = UserMappings.get_mapping_by_discord_id(str(member.id))
+        if not mapping or not mapping.get("plex_username"):
+            await error_state(ErrorKind.INPUT, f"**{name}** isn't linked to a Plex account.",
+                              hint="An admin can link Discord and Plex accounts.").send(
+                interaction, ephemeral=True, replace_placeholder=True)
+            return
 
-        user_stats = Tautulli.get_response_data(user_stats_response, []) or []
-        watched_users = []
-        for user_stat in user_stats:
-            plex_username = user_stat.get("username")
-            if exclude_user and plex_username == exclude_user:
-                continue
-            user_mapping = UserMappings.get_mapping_by_plex_username(plex_username)
-            if user_mapping and not user_mapping.get("ignore", False):
-                discord_id = user_mapping.get("discord_id")
-                try:
-                    discord_user = self.bot.get_user(int(discord_id))
-                    if discord_user is None:
-                        discord_user = await self.bot.fetch_user(int(discord_id))
-                    if discord_user:
-                        watched_users.append(discord_user.display_name)
-                except Exception as e:
-                    logger.error(f"Failed to fetch Discord user with ID {discord_id}: {e}")
-        if return_count:
-            return len(watched_users)
-        return watched_users
+        response = await self.tautulli.get_history({
+            "user": mapping["plex_username"], "length": 10000, "order_column": "date", "order_dir": "desc",
+        })
+        if not Tautulli.check_response(response):
+            logger.error("Failed to retrieve watch history from Tautulli.")
+            await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
+            return
+        history = (Tautulli.get_response_data(response, {}) or {}).get("data") or []
+        if not history:
+            await empty_state(f"**{name}** hasn't watched anything yet, so there's nothing to go on.").send(
+                interaction)
+            return
+
+        genres, picks = await self.pick(history)
+        if not genres:
+            await empty_state(f"Couldn't work out **{name}**'s favourite genres yet.",
+                              hint="The library list may still be loading; try again in a few minutes.").send(
+                interaction)
+            return
+        if not picks:
+            await empty_state(f"**{name}** has seen everything in their favourite genres. Impressive.").send(
+                interaction)
+            return
+
+        counts, posters = await asyncio.gather(
+            self._viewer_counts(picks),
+            asyncio.gather(*(plex_image(self.tautulli, poster_key(p), filename=f"poster-{i}.jpg", width=200,
+                                        height=300) for i, p in enumerate(picks))),
+        )
+        strip = await asyncio.to_thread(poster_strip, [p.data for p in posters if p])
+        embed = overview_card(picks, counts, genres, strip=strip)
+        embed.set_author(name=truncate(member.display_name, Limits.AUTHOR), icon_url=member.display_avatar.url)
+        overview = Reply([embed], [strip] if strip else [])
+        timeout = to_int(config.get("commands", "recommendation_timeout", 180), 180)
+        view = RecommendationView(self.details, interaction.user.id, picks, overview, timeout=timeout)
+        overview.view = view
+        view.message = bot_token_handle(interaction, await overview.send(interaction))
 
 
 def setup(bot):
