@@ -183,7 +183,7 @@ class Recommendations(commands.Cog):
     ):
         await interaction.response.defer()
         member = member or interaction.user
-        name = escape_markdown(member.display_name)
+        name = member.mention
         mapping = UserMappings.get_mapping_by_discord_id(str(member.id))
         if not mapping or not mapping.get("plex_username"):
             await error_state(ErrorKind.INPUT, f"**{name}** isn't linked to a Plex account.",

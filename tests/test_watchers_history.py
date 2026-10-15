@@ -1,12 +1,13 @@
 """/plex watchers when nobody's watching: optionally, who watched last."""
 
 import asyncio
+from types import SimpleNamespace
 
 import utilities
 
 from fakes import FakeTautulli, build_bot, patch_images
 from cogs.server_commands import WatchersView, last_viewers
-from ui.cards import recent_viewer_line
+from ui.cards import recent_viewer_entry, recent_viewer_line
 
 MOVIE = {"user": "alice", "friendly_name": "Alice", "media_type": "movie", "title": "The Matrix",
          "full_title": "The Matrix", "year": 1999, "percent_complete": 98, "platform": "Roku",
@@ -30,6 +31,14 @@ def test_line_for_an_unfinished_episode_escapes_markdown():
 
 def test_line_with_missing_details():
     assert recent_viewer_line({"user": "dan", "media_type": "clip"}) == "▶ **dan** · Unknown"
+
+
+def test_entry_puts_who_and_when_first_and_the_rest_in_subtext():
+    assert recent_viewer_entry(EPISODE) == (
+        "📺 **\\_Bob\\_** · <t:1759995000:R>\n"
+        "-# Severance · S01E02 · Hello, Ms. Cobel · stopped at 45% · on iOS"
+    )
+    assert recent_viewer_entry({"user": "dan", "media_type": "clip"}) == "▶ **dan**\n-# Unknown"
 
 
 def test_last_viewers_keeps_each_viewers_latest_play_and_skips_ignored():
@@ -61,10 +70,21 @@ def _render(monkeypatch, *, enabled, history=None, reachable=True):
 def test_nobody_watching_lists_last_viewers_when_enabled(monkeypatch):
     reply, tautulli = _render(monkeypatch, enabled=True)
     description = reply.embeds[0].description
-    assert description.startswith("Nobody's watching right now.\n\nOur last viewers were:\n🎬 **Alice**")
+    assert description.startswith((
+        "Nobody's watching right now.\n\n**Last seen**\n🎬 **Alice** · <t:1760008000:R>\n-# The Matrix (1999) · on Roku"
+    ))
     assert "Bob" in description and "Mallory" not in description
     assert description.endswith("-# Hit Refresh to check again.")
     assert tautulli.history_calls == [{"length": 25, "order_column": "date", "order_dir": "desc"}]
+
+
+def test_last_seen_mentions_linked_viewers(monkeypatch):
+    monkeypatch.setattr(utilities, "mapped_discord_user",
+                        lambda bot, username: SimpleNamespace(mention="<@42>") if username == "alice" else None)
+    reply, _ = _render(monkeypatch, enabled=True)
+    description = reply.embeds[0].description
+    assert "🎬 **<@42>** · <t:1760008000:R>" in description  # linked: their Discord @mention
+    assert "📺 **\\_Bob\\_** · <t:1759995000:R>" in description  # not linked: their Plex name, escaped
 
 
 def test_history_stays_private_by_default(monkeypatch):

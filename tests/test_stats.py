@@ -2,18 +2,27 @@
 
 import asyncio
 import time
+from types import SimpleNamespace
 
 import pytest
+from nextcord.utils import escape_markdown
 
 import utilities
-from cogs.plex_stats import PlexStats, hot_summary, library_line, popular_lines, top_card, tv_watchers
+from cogs.plex_stats import (
+    PlexStats, hot_summary, library_line, popular_lines, stats_card, tautulli_duration, top_card, tv_watchers,
+)
 from fakes import FakeTautulli, Recorder, build_stats_bot, interaction, patch_images
 
 NOW = int(time.time())
 
 
 def name(row):
-    return row.get("friendly_name") or row.get("user") or row.get("username")
+    """Like viewer_mention for someone not linked to Discord: their Plex name, escaped."""
+    return escape_markdown(row.get("friendly_name") or row.get("user") or row.get("username"))
+
+
+ALICE_ON_DISCORD = SimpleNamespace(mention="<@42>", display_name="Ali",
+                                   display_avatar=SimpleNamespace(url="https://cdn.example/ali.png"))
 
 
 @pytest.fixture(autouse=True)
@@ -39,23 +48,47 @@ class TestRenderers:
         embed = top_card(TOP_USERS[1:], days=7, name=name)
         lines = embed.description.split("\n")
         assert lines[0] == "-# Last 7 days · by watch time"
-        assert lines[1] == "🥇 **Alice** · 12h 30m"
-        assert lines[2] == "-# Last watched Severance"
-        assert lines[3] == "🥈 **\\_Bob\\_** · 1h"
-        assert lines[5] == "🥉 **Cara** · 1m"
-        assert lines[6] == "`4.` **Dan** · 0m"
-        assert embed.footer.text == "Together: 13h 31m"
-        with_total = top_card(TOP_USERS[1:], days=7, name=name, all_time="41 days 6 hrs")
-        assert with_total.footer.text == "Together: 13h 31m · All time: 41 days 6 hrs"
+        assert lines[1] == ""
+        assert lines[2] == "🥇 **Alice** · 12h 30m"
+        assert lines[3] == "-# Last watched Severance"
+        assert lines[4] == "🥈 **\\_Bob\\_** · 1h"
+        assert lines[6] == "🥉 **Cara** · 1m"
+        assert lines[7:] == ["", "`4.` **Dan** · 0m"]
+        assert embed.thumbnail.url is None
+        assert embed.footer.text == "Together 13h 31m"
+        with_total = top_card(TOP_USERS[1:], days=7, name=name, all_time="41 days 6 hrs 2 mins")
+        assert with_total.footer.text == "Together 13h 31m · All time 41d 6h 2m"
+
+    def test_only_the_podium_shows_what_they_last_watched(self):
+        rows = [dict(TOP_USERS[1], friendly_name=f"U{i}") for i in range(5)]
+        lines = top_card(rows, days=7, name=name).description.split("\n")
+        assert lines.count("-# Last watched Severance") == 3
+        assert lines[-1] == "`5.` **U4** · 12h 30m"
+
+    def test_tautulli_duration(self):
+        assert tautulli_duration("459 days 13 hrs 30 mins") == "459d 13h 30m"
+        assert tautulli_duration("1 day 1 hr 1 min") == "1d 1h 1m"
+        assert tautulli_duration("3 mins") == "3m"
+
+    def test_tautulli_duration_never_half_reads(self):
+        # Shown as written rather than silently dropping the parts it doesn't know.
+        for text in ("2 days 5 hours 3 mins", "about 2 days", "2 days 5", "", "something else"):
+            assert tautulli_duration(text) == text
+
+    def test_stats_card_when_nothing_was_watched(self):
+        embed = stats_card([], [], [], days=7, strip=None)
+        assert [(f.name, f.value) for f in embed.fields] == [("Top titles", "Nothing was watched in the last 7 days.")]
+        assert embed.footer.text is None  # no library totals, so no footer
+        assert embed.image.url is None
 
     def test_library_line_and_popular(self):
         rows = [{"section_type": "movie", "count": "1866", "duration": "360000"},
                 {"section_type": "show", "count": "608", "child_count": "27431", "duration": "7200"}]
-        assert library_line(rows) == "🎬 1,866 movies · 📺 608 shows · 27,431 episodes · 4d 6h watched all time"
+        assert library_line(rows) == "1,866 movies · 608 shows · 27,431 episodes · 4d 6h watched all time"
         assert library_line([]) is None
         popular = popular_lines([{"title": "The Matrix", "year": "1999", "media_type": "movie",
                                   "total_plays": 12, "users_watched": 1}])
-        assert popular == "🥇 **The Matrix (1999)** · 12 plays · 1 person"
+        assert popular == "`1.` **The Matrix (1999)** · 12 plays · 1 person"
 
     def test_tv_watchers_sum_libraries_and_skip_ignored(self):
         libraries = [{"section_name": "TV"}, {"section_name": "Anime"}]
@@ -123,6 +156,19 @@ class TestCommands:
         assert "Mallory" not in embed.description
         assert embed.thumbnail.url == "https://plex.tv/a.png"
 
+    def test_top_mentions_linked_viewers(self, monkeypatch):
+        recorder = Recorder(monkeypatch)
+        monkeypatch.setattr(utilities, "mapped_discord_user",
+                            lambda bot, username: ALICE_ON_DISCORD if username == "alice" else None)
+        tautulli = FakeTautulli([])
+        tautulli.home_stats = {"top_users": TOP_USERS}
+        _run(lambda bot, cog: PlexStats.top.callback(cog, interaction(bot), days=30), tautulli)
+        embed = recorder.last("followup")["embeds"][0]
+        lines = embed.description.split("\n")
+        assert lines[2] == "🥇 **<@42>** · 12h 30m"  # linked: their Discord @mention
+        assert lines[4] == "🥈 **\\_Bob\\_** · 1h"  # not linked: their Plex name, escaped
+        assert embed.thumbnail.url == "https://cdn.example/ali.png"
+
     def test_top_roles_only_for_the_standard_ranking(self, monkeypatch):
         Recorder(monkeypatch)
         assigned = []
@@ -162,9 +208,23 @@ class TestCommands:
         _run(lambda bot, cog: PlexStats.stats.callback(cog, interaction(bot), days=None), tautulli)
         sent = recorder.last("followup")
         embed = sent["embeds"][0]
-        assert embed.description == "-# Last 30 days\n🎬 10 movies"
-        assert [f.name for f in embed.fields] == ["🎬 Most popular movies"]
+        assert embed.description is None
+        assert [f.name for f in embed.fields] == ["🎬 Top movies · last 30 days"]
+        assert embed.footer.text == "10 movies"
         assert [f.filename for f in sent["files"]] == ["posters.png"]
+
+    def test_stats_card_without_library_totals(self, monkeypatch):
+        recorder = Recorder(monkeypatch)
+        tautulli = FakeTautulli([])
+        tautulli.home_stats = {"popular_movies": [], "popular_tv": [{"title": "MobLand", "media_type": "show",
+                                                                      "total_plays": 20, "users_watched": 5}]}
+        tautulli.libraries_table = []
+        _run(lambda bot, cog: PlexStats.stats.callback(cog, interaction(bot), days=7), tautulli)
+        embed = recorder.last("followup")["embeds"][0]
+        assert [(f.name, f.value) for f in embed.fields] == [
+            ("📺 Top shows · last 7 days", "`1.` **MobLand** · 20 plays · 5 people"),
+        ]
+        assert embed.footer.text is None
 
     def test_shows(self, monkeypatch):
         recorder = Recorder(monkeypatch)

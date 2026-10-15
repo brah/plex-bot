@@ -21,12 +21,13 @@ from utilities import (
     get_git_revision_short_hash_latest,
     ignored_usernames,
     viewer_avatar,
+    viewer_mention,
 )
 from plex_status import PlexStatus, card_summary, fetch_status, services_card
 from slash_commands import plex, plexadmin
 from tautulli_wrapper import Tautulli
 from ui.cards import (
-    plex_web_link, recent_viewer_line, session_title, session_user, stream_detail, stream_overview,
+    plex_web_link, recent_viewer_entry, session_title, session_user, stream_detail, stream_overview,
 )
 from ui.embeds import (
     ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail, success,
@@ -734,6 +735,9 @@ class ServerCommands(commands.Cog):
             return None
         return Tautulli.get_response_data(response, {})
 
+    def _mention(self, row: dict) -> str:
+        return viewer_mention(self.bot, row)
+
     def _visible_sessions(self, activity: dict) -> list:
         ignored = ignored_usernames()
         return [s for s in activity.get("sessions", []) if s.get("username") not in ignored]
@@ -749,7 +753,9 @@ class ServerCommands(commands.Cog):
         rows = last_viewers(Tautulli.get_response_data(response, {}).get("data") or [], ignored_usernames())
         if not rows:
             return message
-        return f"{message}\n\nOur last viewers were:\n" + "\n".join(recent_viewer_line(row) for row in rows)
+        return f"{message}\n\n**Last seen**\n" + "\n".join(
+            recent_viewer_entry(row, user=self._mention(row)) for row in rows
+        )
 
     async def render_watchers(self, activity: dict, view: "WatchersView") -> Reply:
         """The public overview for the current activity, with its controls rebuilt to match."""
@@ -768,7 +774,7 @@ class ServerCommands(commands.Cog):
         )
         embed = stream_overview(
             sessions, bandwidth_kbps=to_int(activity.get("total_bandwidth")), strip=strip,
-            updated=nextcord.utils.utcnow(),
+            updated=nextcord.utils.utcnow(), name=self._mention,
         )
         return Reply([embed], [strip] if strip else [], view=view)
 
@@ -829,7 +835,7 @@ class ServerCommands(commands.Cog):
         if status == 200:
             note = f" with message: {message}" if message else ""
             logger.info(f"{actor} stopped stream {session_id} ({label}){note}")
-            return True, f"Stopped **{session_user(session)}**'s stream of **{session_title(session)}**."
+            return True, f"Stopped **{self._mention(session)}**'s stream of **{session_title(session)}**."
         logger.warning(f"{actor} failed to stop stream {session_id} ({label}): Tautulli returned an error")
         return False, (
             "Tautulli couldn't stop that stream. An admin can check `/plexadmin logs` for details."

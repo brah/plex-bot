@@ -22,7 +22,8 @@ from ui.format import join, plural, to_int, truncate
 from ui.images import plex_image, poster_key, poster_strip
 from ui.theme import Colour, Limits, brand_colour
 from utilities import (
-    UserMappings, format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_name,
+    UserMappings, format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_mention,
+    viewer_name,
 )
 
 logger = logging.getLogger("plexbot.plex_stats")
@@ -30,6 +31,7 @@ logger.setLevel(logging.INFO)
 
 _MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 _RANKED = 10
+_PODIUM = 3  # /plex top gives the top three a second line
 _TOP_DAYS = 7  # /plex top's default window, and the ranking that sets roles
 _STRIP = 6
 
@@ -40,6 +42,10 @@ def rank_prefix(rank: int) -> str:
 
 def _escaped(text, limit: int = 80) -> str:
     return escape_markdown(truncate(str(text or "Unknown"), limit))
+
+
+# The renderers below take `name`: a viewer's name ready for embed text, as viewer_mention gives it
+# (their Discord @mention when linked, else their escaped Plex name).
 
 
 async def _poster_strip(tautulli, rows) -> Optional[object]:
@@ -66,18 +72,42 @@ def _last_watched(row: dict) -> Optional[str]:
     return row.get("grandchild_title") or row.get("title")
 
 
+_SECONDS = {"day": 86400, "hr": 3600, "min": 60, "sec": 1}
+
+
+def tautulli_duration(text: str) -> str:
+    """Tautulli's own duration text ("41 days 6 hrs 2 mins") in the bot's style ("41d 6h 2m").
+
+    Anything not entirely "<number> <unit>" pairs is shown as Tautulli wrote it, never half-read.
+    """
+    words = str(text).split()
+    if not words or len(words) % 2:
+        return str(text)
+    seconds = 0
+    for count, unit in zip(words[::2], words[1::2]):
+        unit = unit.removesuffix("s")
+        if not count.isdigit() or unit not in _SECONDS:
+            return str(text)
+        seconds += int(count) * _SECONDS[unit]
+    return format_duration(seconds)
+
+
 def top_card(rows, *, days: int, name: Callable[[dict], str], all_time: Optional[str] = None) -> nextcord.Embed:
-    lines = [f"-# Last {plural(days, 'day')} · by watch time"]
+    """The podium (top three, with what they last watched), then everyone else one line each."""
+    lines = [f"-# Last {plural(days, 'day')} · by watch time", ""]
     for rank, row in enumerate(rows[:_RANKED], 1):
+        if rank == _PODIUM + 1:
+            lines.append("")
         watched = format_duration(to_int(row.get("total_duration")))
-        lines.append(f"{rank_prefix(rank)} **{escape_markdown(name(row))}** · {watched}")
+        lines.append(f"{rank_prefix(rank)} **{name(row)}** · {watched}")
         last = _last_watched(row)
-        if last:
+        if last and rank <= _PODIUM:
             lines.append(f"-# Last watched {_escaped(last)}")
     total = sum(to_int(row.get("total_duration")) for row in rows[:_RANKED])
     embed = card(title="🏆 Top watchers", description="\n".join(lines), colour=Colour.GOLD)
-    # all_time is Tautulli's own text, e.g. "41 days 6 hrs 2 mins".
-    embed.set_footer(text=join([f"Together: {format_duration(total)}", f"All time: {all_time}" if all_time else None]))
+    embed.set_footer(text=join([
+        f"Together {format_duration(total)}", f"All time {tautulli_duration(all_time)}" if all_time else None,
+    ]))
     return embed
 
 
@@ -95,8 +125,8 @@ def library_line(rows) -> Optional[str]:
             episodes += to_int(row.get("child_count"))
         watched += to_int(row.get("duration"))
     return join([
-        f"🎬 {plural(movies, 'movie')}" if movies else None,
-        f"📺 {plural(shows, 'show')}" if shows else None,
+        plural(movies, "movie") if movies else None,
+        plural(shows, "show") if shows else None,
         plural(episodes, "episode") if episodes else None,
         f"{format_duration(watched)} watched all time" if watched else None,
     ]) or None
@@ -105,7 +135,7 @@ def library_line(rows) -> Optional[str]:
 def popular_lines(rows, limit: int = 5) -> Optional[str]:
     lines = [
         join([
-            f"{rank_prefix(rank)} **{_escaped(session_title(row))}**",
+            f"`{rank}.` **{_escaped(session_title(row))}**",  # medals are for people (top, shows)
             plural(to_int(row.get("total_plays")), "play"),
             plural(to_int(row.get("users_watched")), "person", "people"),
         ])
@@ -115,17 +145,20 @@ def popular_lines(rows, limit: int = 5) -> Optional[str]:
 
 
 def stats_card(libraries, movies, shows, *, days: int, strip) -> nextcord.Embed:
-    description = join([f"-# Last {plural(days, 'day')}", library_line(libraries)], "\n")
-    embed = card(title="📊 Server stats", description=description, colour=brand_colour())
-    for heading, rows in (("🎬 Most popular movies", movies), ("📺 Most popular shows", shows)):
+    """The popular titles for the window, with the all-time library totals tucked into the footer."""
+    window = f"last {plural(days, 'day')}"
+    embed = card(title="📊 Server stats", colour=brand_colour())
+    for heading, rows in (("🎬 Top movies", movies), ("📺 Top shows", shows)):
         lines = popular_lines(rows)
         if lines:
-            embed.add_field(name=heading, value=truncate(lines, Limits.FIELD_VALUE), inline=False)
+            embed.add_field(name=f"{heading} · {window}", value=truncate(lines, Limits.FIELD_VALUE), inline=False)
     if not (movies or shows):
-        embed.add_field(name="Most popular", value=f"Nothing was watched in the last {plural(days, 'day')}.",
-                        inline=False)
+        embed.add_field(name="Top titles", value=f"Nothing was watched in the {window}.", inline=False)
     if strip:
         embed.set_image(url=strip.url)
+    totals = library_line(libraries)
+    if totals:
+        embed.set_footer(text=totals)
     return embed
 
 
@@ -151,7 +184,7 @@ def tv_watchers(libraries, responses, ignored: set) -> list:
 def shows_card(ranked, *, name: Callable[[dict], str], several_libraries: bool) -> nextcord.Embed:
     lines = ["-# All time, by TV watch time"]
     for rank, (row, seconds, libraries) in enumerate(ranked[:_RANKED], 1):
-        lines.append(f"{rank_prefix(rank)} **{escape_markdown(name(row))}** · {format_duration(seconds)}")
+        lines.append(f"{rank_prefix(rank)} **{name(row)}** · {format_duration(seconds)}")
         if several_libraries:
             lines.append(f"-# {escape_markdown(', '.join(libraries))}")
     return card(title="📺 Top TV watchers", description="\n".join(lines), colour=Colour.GOLD)
@@ -217,7 +250,7 @@ def hot_summary(history, recent_items, *, days: int, name: Callable[[dict], str]
     active = sorted(per_user.values(), key=lambda s: s["plays"], reverse=True)[:5]
     if active:
         sections.append(("🏃 Most active", [
-            f"{rank_prefix(rank)} **{escape_markdown(name(s['row']))}** · {plural(s['plays'], 'play')} · "
+            f"{rank_prefix(rank)} **{name(s['row'])}** · {plural(s['plays'], 'play')} · "
             f"{plural(len(s['titles']), 'title')}"
             for rank, s in enumerate(active, 1)
         ]))
@@ -227,14 +260,14 @@ def hot_summary(history, recent_items, *, days: int, name: Callable[[dict], str]
     )[:3]
     if binges:
         sections.append(("🍿 Binge watchers", [
-            f"**{escape_markdown(name(per_user[user]['row']))}** binged **{_escaped(show)}** ({count} episodes)"
+            f"**{name(per_user[user]['row'])}** binged **{_escaped(show)}** ({count} episodes)"
             for user, show, count in binges
         ]))
     recent_keys = {str(item.get("rating_key")) for item in recent_items}
     discoveries = [t for key, t in titles.items() if key in recent_keys and len(t["users"]) == 1 and t["plays"] <= 2][:3]
     if discoveries:
         sections.append(("🧭 First to check out", [
-            f"**{escape_markdown(name(t['row']))}** tried **{_escaped(t['title'])}**" for t in discoveries
+            f"**{name(t['row'])}** tried **{_escaped(t['title'])}**" for t in discoveries
         ]))
 
     kinds = Counter(row.get("media_type") for row in history)
@@ -282,6 +315,9 @@ class PlexStats(commands.Cog):
     def _name(self, row: dict) -> str:
         return viewer_name(self.bot, row)
 
+    def _mention(self, row: dict) -> str:
+        return viewer_mention(self.bot, row)
+
     @staticmethod
     def _rows(response, default=None):
         """The rows of a home-stats or list response; None when Tautulli failed."""
@@ -322,7 +358,7 @@ class PlexStats(commands.Cog):
         all_time = None
         if Tautulli.check_response(history_r):
             all_time = (Tautulli.get_response_data(history_r, {}) or {}).get("total_duration")
-        embed = top_card(ranked, days=days, name=self._name, all_time=all_time)
+        embed = top_card(ranked, days=days, name=self._mention, all_time=all_time)
         avatar = viewer_avatar(self.bot, ranked[0])
         if avatar:
             embed.set_thumbnail(url=avatar)
@@ -409,7 +445,7 @@ class PlexStats(commands.Cog):
         if not ranked:
             await empty_state("Nobody's watched any TV yet.").send(interaction)
             return
-        embed = shows_card(ranked, name=self._name, several_libraries=len(tv) > 1)
+        embed = shows_card(ranked, name=self._mention, several_libraries=len(tv) > 1)
         avatar = viewer_avatar(self.bot, ranked[0][0])
         if avatar:
             embed.set_thumbnail(url=avatar)
@@ -441,11 +477,11 @@ class PlexStats(commands.Cog):
         rows = [row for row in Tautulli.get_response_data(response, {}).get("data") or []
                 if plex_username(row) not in ignored][:_HISTORY_ROWS]
         if not rows:
-            who = f"**{escape_markdown(self._name(person))}** hasn't" if person else "Nobody has"
+            who = f"**{self._mention(person)}** hasn't" if person else "Nobody has"
             await empty_state(f"{who} watched anything yet.").send(interaction)
             return
         strip = await _poster_strip(self.tautulli, rows)
-        embed = history_card(rows, name=self._name, person=person, strip=strip)
+        embed = history_card(rows, name=self._mention, person=person, strip=strip)
         if person:
             embed.set_author(name=truncate(self._name(person), Limits.AUTHOR),
                              icon_url=viewer_avatar(self.bot, person) or None)
@@ -488,7 +524,7 @@ class PlexStats(commands.Cog):
         if Tautulli.check_response(recent_r):
             recent = [item for item in (Tautulli.get_response_data(recent_r, {}) or {}).get("recently_added") or []
                       if to_int(item.get("added_at")) >= cutoff]
-        summary = hot_summary(history, recent, days=days, name=self._name)
+        summary = hot_summary(history, recent, days=days, name=self._mention)
         strip = await _poster_strip(self.tautulli, summary["posters"])
         await Reply([hot_card(summary, days=days, strip=strip)], [strip] if strip else []).send(interaction)
 
