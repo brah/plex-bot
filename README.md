@@ -215,7 +215,7 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 
 ## Commands
 
-Commands are moving to slash commands: type `/plex` in Discord to see them all. Admin-only commands live under `/plexadmin`, which only admins can see. Commands still listed with the `plex ` prefix haven't moved yet.
+Every command is a slash command: type `/plex` in Discord to see them all. Admin-only commands live under `/plexadmin`, which only admins can see. Typing an old `plex ` command replies with its new name.
 
 | Command | Description |
 |---------|-------------|
@@ -240,8 +240,10 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `/plex chart months [user] [days]` | Plays per month (default: the last year) |
 | `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
 | `/plexadmin cache` | Shows the media cache behind `/plex random` and title suggestions, with a **Refresh now** button (admin only) |
-| `plex mapdiscord [plex_username] [@user]` | Maps Discord user to Plex username (admin only) |
-| `plex ignore [plex_username]` | Toggles ignoring a user in stats (admin only) |
+| `/plexadmin users` | Every Plex user with their Discord link and whether they're ignored (admin only) |
+| `/plexadmin link <plex_user> <member>` | Links a Plex user to a Discord member, so the bot shows their Discord name and avatar, gives top-watcher roles and can recommend for them; replaces either side's old link (admin only) |
+| `/plexadmin unlink <plex_user>` | Removes a Plex user's link (admin only) |
+| `/plexadmin ignore <plex_user>` | Leaves a Plex user out of stats, charts and lists, or brings them back (admin only) |
 
 Library sizes on `/plex status` come from Tautulli. Movie sizes appear on their own; for TV and music, run **Calculate Total File Sizes** on the library's Media Info tab in Tautulli once.
 

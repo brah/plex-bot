@@ -25,19 +25,25 @@ class PlexUsers:
         self.tautulli = tautulli
         self._cache: tuple = (0.0, [])  # (fetched at, users)
 
-    async def all(self) -> Optional[list]:
-        """Every visible user, or None when Tautulli didn't answer."""
+    async def everyone(self) -> Optional[list]:
+        """Every Plex user Tautulli knows, ignored ones included; None when Tautulli didn't answer."""
         fetched, users = self._cache
         if users and time.monotonic() - fetched < _TTL:
             return users
         response = await self.tautulli.get_users()
         if not Tautulli.check_response(response):
             return None
-        ignored = ignored_usernames()
-        users = [row for row in Tautulli.get_response_data(response, []) or []
-                 if row.get("username") and row["username"] not in ignored]
+        users = [row for row in Tautulli.get_response_data(response, []) or [] if row.get("username")]
         self._cache = (time.monotonic(), users)
         return users
+
+    async def all(self) -> Optional[list]:
+        """Every user who isn't ignored (applied on each call, so an ignore takes effect at once)."""
+        users = await self.everyone()
+        if users is None:
+            return None
+        ignored = ignored_usernames()
+        return [row for row in users if row["username"] not in ignored]
 
     def name(self, row: dict) -> str:
         return viewer_name(self.bot, row)
