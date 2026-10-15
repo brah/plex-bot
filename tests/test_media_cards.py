@@ -6,8 +6,9 @@ from types import SimpleNamespace
 from PIL import Image
 
 from cogs.media_commands import (
-    _recent_choices, downloads_card, recent_line, split_torrents, title_choices, torrent_block, watch_stats,
+    _recent_choices, downloads_card, recent_line, split_torrents, title_choices, torrent_block,
 )
+from media_details import watch_stats
 from ui.cards import media_card, media_facts, runtime, session_title
 from ui.images import Attachment
 from ui.theme import Colour

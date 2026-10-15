@@ -37,6 +37,7 @@ EXAMPLES = {
     "/plex tv": "/plex tv title:Severance",
     "/plex random": "/plex random type:TV show genre:Comedy",
     "/plex recent": "/plex recent count:5 type:Movies",
+    "/plex recommend": "/plex recommend member:@Alice",
     "/plex top": "/plex top days:30",
     "/plex history": "/plex history user:alice",
     "/plex hot": "/plex hot days:14",

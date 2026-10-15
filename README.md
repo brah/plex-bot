@@ -219,7 +219,6 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 
 | Command | Description |
 |---------|-------------|
-| `plex recommend [@user]` | Recommends media based on watch history |
 | `/plex help` | Shows what the bot can do, by category (private) |
 | `/plex status` | Server health: version and update status, library totals and sizes, activity, and plex.tv service status (the **Plex services** button lists every service privately) |
 | `/plex watchers [stop] [message]` | Shows every current stream with a poster strip; pick one for private details (current frame, quality, device). Stream managers can stop streams from the details card or with `stop:` |
@@ -228,6 +227,7 @@ Commands are moving to slash commands: type `/plex` in Discord to see them all. 
 | `/plex random [type] [genre]` | A random movie or show, optionally of one genre (suggested as you type); **Roll again** for another |
 | `/plex recent [count] [type]` | What was added recently, with a poster strip; pick one for its details (private) |
 | `/plex downloading` | What qBittorrent is downloading, with progress and time left |
+| `/plex recommend [member]` | Three unwatched picks in someone's favourite genres (default: you); the numbered buttons open each pick |
 | `/plex top [days]` | Top watchers by watch time, with medals. Defaults to the last 7 days; that default ranking also updates the top-three roles |
 | `/plex stats [days]` | Library totals and the most popular movies and shows, with posters |
 | `/plex shows` | Top TV watchers of all time |

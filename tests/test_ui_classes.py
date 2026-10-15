@@ -43,7 +43,7 @@ def test_finds_our_ui_classes():
     expected = {
         "WatchersView", "StreamDetailsSelect", "StreamDetailView", "StopStreamModal", "LoggedView",
         "HelpCategorySelect", "StatusView", "RandomView", "RecentView", "RecentDetailsSelect",
-        "DownloadsView", "CacheView",
+        "DownloadsView", "CacheView", "RecommendationView",
     }
     assert expected <= names
 
