@@ -288,6 +288,20 @@ def test_stop_from_detail_replaces_card_with_confirmation(monkeypatch):
     assert "Stopped **Alice**" in edited["embeds"][0].description and edited["view"] is None
 
 
+def test_stop_confirmation_mentions_a_linked_viewer(monkeypatch):
+    import utilities
+
+    monkeypatch.setattr(utilities, "mapped_discord_user",
+                        lambda bot, username: SimpleNamespace(mention="<@42>") if username == "alice" else None)
+
+    async def run():
+        _bot, cog = build_bot(FakeTautulli([MOVIE_PLAYING]))
+        return await cog.stop_stream("admin", "abc", None)
+
+    ok, text = asyncio.run(run())
+    assert ok is True and text.startswith("Stopped **<@42>**'s stream")
+
+
 def test_stop_option_reports_ended_stream(monkeypatch):
     async def run():
         _bot, cog = build_bot(FakeTautulli([]))

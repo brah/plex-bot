@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import aiohttp
 from nextcord import File
+from nextcord.utils import escape_markdown
 
 logger = logging.getLogger("plexbot.utilities")
 logger.setLevel(logging.INFO)
@@ -217,6 +218,18 @@ def viewer_name(bot, row: Dict[str, Any]) -> str:
     if member:
         return member.display_name
     return row.get("friendly_name") or plex_username(row) or "Unknown"
+
+
+def viewer_mention(bot, row: Dict[str, Any]) -> str:
+    """Their Discord @mention when mapped, else their Plex name, escaped: ready for embed text.
+
+    Only embed descriptions and field values render mentions (and never ping from there); titles,
+    authors, footers, labels and choices show the raw <@id>, so they use viewer_name instead.
+    """
+    member = mapped_discord_user(bot, plex_username(row))
+    if member:
+        return member.mention
+    return escape_markdown(row.get("friendly_name") or plex_username(row) or "Unknown")
 
 
 def viewer_avatar(bot, row: Dict[str, Any]) -> Optional[str]:

@@ -3,7 +3,7 @@
 """Renderers for the /plex watchers stream cards and the media card (lookups, random, recent)."""
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 from urllib.parse import quote
 
 import nextcord
@@ -57,23 +57,46 @@ def media_icon(media_type) -> str:
     return _MEDIA_ICONS.get(media_type or "", Emoji.PLAYING)
 
 
-def recent_viewer_line(row: dict, *, user: Optional[str] = None, show_user: bool = True) -> str:
-    """One past play (a Tautulli history row): who, what, how far, where, when.
-
-    user: the name to show (e.g. their Discord name); show_user=False leads with the title instead,
-    for a list that is all one person's.
-    """
+def _play_details(row: dict) -> tuple:
+    """A history row's (how far, where, when) parts; each is None when there's nothing to say."""
     percent = to_int(row.get("percent_complete"), 100)
     when = to_int(row.get("stopped")) or to_int(row.get("date"))
-    title = escape_markdown(truncate(session_title(row), 80))
-    who = escape_markdown(user or session_user(row))
-    return join([
-        f"{media_icon(row.get('media_type'))} **{who if show_user else title}**",
-        title if show_user else None,
+    return (
         f"stopped at {percent}%" if percent < _FINISHED_PERCENT else None,
         f"on {escape_markdown(str(row['platform']))}" if row.get("platform") else None,
         timestamp(when) if when else None,
+    )
+
+
+def _plex_name(row: dict) -> str:
+    return escape_markdown(session_user(row))
+
+
+def recent_viewer_line(row: dict, *, user: Optional[str] = None, show_user: bool = True) -> str:
+    """One past play (a Tautulli history row): who, what, how far, where, when.
+
+    user: the name to show, ready for embed text (e.g. their Discord @mention); show_user=False
+    leads with the title instead, for a list that is all one person's.
+    """
+    title = escape_markdown(truncate(session_title(row), 80))
+    who = user or _plex_name(row)
+    return join([
+        f"{media_icon(row.get('media_type'))} **{who if show_user else title}**",
+        title if show_user else None,
+        *_play_details(row),
     ])
+
+
+def recent_viewer_entry(row: dict, *, user: Optional[str] = None) -> str:
+    """One past play as two lines: who and when, then what, how far and where in small grey text.
+
+    user: the name to show, ready for embed text (e.g. their Discord @mention).
+    """
+    stopped, platform, when = _play_details(row)
+    icon = media_icon(row.get("media_type"))
+    who = user or _plex_name(row)
+    title = escape_markdown(truncate(session_title(row), 80))
+    return f"{join([f'{icon} **{who}**', when])}\n-# {join([title, stopped, platform])}"
 
 
 def _state(session: dict) -> str:
@@ -91,10 +114,13 @@ def _progress(session: dict) -> str:
     return f"`{progress_bar(offset / duration)}` {format_ms(offset)} / {format_ms(duration)}"
 
 
-def session_lines(session: dict) -> str:
-    """Two lines per stream for the overview: who and what, then progress, quality, device."""
+def session_lines(session: dict, *, name: Callable[[dict], str] = _plex_name) -> str:
+    """Two lines per stream for the overview: who and what, then progress, quality, device.
+
+    name: the viewer's name, ready for embed text (e.g. their Discord @mention).
+    """
     icon = _STATE_ICONS.get(_state(session), Emoji.BULLET)
-    user = escape_markdown(session_user(session))
+    user = name(session)
     title = escape_markdown(session_title(session))
     quality = join([
         session.get("stream_video_full_resolution"),
@@ -110,7 +136,7 @@ def _state_colour(sessions: Sequence[dict]) -> int:
 
 
 def stream_overview(sessions: Sequence[dict], *, bandwidth_kbps: int, strip: Optional[Attachment],
-                    updated: datetime) -> nextcord.Embed:
+                    updated: datetime, name: Callable[[dict], str] = _plex_name) -> nextcord.Embed:
     header = join([
         f"**{plural(len(sessions), 'stream')}**",
         f"{bandwidth_kbps / 1000:.1f} Mbps" if bandwidth_kbps else None,
@@ -120,7 +146,7 @@ def stream_overview(sessions: Sequence[dict], *, bandwidth_kbps: int, strip: Opt
     used = len(header)
     reserve = 40  # room for the "...and N more" line
     for index, session in enumerate(sessions):
-        block = session_lines(session)
+        block = session_lines(session, name=name)
         if used + 2 + len(block) > Limits.DESCRIPTION - reserve:
             blocks.append(f"…and {plural(len(sessions) - index, 'more stream')}")
             break

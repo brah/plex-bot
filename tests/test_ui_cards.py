@@ -53,6 +53,11 @@ class TestOverview:
         embed = stream_overview([EPISODE_PAUSED], bandwidth_kbps=0, strip=None, updated=NOW)
         assert embed.colour.value == Colour.WARNING and not embed.image.url
 
+    def test_names_can_be_discord_mentions(self):
+        embed = stream_overview([MOVIE_PLAYING], bandwidth_kbps=0, strip=None, updated=NOW,
+                                name=lambda session: "<@42>")
+        assert "**<@42>** · The Matrix (1999)" in embed.description
+
     def test_many_streams_stay_within_limits(self):
         embed = stream_overview(many_sessions(200), bandwidth_kbps=1, strip=None, updated=NOW)
         assert len(embed.description) <= Limits.DESCRIPTION
