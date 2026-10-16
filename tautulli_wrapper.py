@@ -276,22 +276,6 @@ class Tautulli:
             params["search"] = search
         return await self.api_call("get_library_media_info", params)
 
-    async def get_most_watched_movies(self, time_range: int) -> Optional[Dict[str, Any]]:
-        """Retrieve details about the most watched movies."""
-        params = {
-            "stat_id": "popular_movies",
-            "time_range": time_range,
-        }
-        return await self.api_call("get_home_stats", params)
-
-    async def get_most_watched_shows(self, time_range: int) -> Optional[Dict[str, Any]]:
-        """Retrieve details about the most watched TV shows."""
-        params = {
-            "stat_id": "popular_tv",
-            "time_range": time_range,
-        }
-        return await self.api_call("get_home_stats", params)
-
 
 class TMDB:
     """Work in progress: a TMDB client for richer metadata. It's created when tmdb.apikey is set, but

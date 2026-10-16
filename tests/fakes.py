@@ -157,12 +157,6 @@ class FakeTautulli:
         self.home_stats_calls = self.home_stats_calls + [params]
         return self._ok({"rows": self.home_stats.get(params["stat_id"], [])})
 
-    async def get_most_watched_movies(self, time_range):
-        return await self.get_home_stats({"stat_id": "popular_movies", "time_range": time_range})
-
-    async def get_most_watched_shows(self, time_range):
-        return await self.get_home_stats({"stat_id": "popular_tv", "time_range": time_range})
-
     async def get_libraries_table(self):
         return self._ok({"data": self.libraries_table})
 

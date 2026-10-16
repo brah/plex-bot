@@ -5,11 +5,13 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from nextcord import ButtonStyle
 from nextcord.utils import escape_markdown
 
 import utilities
 from cogs.plex_stats import (
-    PlexStats, hot_summary, library_line, popular_lines, stats_card, tautulli_duration, top_card, tv_watchers,
+    _ALL_TIME, _STATS, PlexStats, hot_summary, library_line, media_card, overview_card, peak_line, popular_lines,
+    tautulli_duration, top_card, tv_watchers, users_card,
 )
 from fakes import FakeTautulli, Recorder, build_stats_bot, interaction, patch_images
 
@@ -75,11 +77,59 @@ class TestRenderers:
         for text in ("2 days 5 hours 3 mins", "about 2 days", "2 days 5", "", "something else"):
             assert tautulli_duration(text) == text
 
-    def test_stats_card_when_nothing_was_watched(self):
-        embed = stats_card([], [], [], days=7, strip=None)
+    def test_stats_pages_when_nothing_was_watched(self):
+        stats = {stat_id: [] for stat_id in _STATS}
+        embed = overview_card(stats, [], days=7, strip=None)
+        assert embed.description == "-# Last 7 days"
         assert [(f.name, f.value) for f in embed.fields] == [("Top titles", "Nothing was watched in the last 7 days.")]
         assert embed.footer.text is None  # no library totals, so no footer
         assert embed.image.url is None
+        tv = media_card("show", stats, [], days=7, strip=None)
+        assert [(f.name, f.value) for f in tv.fields] == [("🔥 Most popular", "Nothing was watched in the last 7 days.")]
+
+    def test_media_card_splits_libraries_and_shows_watch_time_for_tv(self):
+        stats = {stat_id: [] for stat_id in _STATS}
+        stats["top_libraries"] = [
+            {"section_type": "show", "section_name": "TV", "total_plays": 30, "total_duration": 36_000},
+            {"section_type": "show", "section_name": "Anime", "total_plays": 10, "total_duration": 7_200},
+            {"section_type": "movie", "section_name": "Movies", "total_plays": 4, "total_duration": 28_800},
+        ]
+        stats["top_tv"] = [{"title": "Severance", "media_type": "show", "total_duration": 90_000}]
+        libraries = [{"section_type": "show", "count": "5", "child_count": "80", "duration": "3600"},
+                     {"section_type": "movie", "count": "9"}]
+        tv = media_card("show", stats, libraries, days=30, strip=None)
+        assert tv.description == "-# Last 30 days\n**40 plays** · **12h** watched"
+        assert [f.name for f in tv.fields] == ["🔥 Most popular", "⏱️ Most watch time", "📚 By library"]
+        assert tv.fields[1].value == "`1.` **Severance** · 1d 1h"
+        assert tv.fields[2].value == "**TV** · 30 plays · 10h\n**Anime** · 10 plays · 2h"
+        assert tv.footer.text == "5 shows · 80 episodes · 1h watched all time"
+        movies = media_card("movie", stats, libraries, days=30, strip=None)
+        assert [f.name for f in movies.fields] == ["🔥 Most popular"]  # one library, and no watch-time list
+        assert movies.footer.text == "9 movies"
+
+    def test_users_card_is_all_time_with_plays(self):
+        rows = [dict(TOP_USERS[1], last_play=1_700_000_000), *TOP_USERS[2:]]
+        embed = users_card(rows, name=name, avatar="https://plex.tv/a.png")
+        lines = embed.description.split("\n")
+        assert lines[:4] == ["-# All time · by watch time", "", "🥇 **Alice** · 12h 30m · 12 plays",
+                             "-# Last watched Severance · <t:1700000000:R>"]
+        assert lines[4:6] == ["🥈 **\\_Bob\\_** · 1h · 2 plays", "-# Last watched Heat"]
+        assert lines[-2:] == ["", "`4.` **Dan** · 0m · 1 play"]
+        assert embed.thumbnail.url == "https://plex.tv/a.png"
+        assert embed.footer.text == "4 viewers · 13h 31m together"
+        empty = users_card([], name=name, avatar=None)
+        assert empty.description.endswith("Nobody's watched anything yet.")
+        assert empty.footer.text is None
+
+    def test_overview_platforms_and_peak(self):
+        stats = {stat_id: [] for stat_id in _STATS}
+        stats["top_platforms"] = [{"platform": "Roku", "total_plays": 12}, {"platform": "Chrome", "total_plays": 1}]
+        stats["most_concurrent"] = [{"title": "Concurrent Transcodes", "count": 2},
+                                    {"title": "Concurrent Streams", "count": 6, "started": 1_700_000_000}]
+        fields = {f.name: f.value for f in overview_card(stats, [], days=30, strip=None).fields}
+        assert fields["📱 Platforms"] == "**Roku** · 12 plays\n**Chrome** · 1 play"
+        assert fields["📈 Busiest"] == "6 streams at once · <t:1700000000:d>"
+        assert peak_line([{"title": "Concurrent Streams", "count": 0}]) is None
 
     def test_library_line_and_popular(self):
         rows = [{"section_type": "movie", "count": "1866", "duration": "360000"},
@@ -196,35 +246,55 @@ class TestCommands:
              FakeTautulli([], reachable=False))
         assert recorder.last("followup")["ephemeral"] is True
 
-    def test_stats_card(self, monkeypatch):
+    def test_stats_opens_on_the_overview_and_flips_pages(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         tautulli = FakeTautulli([])
         tautulli.home_stats = {
             "popular_movies": [{"title": "Heat", "year": "1995", "media_type": "movie", "total_plays": 3,
                                 "users_watched": 2, "thumb": "/t/1"}],
             "popular_tv": [],
+            "top_users": TOP_USERS,
         }
         tautulli.libraries_table = [{"section_type": "movie", "count": "10"}]
-        _run(lambda bot, cog: PlexStats.stats.callback(cog, interaction(bot), days=None), tautulli)
-        sent = recorder.last("followup")
-        embed = sent["embeds"][0]
-        assert embed.description is None
-        assert [f.name for f in embed.fields] == ["🎬 Top movies · last 30 days"]
-        assert embed.footer.text == "10 movies"
-        assert [f.filename for f in sent["files"]] == ["posters.png"]
 
-    def test_stats_card_without_library_totals(self, monkeypatch):
+        async def run(bot, cog):
+            await PlexStats.stats.callback(cog, interaction(bot), days=None)
+            view = recorder.last("followup")["view"]
+            opened = [(b.label, b.style) for b in view.children]
+            await view.children[1].callback(interaction(bot))  # Movies
+            on_movies = [b.style for b in view.children]
+            await view.children[3].callback(interaction(bot))  # Users
+            return opened, on_movies
+
+        opened, on_movies = _run(run, tautulli)
+        assert {call["stat_id"] for call in tautulli.home_stats_calls} == set(_STATS)
+        windows = {call["stat_id"]: call["time_range"] for call in tautulli.home_stats_calls}
+        assert windows.pop("top_users") == _ALL_TIME
+        assert set(windows.values()) == {30}
+        users = recorder.last("edit_message")
+        assert users["embeds"][0].title == "👥 User stats"
+        assert "Mallory" not in users["embeds"][0].description  # ignored
+        assert users["embeds"][0].footer.text == "4 viewers · 13h 31m together"
+        assert "files" not in users  # no poster strip, and the Movies page's is dropped
+        assert users["attachments"] == []
+        sent = recorder.last("followup")
+        assert [f.name for f in sent["embeds"][0].fields] == ["🎬 Top movies"]
+        assert sent["embeds"][0].footer.text == "10 movies"
+        assert [f.filename for f in sent["files"]] == ["posters.png"]
+        assert opened == [
+            ("Overview", ButtonStyle.primary), ("Movies", ButtonStyle.secondary), ("TV", ButtonStyle.secondary),
+            ("Users", ButtonStyle.secondary)]
+        flipped = [kwargs for kind, kwargs in recorder.calls if kind == "edit_message"][0]
+        assert flipped["embeds"][0].title == "🎬 Movie stats"
+        assert flipped["embeds"][0].fields[0].value == "`1.` **Heat (1995)** · 3 plays · 2 people"
+        assert [f.filename for f in flipped["files"]] == ["posters.png"]
+        assert on_movies[:2] == [ButtonStyle.secondary, ButtonStyle.primary]
+
+    def test_stats_tautulli_down(self, monkeypatch):
         recorder = Recorder(monkeypatch)
-        tautulli = FakeTautulli([])
-        tautulli.home_stats = {"popular_movies": [], "popular_tv": [{"title": "MobLand", "media_type": "show",
-                                                                      "total_plays": 20, "users_watched": 5}]}
-        tautulli.libraries_table = []
-        _run(lambda bot, cog: PlexStats.stats.callback(cog, interaction(bot), days=7), tautulli)
-        embed = recorder.last("followup")["embeds"][0]
-        assert [(f.name, f.value) for f in embed.fields] == [
-            ("📺 Top shows · last 7 days", "`1.` **MobLand** · 20 plays · 5 people"),
-        ]
-        assert embed.footer.text is None
+        _run(lambda bot, cog: PlexStats.stats.callback(cog, interaction(bot), days=7),
+             FakeTautulli([], reachable=False))
+        assert recorder.last("followup")["ephemeral"] is True
 
     def test_shows(self, monkeypatch):
         recorder = Recorder(monkeypatch)
