@@ -66,6 +66,7 @@ def test_help_command_without_guild_permissions_hides_admin(monkeypatch):
 
         async def send_message(self, **kwargs):
             sent.update(kwargs)
+            return "private handle"
 
     async def run():
         bot, _cog = build_bot(FakeTautulli([]))
@@ -79,6 +80,31 @@ def test_help_command_without_guild_permissions_hides_admin(monkeypatch):
     assert "Admin" not in sent["embeds"][0].description
     select = next(c for c in sent["view"].children if isinstance(c, nextcord.ui.StringSelect))
     assert "admin" not in [o.value for o in select.options]
+    assert sent["view"].message == "private handle"  # what removes the menu when it expires
+
+
+def test_an_expired_help_menu_loses_its_controls_through_the_latest_token():
+    edits = []
+
+    class Interaction(SimpleNamespace):
+        async def edit_original_message(self, **kwargs):
+            edits.append((self.name, kwargs["view"]))
+
+    class Response:
+        async def edit_message(self, **kwargs):
+            pass
+
+    async def run():
+        view = help_module.HelpView(ENTRIES)
+        view.message = nextcord.PartialInteractionMessage(Interaction(name="command"))
+        await view.on_timeout()
+        select = view.children[0]
+        select._selected_values = ["watching"]
+        await select.callback(Interaction(name="click", response=Response()))
+        await view.on_timeout()
+
+    asyncio.run(run())
+    assert edits == [("command", None), ("click", None)]
 
 
 def _choose(entries, value):

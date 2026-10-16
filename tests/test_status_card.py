@@ -226,3 +226,25 @@ def test_services_button_opens_the_full_list_privately(monkeypatch):
 def test_services_button_falls_back_to_the_card_snapshot(monkeypatch):
     recorder = _click_services(monkeypatch, None)
     assert recorder.last("followup")["embeds"][0].description.count("🟢") == 4
+
+
+def test_presence_counts_every_stream_and_their_total_bandwidth(monkeypatch):
+    from fakes import EPISODE_PAUSED, MOVIE_PLAYING
+
+    shown = []
+
+    async def run():
+        tautulli = FakeTautulli([MOVIE_PLAYING, EPISODE_PAUSED])  # one stream at home, one remote
+        bot, cog = build_bot(tautulli)
+
+        async def change_presence(activity=None, **kwargs):
+            shown.append(activity.name)
+
+        monkeypatch.setattr(bot, "change_presence", change_presence)
+        await cog.status_task.coro(cog)
+        tautulli.sessions = [MOVIE_PLAYING]
+        cog._display_streams = True  # the next tick would show the help hint
+        await cog.status_task.coro(cog)
+
+    asyncio.run(run())
+    assert shown == ["2 streams at 20.0 Mbps", "1 stream at 12.0 Mbps"]

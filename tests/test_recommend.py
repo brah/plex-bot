@@ -8,8 +8,9 @@ import pytest
 
 import utilities
 from cogs.recommendations import (
-    RecommendationView, Recommendations, favourite_genres, overview_card, viewer_count, watched_keys,
+    RecommendationView, Recommendations, favourite_genres, overview_card, watched_keys,
 )
+from media_details import item_viewers
 from fakes import (
     GUILD_ID, MESSAGE_ID, FakeTautulli, Recorder, component_payload, interaction, member_payload, patch_images,
     settle,
@@ -48,10 +49,10 @@ class TestPicking:
     def test_favourite_genres_count_each_item_once(self):
         assert favourite_genres(HISTORY, CACHE.get) == ["drama", "science fiction", "crime"]
 
-    def test_viewer_count_skips_ignored_and_unplayed(self):
+    def test_viewers_skip_ignored_and_unplayed_most_plays_first(self):
         rows = [{"username": "bob", "total_plays": 2}, {"username": "mallory", "total_plays": 9},
-                {"username": "zed", "total_plays": 0}]
-        assert viewer_count(rows, {"mallory"}) == 1
+                {"username": "zed", "total_plays": 0}, {"username": "cara", "total_plays": "5"}]
+        assert [row["username"] for row in item_viewers(rows, {"mallory"})] == ["cara", "bob"]
 
     def test_overview(self):
         embed = overview_card([CACHE["3"], CACHE["4"]], [2, 0], ["drama", "science fiction"], strip=None)

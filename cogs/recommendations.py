@@ -14,7 +14,7 @@ from nextcord.utils import escape_markdown
 from config import config
 from errors import LoggedView
 from media_cache import MediaCache
-from media_details import MediaDetails, TautulliUnavailable
+from media_details import MediaDetails, TautulliUnavailable, item_viewers
 from slash_commands import plex
 from tautulli_wrapper import Tautulli
 from ui.cards import genre_label, media_icon, session_title
@@ -47,10 +47,6 @@ def favourite_genres(history: list, item_for) -> List[str]:
         for genre in (item_for(key) or {}).get("genres") or []:
             counts[genre.lower()] += 1
     return [genre for genre, _count in counts.most_common(_TOP_GENRES)]
-
-
-def viewer_count(user_rows, ignored: set) -> int:
-    return sum(1 for row in user_rows or [] if to_int(row.get("total_plays")) and row.get("username") not in ignored)
 
 
 def overview_card(picks: list, counts: list, genres: List[str], *, strip) -> nextcord.Embed:
@@ -154,7 +150,7 @@ class Recommendations(commands.Cog):
     async def _viewer_counts(self, picks: list) -> list:
         responses = await asyncio.gather(*(self.tautulli.get_item_user_stats(p["rating_key"]) for p in picks))
         ignored = ignored_usernames()
-        return [viewer_count(Tautulli.get_response_data(r, []) if Tautulli.check_response(r) else [], ignored)
+        return [len(item_viewers(Tautulli.get_response_data(r, []) if Tautulli.check_response(r) else [], ignored))
                 for r in responses]
 
     @plex.subcommand(description="Recommend unwatched movies and shows from someone's favourite genres")

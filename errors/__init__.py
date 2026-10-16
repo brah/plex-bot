@@ -134,9 +134,18 @@ class LoggedView(nextcord.ui.View):
     user just sees "This interaction failed".
     """
 
-    # The message the controls sit under, once sent: ideally a bot-token handle (bot_token_handle),
-    # since the command's interaction webhook expires after 15 minutes.
+    # The message the controls sit under, once sent. A public one: a bot-token handle (bot_token_handle),
+    # since the command's interaction webhook expires after 15 minutes. A private one can only be
+    # edited through an interaction's token, so it's what Reply.send returned, then refresh_private().
     message = None
+
+    def refresh_private(self, interaction: nextcord.Interaction) -> None:
+        """After a click on a private message: edit it through this click's token from now on.
+
+        The timeout restarts with every click, so the newest token always outlives it.
+        Only for callbacks that answer by updating the message itself (edit_message or defer()).
+        """
+        self.message = nextcord.PartialInteractionMessage(interaction)
 
     async def on_timeout(self):
         if self.message:

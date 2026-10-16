@@ -566,11 +566,12 @@ class ServerCommands(commands.Cog):
                 logger.error("Failed to retrieve activity from Tautulli.")
                 return
             data = Tautulli.get_response_data(response, {})
-            stream_count = data.get("stream_count", 0)
-            wan_bandwidth_mbps = round(data.get("wan_bandwidth", 0) / 1000, 1)
+            # Total, not WAN, bandwidth: the same figure /plex status and /plex watchers show.
+            streams = plural(to_int(data.get("stream_count")), "stream")
+            mbps = to_int(data.get("total_bandwidth")) / 1000
 
             if self._display_streams:
-                activity_text = f"{stream_count} streams at {wan_bandwidth_mbps} mbps"
+                activity_text = f"{streams} at {mbps:.1f} Mbps"
                 activity_type = nextcord.ActivityType.playing
             else:
                 activity_text = "/plex help"
@@ -743,7 +744,8 @@ class ServerCommands(commands.Cog):
         )
         view = StreamDetailView(self, session_id, _session_label(session), watchers_view,
                                 can_stop=self.can_manage(interaction))
-        await Reply([embed], [a for a in (frame, poster) if a], view=view).send(interaction, ephemeral=True)
+        view.message = await Reply([embed], [a for a in (frame, poster) if a], view=view).send(
+            interaction, ephemeral=True)
 
     async def stop_stream(self, actor, session_id: str, message: str | None) -> tuple[bool, str]:
         """Stop a stream; returns (stopped, text for the manager who asked)."""

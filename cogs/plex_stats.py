@@ -359,7 +359,7 @@ def hot_summary(history, recent_items, *, days: int, name: Callable[[dict], str]
         entry["plays"] += 1
         stats = per_user[user]
         stats["plays"] += 1
-        stats["titles"].add(row.get("title"))
+        stats["titles"].add(key)  # the show, not the episode, as the totals line counts them
         stats["row"] = stats["row"] or row
         if row.get("media_type") == "episode" and row.get("grandparent_title"):
             episodes[user][row["grandparent_title"]] += 1
