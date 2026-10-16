@@ -36,7 +36,7 @@ from ui.embeds import (
     ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail, success,
 )
 from ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
-from ui.images import current_frame, mascot, plex_image, poster_key, poster_strip
+from ui.images import STRIP_POSTERS, current_frame, mascot, plex_image, poster_key, poster_strip
 from ui.theme import Colour
 
 # Configure logging for this module
@@ -721,10 +721,10 @@ class ServerCommands(commands.Cog):
             return reply
         posters = await asyncio.gather(*(
             plex_image(self.tautulli, poster_key(s), filename=f"poster-{i}.jpg", width=200, height=300)
-            for i, s in enumerate(sessions[:6])
+            for i, s in enumerate(sessions[:STRIP_POSTERS])
         ))
         strip = await asyncio.to_thread(
-            poster_strip, [p.data for p in posters if p], extra=max(0, len(sessions) - 6)
+            poster_strip, [p.data for p in posters if p], extra=max(0, len(sessions) - STRIP_POSTERS)
         )
         embed = stream_overview(
             sessions, bandwidth_kbps=to_int(activity.get("total_bandwidth")), strip=strip,

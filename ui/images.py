@@ -9,6 +9,7 @@ None when the image isn't available; callers simply leave that image out.
 import asyncio
 import io
 import logging
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -97,11 +98,15 @@ async def current_frame(tautulli, session: dict, *, filename: str = "frame.jpg")
     return await plex_image(tautulli, key, filename=filename, width=640, height=360)
 
 
+STRIP_POSTERS = 12  # two rows of six; Discord scales a third row's taller image down, shrinking every poster
+_ROW = 6
+
+
 def poster_strip(
     posters: Sequence[bytes], *, extra: int = 0, filename: str = "posters.png",
     height: int = 300, gap: int = 8,
 ) -> Optional[Attachment]:
-    """Posters side by side at a common height, plus a "+N" tile when more were left out."""
+    """Posters at a common height, in rows of at most six split evenly, plus a "+N" tile when more were left out."""
     tiles = []
     for data in posters:
         try:
@@ -113,24 +118,23 @@ def poster_strip(
         tiles.append(rgba.resize((width, height), Image.Resampling.LANCZOS))
     if not tiles:
         return None
+    if extra:
+        tile = Image.new("RGBA", (round(height * 2 / 3), height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(tile)
+        draw.rounded_rectangle((0, 0, tile.width - 1, height - 1), radius=16, fill=(32, 34, 37, 255))
+        draw.text((tile.width / 2, height / 2), f"+{extra}", font=ImageFont.load_default(size=height // 5),
+                  fill=(255, 255, 255, 255), anchor="mm")
+        tiles.append(tile)
 
-    extra_width = round(height * 2 / 3) if extra else 0
-    total_width = sum(tile.width for tile in tiles) + gap * (len(tiles) - 1)
-    if extra:
-        total_width += gap + extra_width
-    canvas = Image.new("RGBA", (total_width, height), (0, 0, 0, 0))
-    x = 0
-    for tile in tiles:
-        canvas.paste(tile, (x, 0))
-        x += tile.width + gap
-    if extra:
-        draw = ImageDraw.Draw(canvas)
-        draw.rounded_rectangle((x, 0, x + extra_width - 1, height - 1), radius=16, fill=(32, 34, 37, 255))
-        font = ImageFont.load_default(size=height // 5)
-        draw.text(
-            (x + extra_width / 2, height / 2), f"+{extra}",
-            font=font, fill=(255, 255, 255, 255), anchor="mm",
-        )
+    per_row = math.ceil(len(tiles) / math.ceil(len(tiles) / _ROW))  # 7 tiles -> 4 + 3, not 6 + 1
+    rows = [tiles[i:i + per_row] for i in range(0, len(tiles), per_row)]
+    width = max(sum(tile.width for tile in row) + gap * (len(row) - 1) for row in rows)
+    canvas = Image.new("RGBA", (width, len(rows) * (height + gap) - gap), (0, 0, 0, 0))
+    for r, row in enumerate(rows):
+        x = 0
+        for tile in row:
+            canvas.paste(tile, (x, r * (height + gap)))
+            x += tile.width + gap
 
     out = io.BytesIO()
     canvas.save(out, format="PNG")

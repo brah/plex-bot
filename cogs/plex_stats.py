@@ -20,7 +20,7 @@ from tautulli_wrapper import Tautulli
 from ui.cards import media_icon, recent_viewer_line, session_title
 from ui.embeds import Reply, bot_token_handle, card, empty_state, service_down
 from ui.format import join, plural, timestamp, to_int, truncate
-from ui.images import plex_image, poster_key, poster_strip
+from ui.images import STRIP_POSTERS, plex_image, poster_key, poster_strip
 from ui.theme import Colour, Limits, brand_colour
 from utilities import (
     library_totals,
@@ -34,7 +34,6 @@ _MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 _RANKED = 10
 _PODIUM = 3  # /plex top gives the top three a second line
 _TOP_DAYS = 7  # /plex top's default window, and the ranking that sets roles
-_STRIP = 6
 
 
 def rank_prefix(rank: int) -> str:
@@ -50,13 +49,13 @@ def _escaped(text, limit: int = 80) -> str:
 
 
 async def _poster_strip(tautulli, rows) -> Optional[object]:
-    """Posters for rows (distinct titles, at most six) side by side, or None."""
+    """A poster strip for rows (distinct titles, at most STRIP_POSTERS), or None."""
     keys = []
     for row in rows:
         key = poster_key(row)
         if key and key not in keys:
             keys.append(key)
-        if len(keys) == _STRIP:
+        if len(keys) == STRIP_POSTERS:
             break
     posters = await asyncio.gather(*(
         plex_image(tautulli, key, filename=f"poster-{i}.jpg", width=200, height=300) for i, key in enumerate(keys)
@@ -584,7 +583,7 @@ class PlexStats(commands.Cog):
         ignored = ignored_usernames()
         users = [row for row in stats["top_users"] if plex_username(row) not in ignored]
         strips = await asyncio.gather(*(
-            _poster_strip(self.tautulli, rows) for rows in (movies[:3] + shows[:3], movies, shows)
+            _poster_strip(self.tautulli, rows) for rows in (movies[:6] + shows[:6], movies, shows)
         ))
         view = StatsView({
             "Overview": (overview_card(stats, libraries, days=days, strip=strips[0]), strips[0]),
