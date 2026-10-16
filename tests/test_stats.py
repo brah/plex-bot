@@ -176,7 +176,8 @@ class TestHot:
         sections = dict(summary["sections"])
         assert sections["🔥 Trending"] == ["**Severance** · 2 people · 7 plays"]
         assert sections["🆕 New and watched"] == ["🎬 **Heat (1995)** · 1 play"]
-        assert sections["🏃 Most active"][0] == "🥇 **Alice** · 6 plays · 6 titles"
+        # Six episodes of one show is one title, as in the totals line.
+        assert sections["🏃 Most active"] == ["🥇 **Alice** · 6 plays · 1 title", "🥈 **Bob** · 2 plays · 2 titles"]
         assert sections["🍿 Binge watchers"] == ["**Alice** binged **Severance** (6 episodes)"]
         assert sections["🧭 First to check out"] == ["**Bob** tried **Heat**"]
         assert summary["leader"] == "TV leads: 7 episodes to 1 movie"

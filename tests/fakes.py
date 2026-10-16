@@ -210,6 +210,7 @@ class Recorder:
 
         async def send_message(self, content=None, **kwargs):
             recorder.calls.append(("send_message", dict(kwargs, content=content)))
+            return nextcord.PartialInteractionMessage(self._parent)  # as nextcord returns
 
         async def edit_message(self, **kwargs):
             recorder.calls.append(("edit_message", kwargs))

@@ -11,9 +11,6 @@ import aiohttp
 logger = logging.getLogger("plexbot.tautulli_wrapper")
 
 
-_RATING_KEY_REQUIRED = "rating_key is required; see Tautulli API Reference."
-
-
 class Tautulli:
     def __init__(self, api_key: str, tautulli_ip: str, use_https: bool = False) -> None:
         logger.info("Initializing Tautulli wrapper.")
@@ -150,49 +147,22 @@ class Tautulli:
 
     async def get_recently_added(self, count: int, media_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get all items that were recently added to Plex (media_type: movie, show, artist)."""
-        if count is None:
-            error_msg = "count is required; see Tautulli API Reference."
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
         params = {"count": count}
         if media_type:
             params["media_type"] = media_type
         return await self.api_call("get_recently_added", params)
 
-    async def get_item_user_stats(
-        self, rating_key: str, params: Dict[str, Any] = None
-    ) -> Optional[Dict[str, Any]]:
+    async def get_item_user_stats(self, rating_key: str) -> Optional[Dict[str, Any]]:
         """Get the user stats for the media item."""
-        if rating_key is None:
-            error_msg = _RATING_KEY_REQUIRED
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
-        if params is None:
-            params = {}
-        params["rating_key"] = rating_key
-        return await self.api_call("get_item_user_stats", params)
+        return await self.api_call("get_item_user_stats", {"rating_key": rating_key})
 
-    async def get_item_watch_time_stats(
-        self, rating_key: str, params: Dict[str, Any] = None
-    ) -> Optional[Dict[str, Any]]:
+    async def get_item_watch_time_stats(self, rating_key: str) -> Optional[Dict[str, Any]]:
         """Get the watch time stats for the media item."""
-        if rating_key is None:
-            error_msg = _RATING_KEY_REQUIRED
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
-        if params is None:
-            params = {}
-        params["rating_key"] = rating_key
-        return await self.api_call("get_item_watch_time_stats", params)
+        return await self.api_call("get_item_watch_time_stats", {"rating_key": rating_key})
 
     async def get_metadata(self, rating_key: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a media item."""
-        if rating_key is None:
-            error_msg = _RATING_KEY_REQUIRED
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
-        params = {"rating_key": rating_key}
-        return await self.api_call("get_metadata", params)
+        return await self.api_call("get_metadata", {"rating_key": rating_key})
 
     async def get_server_info(self) -> Optional[Dict[str, Any]]:
         """Get the PMS server information."""
@@ -210,31 +180,17 @@ class Tautulli:
         """Check whether a Plex Media Server update is available."""
         return await self.api_call("get_pms_update")
 
-    async def terminate_session(
-        self, session_key: int = None, session_id: str = None, message: str = None
-    ) -> int:
-        """Stop a streaming session."""
-        if session_id is None and session_key is None:
-            error_msg = "Either session_key or session_id is required."
-            logger.error(error_msg)
-            return 400
-        # Omit an absent message: aiohttp/yarl reject None query values outright.
-        params = {"message": message} if message else {}
-        if session_key is not None:
-            params["session_key"] = session_key
-        else:
-            params["session_id"] = session_id
+    async def terminate_session(self, session_id: str, message: Optional[str] = None) -> int:
+        """Stop a streaming session: 200 when Tautulli stopped it, else 400."""
+        params = {"session_id": session_id}
+        if message:  # omitted when absent: aiohttp/yarl reject None query values outright
+            params["message"] = message
         response = await self.api_call("terminate_session", params)
         return 200 if self.check_response(response) else 400
 
-    async def get_library_user_stats(self, section_id: str = None) -> Optional[Dict[str, Any]]:
+    async def get_library_user_stats(self, section_id: str) -> Optional[Dict[str, Any]]:
         """Get user stats for a library."""
-        if section_id is None:
-            error_msg = "Section ID is required."
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
-        params = {"section_id": section_id}
-        return await self.api_call("get_library_user_stats", params)
+        return await self.api_call("get_library_user_stats", {"section_id": section_id})
 
     async def get_libraries_table(self) -> Optional[Dict[str, Any]]:
         """Get the data on the Tautulli libraries table."""
@@ -245,34 +201,13 @@ class Tautulli:
         return await self.api_call("get_libraries")
 
     async def get_library_media_info(
-        self,
-        section_id=None,
-        rating_key=None,
-        media_info=0,
-        length=50,
-        include_metadata=0,
-        search=None,
-        start=0,
+        self, section_id, length: int = 50, search: Optional[str] = None, start: int = 0,
     ) -> Optional[Dict[str, Any]]:
-        """Get media information for a library or specific item."""
-        if section_id is None and rating_key is None:
-            error_msg = "Either section_id or rating_key are required."
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
-        params = {
-            "media_info": media_info,
-            "include_metadata": include_metadata,
-            "start": start,
-            "length": length,
-        }
-        if section_id is not None:
-            params["section_id"] = section_id
-        else:
-            params["rating_key"] = rating_key
+        """Get one page of a library's titles (total_file_size comes with it)."""
+        params = {"section_id": section_id, "start": start, "length": length}
         if search is not None:
             params["search"] = search
         return await self.api_call("get_library_media_info", params)
-
 
 class TMDB:
     """Work in progress: a TMDB client for richer metadata. It's created when tmdb.apikey is set, but

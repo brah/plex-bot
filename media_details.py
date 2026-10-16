@@ -26,16 +26,21 @@ def _all_time(rows) -> dict:
     return next((r for r in rows if to_int(r.get("query_days"), -1) == 0), rows[-1] if rows else {})
 
 
+def item_viewers(user_rows, ignored: set) -> list:
+    """Who has played an item (its Tautulli user stats rows), most plays first, ignored users left out."""
+    return sorted(
+        (row for row in user_rows or [] if to_int(row.get("total_plays")) and row.get("username") not in ignored),
+        key=lambda row: to_int(row.get("total_plays")), reverse=True,
+    )
+
+
 def watch_stats(user_rows, time_rows, display_name, ignored: set) -> str:
     """The card's watch line: plays and time, then who watched it most."""
     totals = _all_time(time_rows)
     plays, seconds = to_int(totals.get("total_plays")), to_int(totals.get("total_time"))
     if not plays:
         return "-# Nobody's watched this yet."
-    viewers = sorted(
-        (row for row in user_rows or [] if to_int(row.get("total_plays")) and row.get("username") not in ignored),
-        key=lambda row: to_int(row.get("total_plays")), reverse=True,
-    )
+    viewers = item_viewers(user_rows, ignored)
     names = [f"**{escape_markdown(display_name(row))}** ({to_int(row.get('total_plays'))})" for row in viewers[:4]]
     if len(viewers) > 4:
         names.append(plural(len(viewers) - 4, "other"))

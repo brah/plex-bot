@@ -131,6 +131,7 @@ class HelpCategorySelect(nextcord.ui.StringSelect):
         reply = help_overview(view.entries) if key == "overview" else help_category_page(view.entries, key)
         reply.view = view
         await interaction.response.edit_message(**reply.edit_payload())
+        view.refresh_private(interaction)
 
 
 class HelpView(LoggedView):
@@ -150,7 +151,7 @@ class UtilityCommands(commands.Cog):
         entries = visible_entries(collect_help_entries(self.bot), admin)
         reply = help_overview(entries)
         reply.view = HelpView(entries)
-        await reply.send(interaction, ephemeral=True)
+        reply.view.message = await reply.send(interaction, ephemeral=True)
 
 
 def setup(bot):

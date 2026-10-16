@@ -66,7 +66,10 @@ class Reply:
 
     async def send(self, interaction: nextcord.Interaction, *, ephemeral: bool = False,
                    replace_placeholder: bool = False):
-        """Send as the first response, or as a follow-up after a defer.
+        """Send as the first response, or as a follow-up after a defer; returns the sent message.
+
+        A first response comes back as a PartialInteractionMessage, edited through the interaction's
+        token (15 minutes), which is the only way to edit a private message.
 
         replace_placeholder: the command deferred publicly ("thinking…"), but this reply
         must be private. Discord makes the first follow-up inherit the placeholder's
@@ -79,8 +82,7 @@ class Reply:
         real content and then raised would lose that content with the placeholder.
         """
         if not interaction.response.is_done():
-            await interaction.response.send_message(ephemeral=ephemeral, **self._send_payload())
-            return None
+            return await interaction.response.send_message(ephemeral=ephemeral, **self._send_payload())
         if ephemeral and replace_placeholder:
             try:
                 await interaction.delete_original_message()
@@ -108,10 +110,11 @@ def bot_token_handle(interaction: nextcord.Interaction, message):
 
     A WebhookMessage edits through the interaction token, which expires after 15 minutes
     while the view can live on. A partial message from the channel doesn't expire. Falls back
-    to the original when the channel can't make one (voice channels, no channel).
+    to the original when the channel can't make one (voice channels, no channel) or the message has
+    no id (a first response's PartialInteractionMessage).
     """
     get_partial = getattr(interaction.channel, "get_partial_message", None)
-    if message is None or get_partial is None:
+    if getattr(message, "id", None) is None or get_partial is None:
         return message
     return get_partial(message.id)
 

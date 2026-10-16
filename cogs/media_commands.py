@@ -275,6 +275,7 @@ class CacheView(LoggedView):
         busy = cache_status(self.media_cache, "⏳ Refreshing… this can take a few minutes.")
         busy.view = self
         await interaction.response.edit_message(**busy.edit_payload())
+        self.refresh_private(interaction)
         await self.media_cache.refresh()
         logger.info(f"{interaction.user} refreshed the media cache")
         button.disabled = False
@@ -546,7 +547,7 @@ class MediaCommands(commands.Cog):
     async def cache(self, interaction: nextcord.Interaction):
         reply = cache_status(self.media_cache)
         reply.view = CacheView(self.media_cache)
-        await reply.send(interaction, ephemeral=True)
+        reply.view.message = await reply.send(interaction, ephemeral=True)
 
 
 def setup(bot):

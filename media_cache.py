@@ -241,11 +241,7 @@ class MediaCache:
         libraries = await self._get_libraries()
         logger.info(f"Starting to fetch media items from {len(libraries)} libraries.")
 
-        # Log libraries for debugging
-        for lib in libraries:
-            logger.info(f"Processing library: {lib['section_name']} (ID: {lib['section_id']}, Type: {lib['section_type']})")
-
-        # Process all libraries concurrently with limits
+        # Process all libraries concurrently with limits (each logs its own name as it starts)
         results = await asyncio.gather(*(self._process_library(lib, full) for lib in libraries),
                                        return_exceptions=True)
 
@@ -275,16 +271,8 @@ class MediaCache:
         if items_filtered > 0:
             logger.info(f"Filtered out {items_filtered} low-quality media items")
 
-        # Count items by media type for debugging
-        media_types_count = {}
-        for item in filtered_items:
-            media_type = item.get("media_type", "unknown")
-            if media_type not in media_types_count:
-                media_types_count[media_type] = 0
-            media_types_count[media_type] += 1
-        
-        logger.info(f"Media types count in fetched items: {media_types_count}")
-        logger.info(f"Fetched a total of {len(filtered_items)} quality media items.")
+        by_type = dict(Counter(item.get("media_type", "unknown") for item in filtered_items))
+        logger.info(f"Fetched a total of {len(filtered_items)} quality media items: {by_type}")
         return filtered_items
 
     def _filter_quality_items(self, items: List[Dict]) -> List[Dict]:
@@ -299,7 +287,7 @@ class MediaCache:
             # Skip items that are just "Unknown Title" with no useful metadata
             if (
                 item.get("title") == "Unknown Title"
-                and (not item.get("genres") or len(item.get("genres", [])) == 0)
+                and not item.get("genres")
                 and not item.get("year")
                 and not item.get("play_count")
                 and not item.get("summary")
@@ -308,9 +296,7 @@ class MediaCache:
                 continue
 
             # Skip items with "unknown" media type and no genres
-            if item.get("media_type") == "unknown" and (
-                not item.get("genres") or len(item.get("genres", [])) == 0
-            ):
+            if item.get("media_type") == "unknown" and not item.get("genres"):
                 continue
 
             # Keep all other items
