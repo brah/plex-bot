@@ -25,7 +25,7 @@ from tautulli_wrapper import Tautulli
 from ui.cards import media_icon, session_title
 from ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail
 from ui.format import file_size, join, plural, progress_bar, timestamp, to_int, truncate
-from ui.images import mascot, plex_image, poster_key, poster_strip
+from ui.images import STRIP_POSTERS, mascot, plex_image, poster_key, poster_strip
 from ui.theme import Colour, Limits, brand_colour
 from utilities import format_duration
 
@@ -50,7 +50,6 @@ def title_choices(items) -> dict:
 
 # --- /plex recent ----------------------------------------------------------------
 
-_STRIP_POSTERS = 6
 
 
 def recent_line(entry: dict) -> str:
@@ -517,10 +516,10 @@ class MediaCommands(commands.Cog):
             return
         posters = await asyncio.gather(*(
             plex_image(self.tautulli, poster_key(e), filename=f"poster-{i}.jpg", width=200, height=300)
-            for i, e in enumerate(entries[:_STRIP_POSTERS])
+            for i, e in enumerate(entries[:STRIP_POSTERS])
         ))
         strip = await asyncio.to_thread(
-            poster_strip, [p.data for p in posters if p], extra=max(0, len(entries) - _STRIP_POSTERS)
+            poster_strip, [p.data for p in posters if p], extra=max(0, len(entries) - STRIP_POSTERS)
         )
         view = RecentView(self, entries)
         reply = Reply([recent_overview(entries, strip=strip)], [strip] if strip else [], view=view)

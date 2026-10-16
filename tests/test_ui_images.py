@@ -114,9 +114,21 @@ class TestPosterStrip:
             assert im.size == (3 * 200 + 2 * 8, 300)
 
     def test_extra_count_adds_a_tile(self):
+        strip = poster_strip([png()] * 5, extra=4, gap=8)
+        with Image.open(io.BytesIO(strip.data)) as im:
+            assert im.size == (6 * 200 + 5 * 8, 300)
+            assert im.getpixel((5 * 208 + 100, 150))[:3] == (32, 34, 37)  # the "+4" tile, last
+
+    def test_wraps_into_two_even_rows(self):
+        for count, per_row in ((12, 6), (10, 5), (7, 4)):
+            strip = poster_strip([png()] * count, gap=8)
+            with Image.open(io.BytesIO(strip.data)) as im:
+                assert im.size == (per_row * 200 + (per_row - 1) * 8, 2 * 300 + 8), count
+        # The "+N" tile counts toward the rows: 6 posters and it make 4 + 3.
         strip = poster_strip([png()] * 6, extra=4, gap=8)
         with Image.open(io.BytesIO(strip.data)) as im:
-            assert im.size == (6 * 200 + 6 * 8 + 200, 300)
+            assert im.size == (4 * 200 + 3 * 8, 608)
+            assert im.getpixel((2 * 208 + 100, 308 + 150))[:3] == (32, 34, 37)  # end of the second row
 
     def test_invalid_images_skipped_and_none_when_empty(self):
         assert poster_strip([b"not an image"]) is None
