@@ -198,6 +198,11 @@ def main():
     parser.add_argument("--backup-dir", default="config_backups", help="Directory for backups")
     args = parser.parse_args()
 
+    # A config.json in the new format has nothing to migrate; "migrating" it would wipe the token and keys.
+    if "core" in load_legacy_json_config():
+        logger.info("config.json is already in the new format; nothing to migrate.")
+        return 0
+
     # Check if output file already exists
     output_file = Path(args.output)
     if output_file.exists() and not args.force:

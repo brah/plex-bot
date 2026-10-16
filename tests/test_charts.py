@@ -192,7 +192,7 @@ def test_chart_commands_registered_with_user_suggestions():
 
     async def run(bot, cog):
         paths = dict(command_paths(bot))
-        return paths, collect_help_entries(bot, "plex ")
+        return paths, collect_help_entries(bot)
 
     paths, entries = _run(run, FakeTautulli([]))
     for kind in ("hours", "days", "media", "months"):

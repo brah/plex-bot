@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -11,9 +12,47 @@ from typing import List, Dict, Any, Optional
 
 from nextcord.utils import escape_markdown
 
+from config import config
 from ui.format import to_int
 
 logger = logging.getLogger("plexbot.utilities")
+
+
+# --- secrets in logs -----------------------------------------------------------
+# aiohttp errors include the full request URL, and Tautulli/TMDB keys travel as query parameters.
+_SECRET_PARAM = re.compile(r"((?:apikey|api_key|token|password)=)[^&\s'\"]+", re.IGNORECASE)
+_REDACTED = "[REDACTED]"
+
+
+def redact(text: str, secrets) -> str:
+    """Replace configured secret values and secret-looking URL parameters."""
+    values = {str(s) for s in secrets if s not in (None, "")}
+    # Longest first, so a secret containing another is replaced whole.
+    for value in sorted(values, key=len, reverse=True):
+        text = text.replace(value, _REDACTED)
+    return _SECRET_PARAM.sub(rf"\g<1>{_REDACTED}", text)
+
+
+def config_secrets() -> list:
+    return [
+        config.get("core", "token"),
+        config.get("tautulli", "apikey"),
+        config.get("tmdb", "apikey"),
+        config.get("qbittorrent", "password"),
+    ]
+
+
+class RedactSecrets(logging.Filter):
+    """Scrubs secrets from every record before a handler writes it (console, plexbot.log, journald)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        secrets = config_secrets()
+        record.msg, record.args = redact(record.getMessage(), secrets), None
+        if record.exc_info or record.exc_text:
+            # Formatters reuse exc_text, so the traceback is redacted once for every handler.
+            text = record.exc_text or logging.Formatter().formatException(record.exc_info)
+            record.exc_text = redact(text, secrets)
+        return True
 
 
 # Bot configuration lives in the `config` package (config/__init__.py).
@@ -276,22 +315,26 @@ def format_duration(seconds: int) -> str:
     return " ".join(parts)
 
 
+# No git checkout is normal (the Docker image has neither git nor .git), so a failure is debug
+# noise, not an error; the startup log already shows the version as "unknown".
 def get_git_revision_short_hash() -> str:
     """Get the current git commit short hash."""
     try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("ascii").strip()
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode("ascii").strip()
     except Exception as e:
-        logger.error(f"Failed to get git revision: {e}")
+        logger.debug(f"Couldn't read the git revision: {e}")
         return "unknown"
 
 
 def get_git_revision_short_hash_latest() -> str:
     """Get the latest git commit short hash from origin."""
     try:
-        subprocess.check_call(["git", "fetch"])
-        return (
-            subprocess.check_output(["git", "rev-parse", "--short", "origin/HEAD"]).decode("ascii").strip()
-        )
+        subprocess.check_call(["git", "fetch"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "origin/HEAD"], stderr=subprocess.DEVNULL
+        ).decode("ascii").strip()
     except Exception as e:
-        logger.error(f"Failed to get latest git revision: {e}")
+        logger.debug(f"Couldn't read the latest git revision: {e}")
         return "unknown"

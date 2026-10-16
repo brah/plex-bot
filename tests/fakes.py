@@ -88,9 +88,6 @@ class FakeTautulli:
     def _ok(self, data):
         return {"response": {"result": "success", "data": data}} if self.reachable else None
 
-    def initialize(self):
-        pass
-
     async def get_activity(self):
         bandwidth = sum(int(s.get("bandwidth") or 0) for s in self.sessions)
         return self._ok({"sessions": self.sessions, "stream_count": len(self.sessions),
@@ -110,6 +107,8 @@ class FakeTautulli:
         return self._ok({"data": rows})
 
     get_history_rows = Tautulli.get_history_rows
+    get_library_media_rows = Tautulli.get_library_media_rows
+    _all_rows = Tautulli._all_rows
     server_id = Tautulli.server_id
     _pms_identifier = None
     check_response = staticmethod(Tautulli.check_response)
@@ -141,11 +140,11 @@ class FakeTautulli:
     async def get_libraries(self):
         return self._ok(self.libraries)
 
-    async def get_library_media_info(self, section_id=None, search=None, length=50, **kwargs):
+    async def get_library_media_info(self, section_id=None, search=None, length=50, start=0, **kwargs):
         rows = self.library_items.get(str(section_id), [])
         if search:
             rows = [r for r in rows if search.lower() in r.get("title", "").lower()]
-        return self._ok({"data": rows[:length]})
+        return self._ok({"data": rows[start:start + length]})
 
     # Stats data: home stats by stat_id, library tables and users.
     home_stats: dict = {}

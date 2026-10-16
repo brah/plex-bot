@@ -25,7 +25,7 @@ def _build_bot():
         help_command=None,
         default_guild_ids=[123],
     )
-    bot.shared_resources = {"tautulli": SimpleNamespace(initialize=lambda: None)}
+    bot.shared_resources = {"tautulli": SimpleNamespace()}
     install_slash_groups(bot)  # before the cogs, as in PlexBot.setup_hook
     cog = ServerCommands(bot)
     cog.status_task.cancel()

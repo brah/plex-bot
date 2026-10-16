@@ -1,15 +1,16 @@
 """Unit tests for the `plex logs` helpers (parsing, filtering, redaction, preview fitting)."""
 
+import io
 import logging
 from pathlib import Path
 
+from utilities import RedactSecrets, redact
 from cogs.server_commands import (
     _build_logs_reply,
     _filter_records,
     _find_log_path,
     _fit_tail,
     _record_level,
-    _redact,
     _split_records,
 )
 
@@ -72,22 +73,22 @@ class TestFilterRecords:
 class TestRedact:
     def test_configured_secrets(self):
         text = "token abc123secret and key KEY999"
-        assert _redact(text, ["abc123secret", "KEY999"]) == "token [REDACTED] and key [REDACTED]"
+        assert redact(text, ["abc123secret", "KEY999"]) == "token [REDACTED] and key [REDACTED]"
 
     def test_empty_and_missing_secrets_ignored(self):
-        assert _redact("nothing here", ["", None]) == "nothing here"
+        assert redact("nothing here", ["", None]) == "nothing here"
 
     def test_non_string_secret(self):
-        assert _redact("pin 123456", [123456]) == "pin [REDACTED]"
+        assert redact("pin 123456", [123456]) == "pin [REDACTED]"
 
     def test_query_params(self):
         text = "failed: 500, url='http://host:8181/api/v2?apikey=deadbeef&cmd=get_activity'"
-        assert _redact(text, []) == (
+        assert redact(text, []) == (
             "failed: 500, url='http://host:8181/api/v2?apikey=[REDACTED]&cmd=get_activity'"
         )
 
     def test_query_params_case_insensitive(self):
-        assert _redact("?API_KEY=abc&x=1", []) == "?API_KEY=[REDACTED]&x=1"
+        assert redact("?API_KEY=abc&x=1", []) == "?API_KEY=[REDACTED]&x=1"
 
 
 class TestFitTail:
@@ -160,3 +161,24 @@ class TestBuildLogsReply:
     def test_long_search_truncated_in_header(self):
         content, _ = _build_logs_reply(LOG_TEXT, None, "x" * 200)
         assert "x" * 60 not in content
+
+
+def test_every_logged_record_is_redacted_before_it_is_written():
+    """aiohttp errors carry the request URL, apikey included; no handler may write it."""
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.addFilter(RedactSecrets())
+    log = logging.getLogger("plexbot.test_redaction")
+    log.addHandler(handler)
+    try:
+        url = "http://tautulli:8181/api/v2?apikey=hunter2&cmd=get_activity"
+        log.error("API call failed: %s", url)
+        try:
+            raise RuntimeError(f"500, url='{url}'")
+        except RuntimeError:
+            log.exception("Request crashed")
+    finally:
+        log.removeHandler(handler)
+    written = stream.getvalue()
+    assert "hunter2" not in written
+    assert written.count("apikey=[REDACTED]") == 2

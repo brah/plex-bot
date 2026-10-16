@@ -7,9 +7,9 @@ services:
       # Container timezone (the bot also reads Tautulli's own TZ for display).
       TZ: ${TZ:-UTC}
     volumes:
-      # config.json is read at startup AND rewritten when a user persists a
-      # command default (e.g. `plex stats <days>`), so it is mounted read-write.
-      - ./config.json:/app/config.json
+      # config.json is only read (at startup), so it is mounted read-only.
+      # map.json is rewritten by /plexadmin link, unlink and ignore.
+      - ./config.json:/app/config.json:ro
       - ./map.json:/app/map.json
       # Media cache in a named volume: auto-created, app-owned, survives rebuilds.
       - plexbot-cache:/app/cache

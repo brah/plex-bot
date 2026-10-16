@@ -17,7 +17,9 @@ from nextcord.ext import commands, tasks
 from config import config
 from errors import LoggedModal, LoggedView
 from utilities import (
+    config_secrets,
     library_totals,
+    redact,
     get_git_revision_short_hash,
     get_git_revision_short_hash_latest,
     ignored_usernames,
@@ -52,10 +54,6 @@ _LEVELS = {
     "error": logging.ERROR,
     "critical": logging.CRITICAL,
 }
-# Secrets embedded in logged URLs — aiohttp errors include the full request URL,
-# and Tautulli/TMDB keys travel as query parameters.
-_SECRET_PARAM = re.compile(r"((?:apikey|api_key|token|password)=)[^&\s'\"]+", re.IGNORECASE)
-_REDACTED = "[REDACTED]"
 # Leaves room in Discord's 2000-char message limit for the header and code fences.
 _PREVIEW_BUDGET = 1800
 _HEADER_SEARCH_MAX = 60
@@ -91,15 +89,6 @@ def _filter_records(records: list[str], min_level: int | None, search: str | Non
     return matches
 
 
-def _redact(text: str, secrets) -> str:
-    """Replace configured secret values and secret-looking URL parameters."""
-    values = {str(s) for s in secrets if s not in (None, "")}
-    # Longest first, so a secret containing another is replaced whole.
-    for value in sorted(values, key=len, reverse=True):
-        text = text.replace(value, _REDACTED)
-    return _SECRET_PARAM.sub(rf"\g<1>{_REDACTED}", text)
-
-
 def _fit_tail(records: list[str], budget: int) -> list[str]:
     """Return the most recent records whose newline-joined length fits in budget.
 
@@ -131,12 +120,6 @@ def _find_log_path(log: logging.Logger | None = None) -> Path | None:
     return None
 
 
-def _format_file_size(size: int) -> str:
-    if size >= 1_000_000:
-        return f"{size / 1_000_000:.1f} MB"
-    return f"{max(size / 1000, 0.1):.1f} KB"
-
-
 def _build_logs_reply(text: str, min_level: int | None, search: str | None):
     """Build the /plexadmin logs message and attachments as (content, [(filename, bytes), ...])."""
     records = _split_records(text)
@@ -147,7 +130,7 @@ def _build_logs_reply(text: str, min_level: int | None, search: str | None):
 
     full_log = text.encode("utf-8")
     files = [("plexbot.log", full_log)]
-    attached = f"full log attached ({_format_file_size(len(full_log))})"
+    attached = f"full log attached ({file_size(len(full_log))})"
     if filtered:
         parts = []
         if min_level is not None:
@@ -619,9 +602,8 @@ class ServerCommands(commands.Cog):
 
     @status_task.before_loop  # type: ignore[attr-defined]
     async def _before_status_task(self):
-        """Wait for the gateway, initialize Tautulli, and log startup info before the first tick."""
+        """Wait for the gateway and log startup info before the first tick."""
         await self.bot.wait_until_ready()
-        self.tautulli.initialize()
         await self._log_startup_info()
 
     # --- /plex status ------------------------------------------------------
@@ -871,7 +853,8 @@ class ServerCommands(commands.Cog):
             await interaction.followup.send("No log file found.", ephemeral=True)
             return
         raw = await asyncio.to_thread(log_path.read_text, encoding="utf-8", errors="replace")
-        text = _redact(raw, self._log_secrets())
+        # Records are redacted as they're logged; this also covers lines written before that.
+        text = redact(raw, config_secrets())
         if not text.strip():
             await interaction.followup.send("The log file is empty.", ephemeral=True)
             return
@@ -882,15 +865,6 @@ class ServerCommands(commands.Cog):
             files=[nextcord.File(io.BytesIO(data), filename=name) for name, data in files],
             ephemeral=True,
         )
-
-    @staticmethod
-    def _log_secrets():
-        return [
-            config.get("core", "token"),
-            config.get("tautulli", "apikey"),
-            config.get("tmdb", "apikey"),
-            config.get("qbittorrent", "password"),
-        ]
 
 
 def setup(bot):

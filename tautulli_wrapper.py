@@ -36,10 +36,6 @@ class Tautulli:
             self.session = aiohttp.ClientSession()
             logger.info("aiohttp ClientSession initialized for Tautulli.")
 
-    def initialize(self) -> None:
-        """Initialize the aiohttp ClientSession."""
-        self._ensure_session()
-
     async def close(self) -> None:
         """Close the aiohttp ClientSession."""
         if self.session and not self.session.closed:
@@ -94,9 +90,19 @@ class Tautulli:
         get_history returns at most `length` rows, newest first, so one call over a long window on a
         busy server would silently lose the oldest plays. Bound the rows with params (e.g. "after").
         """
+        return await self._all_rows(lambda start: self.get_history({**params, "start": start, "length": page}), page)
+
+    async def get_library_media_rows(self, section_id, page: int = 1000) -> Optional[list]:
+        """Every title in a library, a page at a time; None when Tautulli didn't answer."""
+        return await self._all_rows(
+            lambda start: self.get_library_media_info(section_id=section_id, start=start, length=page), page
+        )
+
+    async def _all_rows(self, fetch, page: int) -> Optional[list]:
+        """Call fetch(start) for successive pages of a paged Tautulli table until one comes back short."""
         rows: list = []
         while True:
-            response = await self.get_history({**params, "start": len(rows), "length": page})
+            response = await fetch(len(rows))
             if not self.check_response(response):
                 return None
             batch = (self.get_response_data(response, {}) or {}).get("data") or []
@@ -249,6 +255,7 @@ class Tautulli:
         length=50,
         include_metadata=0,
         search=None,
+        start=0,
     ) -> Optional[Dict[str, Any]]:
         """Get media information for a library or specific item."""
         if section_id is None and rating_key is None:
@@ -258,6 +265,7 @@ class Tautulli:
         params = {
             "media_info": media_info,
             "include_metadata": include_metadata,
+            "start": start,
             "length": length,
         }
         if section_id is not None:
@@ -301,10 +309,6 @@ class TMDB:
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
             logger.info("aiohttp ClientSession initialized for TMDB.")
-
-    def initialize(self) -> None:
-        """Initialize the aiohttp ClientSession."""
-        self._ensure_session()
 
     async def close(self) -> None:
         """Close the aiohttp ClientSession."""

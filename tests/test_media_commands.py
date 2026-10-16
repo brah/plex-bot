@@ -284,7 +284,7 @@ def test_media_commands_registered_and_in_help():
     async def run(bot, cog):
         plex = next(c for c in bot._connection._application_commands if c.name == "plex")
         admin = next(c for c in bot._connection._application_commands if c.name == "plexadmin")
-        return set(plex.children), set(admin.children), collect_help_entries(bot, "plex ")
+        return set(plex.children), set(admin.children), collect_help_entries(bot)
 
     plex_children, admin_children, entries = _run(run)
     assert {"movie", "tv", "random", "recent", "downloading"} <= plex_children

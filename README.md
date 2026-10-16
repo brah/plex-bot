@@ -45,10 +45,10 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
    
    **Option 1: Migrate from an existing configuration**
    
-   If you have a previous version of PlexBot with `config.json` and `bot_config.py` files, use the migration script:
+   If you have an old PlexBot `config.json` (the flat format, with keys like `tautulli_ip`), convert it with the migration script. `--force` lets it replace the old file; a copy is saved to `config_backups/` first:
    
    ```bash
-   python migrate_config.py
+   python migrate_config.py --force
    ```
    
    **Option 2: Create a new configuration**
@@ -98,6 +98,8 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
 
    *`server_id` registers slash commands to your server so they appear instantly; if left blank they register globally, which can take up to an hour.*
 
+   *Set `server_id` unless you mean to share the bot. Commands registered globally work in every server the bot is in, and Discord makes new bots public by default, so anyone can add it from its profile. They could then run `/plex history`, `/plex watchers` and the rest on your Plex server. If you leave `server_id` blank, turn off **Public Bot** under **Bot** in the Discord Developer Portal.*
+
    *Bot admins can use `/plexadmin` and stop streams. They are the Discord administrators of `server_id`, plus every user or role listed in `admin_ids`. Being an administrator of any other server doesn't count, because anyone can invite a public bot to their own server: with `server_id` blank, only `admin_ids` grants admin, so set one of the two. Discord shows `/plexadmin` only to administrators; to let someone in `admin_ids` who isn't one see it, allow it for them under **Server Settings → Integrations**.*
 
    *`stream_manager_ids` lists Discord user or role IDs (besides bot admins) allowed to stop streams from `/plex watchers`. Set `show_recent_viewers` to `true` to have `/plex watchers` list the last three viewers and what they watched when nobody's streaming; it's off by default because that card is public. If slash commands never appear, re-invite the bot with the `applications.commands` scope.*
@@ -126,14 +128,14 @@ PlexBot now uses a unified configuration system that organizes settings into log
 
 #### Migrating to the New Configuration System
 
-If you're upgrading from an older version of PlexBot, follow these steps:
+Only needed if your `config.json` is still in the old flat format (keys like `tautulli_ip`). A config that already has a `core` section is left alone.
 
 1. **Backup your existing configuration**:
    The migration script will automatically create backups, but it's always good practice to make your own.
 
 2. **Run the migration script**:
    ```bash
-   python migrate_config.py
+   python migrate_config.py --force
    ```
 
 3. **Review the new configuration**:
@@ -343,9 +345,9 @@ Adjust default command behaviors:
    git pull origin main
    ```
 
-2. Run the migration script to update your configuration:
+2. Only if your `config.json` is still in the old flat format, convert it (see [Migrating](#migrating-to-the-new-configuration-system)):
    ```bash
-   python migrate_config.py
+   python migrate_config.py --force
    ```
 
 3. Install any new dependencies:
