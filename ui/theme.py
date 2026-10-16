@@ -33,8 +33,20 @@ _MEDIA_COLOURS = {
 
 
 def brand_colour() -> int:
-    """The neutral brand accent (config ui.plex_embed_color), for frames with no state."""
-    return config.get("ui", "plex_embed_color", Colour.MOVIE)
+    """The neutral brand accent (config ui.plex_embed_color), for frames with no state.
+
+    JSON has no hex numbers, so hex text ("#E5A00D", "0xE5A00D") is accepted too; anything else
+    falls back to Plex orange rather than breaking every embed.
+    """
+    value = config.get("ui", "plex_embed_color", Colour.MOVIE)
+    if isinstance(value, str):
+        try:
+            value = int(value.strip().lstrip("#"), 16)
+        except ValueError:
+            return Colour.MOVIE
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFFFFFF:
+        return Colour.MOVIE
+    return value
 
 
 def media_colour(media_type) -> int:

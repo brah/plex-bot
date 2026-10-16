@@ -2,8 +2,11 @@
 
 from datetime import datetime, timezone
 
+import nextcord
+
+from config import config
 from ui.format import file_size, format_ms, is_truthy, join, plural, progress_bar, timestamp, to_int, truncate
-from ui.theme import Colour, Limits, media_colour
+from ui.theme import Colour, Limits, brand_colour, media_colour
 
 
 class TestTruncate:
@@ -84,6 +87,15 @@ class TestTheme:
         assert media_colour("episode") == Colour.TV
         assert media_colour("track") == Colour.MUSIC
         assert media_colour(None) == Colour.NEUTRAL
+
+    def test_brand_colour_accepts_hex_text(self, monkeypatch):
+        values = {}
+        monkeypatch.setattr(config, "get", lambda section, key, default=None: values.get(key, default))
+        for setting, expected in [(0x112233, 0x112233), ("#E5A00D", 0xE5A00D), ("0x4A90D9", 0x4A90D9),
+                                  ("orange", Colour.MOVIE), ("#FFFFFFFF", Colour.MOVIE), (True, Colour.MOVIE)]:
+            values["plex_embed_color"] = setting
+            assert brand_colour() == expected, setting
+        nextcord.Embed(colour=brand_colour())  # an embed accepts it
 
     def test_limits(self):
         assert Limits.DESCRIPTION == 4096 and Limits.SELECT_OPTIONS == 25

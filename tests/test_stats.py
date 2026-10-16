@@ -9,6 +9,7 @@ from nextcord import ButtonStyle
 from nextcord.utils import escape_markdown
 
 import utilities
+from cogs import plex_stats
 from cogs.plex_stats import (
     _ALL_TIME, _STATS, PlexStats, hot_summary, library_line, media_card, overview_card, peak_line, popular_lines,
     tautulli_duration, top_card, tv_watchers, users_card,
@@ -239,6 +240,49 @@ class TestCommands:
 
         _run(run, tautulli)
         assert assigned == [["alice", "bob", "cara"]]
+
+    def test_top_roles_move_with_the_ranking(self, monkeypatch):
+        class Role:
+            def __init__(self, role_id, position):
+                self.id, self.position, self.members = role_id, position, []
+
+            def __gt__(self, other):
+                return self.position > other.position
+
+        class Member:
+            def __init__(self, member_id, *roles):
+                self.id, self.display_name, self.roles = member_id, f"member {member_id}", []
+                asyncio.run(self.add_roles(*roles))
+
+            async def add_roles(self, *roles, reason=None):
+                for role in roles:
+                    if role not in self.roles:
+                        self.roles.append(role)
+                        role.members.append(self)
+
+            async def remove_roles(self, *roles, reason=None):
+                for role in roles:
+                    if role in self.roles:
+                        self.roles.remove(role)
+                        role.members.remove(self)
+
+        first, second, third = Role(1, 5), Role(2, 4), Role(3, 3)
+        alice, bob, eve = Member(42, second), Member(43, first), Member(44, third)  # last week's ranking
+        guild = SimpleNamespace(get_role={1: first, 2: second, 3: third}.get,
+                                get_member={42: alice, 43: bob, 44: eve}.get,
+                                me=SimpleNamespace(top_role=Role(0, 10)))
+        role_ids = {"top_role_id": "1", "second_role_id": "2", "third_role_id": "3"}
+        monkeypatch.setattr(plex_stats.config, "get", lambda section, key, default=None: role_ids.get(key, default))
+        monkeypatch.setattr(utilities.UserMappings, "load_user_mappings", staticmethod(lambda: [
+            {"plex_username": "alice", "discord_id": "42"}, {"plex_username": "bob", "discord_id": "43"},
+            {"plex_username": "eve", "discord_id": "44"},
+        ]))
+
+        # This week: alice first, bob second, cara third but not linked to Discord; eve dropped out.
+        rows = [{"user": "alice"}, {"user": "bob"}, {"user": "cara"}]
+        asyncio.run(PlexStats._assign_top_roles(None, guild, rows))
+        assert alice.roles == [first] and bob.roles == [second] and eve.roles == []
+        assert third.members == []
 
     def test_top_tautulli_down(self, monkeypatch):
         recorder = Recorder(monkeypatch)

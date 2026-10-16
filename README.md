@@ -309,9 +309,11 @@ You can customize the appearance of bot messages by modifying the UI settings in
 
 ```json
 "ui": {
-    "plex_embed_color": 15040013
+    "plex_embed_color": "#E5A00D"
 }
 ```
+
+The colour can be hex text (`"#E5A00D"`) or the same value as a plain number (`15040013`).
 
 ### Chart Customization
 

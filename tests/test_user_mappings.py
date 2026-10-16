@@ -15,6 +15,7 @@ def map_file(tmp_path, monkeypatch):
     monkeypatch.setattr(UserMappings, "_mapping_file", str(path))
     monkeypatch.setattr(UserMappings, "_mappings", None)
     monkeypatch.setattr(UserMappings, "_unreadable", False)
+    monkeypatch.setattr(UserMappings, "_unreadable_version", None)
     return path
 
 
@@ -55,6 +56,16 @@ class TestStorage:
         with pytest.raises(MappingsUnavailable):
             UserMappings.link("bob", 22)
         assert map_file.read_text(encoding="utf-8").startswith('[{"plex_username": "alice"')
+
+    def test_a_fixed_file_is_read_again_without_a_restart(self, map_file):
+        map_file.write_text("{broken", encoding="utf-8")
+        assert UserMappings.is_unreadable()
+        map_file.write_text("[]", encoding="utf-8")
+        stat = map_file.stat()
+        os.utime(map_file, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))  # edited a moment later
+        assert not UserMappings.is_unreadable()
+        UserMappings.link("alice", 11)
+        assert _stored(map_file) == [{"plex_username": "alice", "discord_id": "11", "ignore": False}]
 
     def test_writes_in_place_with_a_backup_when_the_file_cannot_be_swapped(self, map_file, monkeypatch):
         map_file.write_text(json.dumps([{"plex_username": "alice", "discord_id": "11"}]), encoding="utf-8")

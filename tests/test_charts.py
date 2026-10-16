@@ -185,6 +185,17 @@ class TestCommands:
 
         assert _run(zone, tautulli) is not None
 
+    def test_tautulli_down_doesnt_pin_the_host_timezone(self):
+        tautulli = FakeTautulli([], reachable=False)
+        tautulli.settings = {"default_timezone": "Australia/Sydney"}
+
+        async def zones(bot, cog):
+            await cog.timezone()  # Tautulli is restarting
+            tautulli.reachable = True
+            return str(await cog.timezone())
+
+        assert _run(zones, tautulli) == "Australia/Sydney"
+
 
 def test_chart_commands_registered_with_user_suggestions():
     from cogs.utility_commands import collect_help_entries

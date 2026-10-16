@@ -29,6 +29,7 @@ def map_file(tmp_path, monkeypatch):
     monkeypatch.setattr(UserMappings, "_mapping_file", str(path))
     monkeypatch.setattr(UserMappings, "_mappings", None)
     monkeypatch.setattr(UserMappings, "_unreadable", False)
+    monkeypatch.setattr(UserMappings, "_unreadable_version", None)
     return path
 
 

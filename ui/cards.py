@@ -266,7 +266,7 @@ def _names(values, limit: int) -> list:
     return [str(value) for value in (values or [])[:limit] if value]
 
 
-def _genre(name) -> str:
+def genre_label(name) -> str:
     """Tautulli genres are "Action"; the media cache stores some lower-case."""
     name = str(name)
     return name[:1].upper() + name[1:]
@@ -282,7 +282,7 @@ def media_facts(item: dict) -> str:
         runtime(item.get("duration")) if media_type in ("movie", "episode") else None,
         plural(seasons, "season") if media_type == "show" and seasons else None,
         f"aired {aired}" if aired else None,
-        ", ".join(_genre(g) for g in (item.get("genres") or [])[:3]),
+        ", ".join(genre_label(g) for g in (item.get("genres") or [])[:3]),
         _star_rating(item),
     ])
 

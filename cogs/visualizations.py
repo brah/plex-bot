@@ -160,8 +160,9 @@ class Visualizations(commands.Cog):
         """The timezone Tautulli is set to (so 9pm means 9pm on the server), else the host's."""
         if self._zone is None:
             response = await self.tautulli.get_settings()
-            name = (Tautulli.get_response_data(response, {}) or {}).get("default_timezone") \
-                if Tautulli.check_response(response) else None
+            if not Tautulli.check_response(response):
+                return tzlocal.get_localzone()  # not remembered: ask Tautulli again next time
+            name = (Tautulli.get_response_data(response, {}) or {}).get("default_timezone")
             try:
                 self._zone = ZoneInfo(name) if name else tzlocal.get_localzone()
             except (ZoneInfoNotFoundError, ValueError):

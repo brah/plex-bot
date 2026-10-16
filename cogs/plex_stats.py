@@ -20,7 +20,7 @@ from tautulli_wrapper import Tautulli
 from ui.cards import media_icon, recent_viewer_line, session_title
 from ui.embeds import Reply, bot_token_handle, card, empty_state, service_down
 from ui.format import join, plural, timestamp, to_int, truncate
-from ui.images import STRIP_POSTERS, plex_image, poster_key, poster_strip
+from ui.images import fetch_poster_strip, poster_key
 from ui.theme import Colour, Limits, brand_colour
 from utilities import (
     library_totals,
@@ -50,17 +50,7 @@ def _escaped(text, limit: int = 80) -> str:
 
 async def _poster_strip(tautulli, rows) -> Optional[object]:
     """A poster strip for rows (distinct titles, at most STRIP_POSTERS), or None."""
-    keys = []
-    for row in rows:
-        key = poster_key(row)
-        if key and key not in keys:
-            keys.append(key)
-        if len(keys) == STRIP_POSTERS:
-            break
-    posters = await asyncio.gather(*(
-        plex_image(tautulli, key, filename=f"poster-{i}.jpg", width=200, height=300) for i, key in enumerate(keys)
-    ))
-    return await asyncio.to_thread(poster_strip, [p.data for p in posters if p])
+    return await fetch_poster_strip(tautulli, list(dict.fromkeys(key for key in map(poster_key, rows) if key)))
 
 
 # --- /plex top -------------------------------------------------------------------
@@ -297,7 +287,6 @@ class StatsView(LoggedView):
         super().__init__(timeout=timeout)
         self.pages = {label: Reply([embed], [strip] if strip else [], view=self)
                       for label, (embed, strip) in pages.items()}
-        self.message = None
         for label in pages:
             self.add_item(StatsPageButton(label))
 
@@ -306,14 +295,6 @@ class StatsView(LoggedView):
         for button in self.children:
             button.style = nextcord.ButtonStyle.primary if button.label == label else nextcord.ButtonStyle.secondary
         return self.pages[label]
-
-    async def on_timeout(self):
-        # Expired controls are removed; the page on show stays.
-        if self.message:
-            try:
-                await self.message.edit(view=None)
-            except nextcord.HTTPException:
-                pass
 
 
 # --- /plex shows -----------------------------------------------------------------

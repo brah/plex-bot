@@ -61,8 +61,8 @@ async def initialize_resources():
 
     # Test Tautulli connection
     test_response = await tautulli.get_server_info()
-    if test_response and test_response.get("response", {}).get("result") == "success":
-        server_name = test_response.get("response", {}).get("data", {}).get("pms_name", "Unknown")
+    if Tautulli.check_response(test_response):
+        server_name = Tautulli.get_response_data(test_response, {}).get("pms_name", "Unknown")
         logger.info(f"Tautulli connection established to server: {server_name}")
     else:
         logger.error("Tautulli connection test failed. Please check your API key and host settings.")
