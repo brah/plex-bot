@@ -178,7 +178,7 @@ def test_registered_in_help():
     from cogs.utility_commands import collect_help_entries
 
     async def run(bot, cog):
-        return collect_help_entries(bot, "plex ")
+        return collect_help_entries(bot)
 
     entries = {e.usage: e.category for e in _run(run, FakeTautulli([]))}
     assert entries["/plex recommend [member]"] == "library"

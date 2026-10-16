@@ -4,7 +4,6 @@ import asyncio
 from types import SimpleNamespace
 
 import nextcord
-from nextcord.ext import commands
 
 import cogs.utility_commands as help_module
 from cogs.utility_commands import (
@@ -16,94 +15,22 @@ from ui.images import Attachment
 ENTRIES = [
     HelpEntry("/plex watchers [stop] [message]", "See who's watching", "watching", "/plex watchers"),
     HelpEntry("/plex status", "Server health", "watching"),
-    HelpEntry("plex movie <movie_name>", "Look up a movie", "library"),
+    HelpEntry("/plex movie <title>", "Look up a movie", "library"),
     HelpEntry("/plexadmin logs [level] [search]", "Bot logs", "admin"),
 ]
 
 
-def _build_with_prefix_cog():
-    class Library(commands.Cog):
-        help_category = "library"
-
-        @commands.command()
-        async def movie(self, ctx, *, movie_name: str):
-            """Lookup a movie in your Plex library.
-
-            More detail that should not appear."""
-
-        @commands.command(hidden=True)
-        async def secret(self, ctx):
-            """Hidden."""
-
-        @commands.command()
-        @commands.has_permissions(administrator=True)
-        async def refresh(self, ctx):
-            """Refresh the cache."""
-
+def test_entries_come_from_slash_command_metadata():
     async def run():
         bot, _cog = build_bot(FakeTautulli([]))
-        bot.add_cog(Library())
         bot.add_cog(help_module.UtilityCommands(bot))
-        return collect_help_entries(bot, "plex ")
+        return collect_help_entries(bot)
 
-    return asyncio.run(run())
-
-
-def test_entries_come_from_slash_and_prefix_metadata():
-    entries = {e.usage: e for e in _build_with_prefix_cog()}
+    entries = {e.usage: e for e in asyncio.run(run())}
     assert entries["/plex watchers [stop] [message]"].category == "watching"
     assert entries["/plex watchers [stop] [message]"].description.startswith("See who's watching")
     assert entries["/plexadmin logs [level] [search]"].category == "admin"
-    movie = entries["plex movie <movie_name>"]
-    assert movie.category == "library" and movie.description == "Lookup a movie in your Plex library."
-    assert not any(usage.startswith("plex secret") for usage in entries)
     assert not any(usage.startswith("/plex help") for usage in entries)  # help doesn't list itself
-
-
-def test_admin_only_prefix_command_in_a_public_cog_is_admin():
-    entries = _build_with_prefix_cog()
-    refresh = next(e for e in entries if e.usage.startswith("plex refresh"))
-    assert refresh.category == "admin"
-    assert next(e for e in entries if e.usage.startswith("plex movie")).category == "library"
-    assert refresh not in visible_entries(entries, is_admin=False)
-    assert refresh in visible_entries(entries, is_admin=True)
-
-
-def test_group_subcommands_are_listed_instead_of_the_group():
-    class Charts(commands.Cog):
-        help_category = "charts"
-
-        @commands.group(invoke_without_command=True)
-        async def chart(self, ctx):
-            """Create various charts."""
-
-        @chart.command(name="hours")
-        async def chart_hours(self, ctx, *args):
-            """
-            Chart of the most-watched hours.
-
-            More detail that should not appear.
-            """
-
-        @chart.command(name="users")
-        @commands.has_permissions(administrator=True)
-        async def chart_users(self, ctx, *args):
-            """Chart of the most active users."""
-
-        @chart.command(name="secret", hidden=True)
-        async def chart_secret(self, ctx):
-            """Hidden."""
-
-    async def run():
-        bot, _cog = build_bot(FakeTautulli([]))
-        bot.add_cog(Charts())
-        return collect_help_entries(bot, "plex ")
-
-    entries = {e.usage: e for e in asyncio.run(run()) if e.usage.startswith("plex chart")}
-    assert sorted(entries) == ["plex chart hours [args...]", "plex chart users [args...]"]
-    hours = entries["plex chart hours [args...]"]
-    assert hours.category == "charts" and hours.description == "Chart of the most-watched hours."
-    assert entries["plex chart users [args...]"].category == "admin"  # checked per subcommand
 
 
 def test_admin_hidden_from_non_admins():

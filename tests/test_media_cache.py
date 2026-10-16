@@ -70,6 +70,40 @@ def test_a_failed_fetch_keeps_the_title_we_had(tmp_path):
     assert _titles(cache.media_items.values()) == ["Old two", "Refreshed"]
 
 
+def test_an_unreadable_library_keeps_its_titles_and_the_others_refresh(tmp_path):
+    tautulli = LibraryTautulli({"1": "Refreshed movie"})
+    tautulli.libraries.append({"section_id": 2, "section_name": "TV", "section_type": "show"})
+
+    async def media_info(section_id=None, **kwargs):
+        if str(section_id) == "2":
+            return None  # e.g. Tautulli timed out on the TV library
+        return await LibraryTautulli.get_library_media_info(tautulli, section_id=section_id, **kwargs)
+
+    tautulli.get_library_media_info = media_info
+    show = {**_item("9", "Cached show"), "media_type": "show", "section_id": "2"}
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Old movie"), show])
+    asyncio.run(cache.refresh())
+    assert _titles(cache.media_items.values()) == ["Cached show", "Refreshed movie"]
+
+
+def test_a_library_bigger_than_one_page_is_read_whole():
+    tautulli = LibraryTautulli({str(key): f"Movie {key}" for key in range(1, 6)})
+    rows = asyncio.run(tautulli.get_library_media_rows(1, page=2))
+    assert [row["rating_key"] for row in rows] == ["1", "2", "3", "4", "5"]
+
+
+def test_an_empty_cache_fills_in_the_background_at_startup(tmp_path):
+    cache = MediaCache(LibraryTautulli({"1": "First"}), cache_file_path=str(tmp_path / "cache.json"))
+
+    async def run():
+        await cache.initialize()
+        assert cache._refresh is not None and not cache._refresh.done()  # startup didn't wait
+        await cache._refresh
+
+    asyncio.run(run())
+    assert _titles(cache.media_items.values()) == ["First"]
+
+
 def test_disk_round_trip_keeps_items_and_freshness(tmp_path):
     cache = _stale_cache(LibraryTautulli({}), tmp_path, [_item("1", "Kept")])
     cache.last_updated = datetime(2026, 10, 1, 12, 0)

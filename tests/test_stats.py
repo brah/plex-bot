@@ -290,7 +290,7 @@ def test_stats_commands_registered_in_help():
     from cogs.utility_commands import collect_help_entries
 
     async def run(bot, cog):
-        return collect_help_entries(bot, "plex ")
+        return collect_help_entries(bot)
 
     entries = _run(run, FakeTautulli([]))
     stats = {e.usage for e in entries if e.category == "stats"}

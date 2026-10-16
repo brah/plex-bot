@@ -50,26 +50,12 @@ class MediaCache:
         # Load cache from disk
         await self.load_cache_from_disk()
 
-        # Always force an update if the cache is empty
-        if not self.media_items:
-            logger.info("Cache is empty, triggering initial population")
-            try:
-                # Fetch and process all media items
-                new_items = await self._fetch_all_media_items()
-
-                if new_items:
-                    # Update the cache with new items
-                    self.media_items = {str(item["rating_key"]): item for item in new_items}
-                    self.last_updated = datetime.now()
-
-                    await self._write_items_to_disk(list(self.media_items.values()))
-                    logger.info(f"Media cache initialized with {len(self.media_items)} items")
-                else:
-                    logger.warning("No media items found during initialization")
-            except Exception as e:
-                logger.error(f"Failed to initialize media cache: {e}")
-        else:
+        if self.media_items:
             logger.info(f"Media cache loaded with {len(self.media_items)} items")
+        else:
+            # A first fill reads the whole library (minutes on a big one): don't hold up the Discord login.
+            logger.info("Cache is empty, filling it in the background")
+            self._refresh = asyncio.create_task(self.update_cache())
 
     def is_cache_valid(self) -> bool:
         """Check if the cache is still valid based on the update interval and content."""
@@ -142,8 +128,6 @@ class MediaCache:
         genres: Optional[List[str]] = None,
         exclude_rating_keys: Optional[Set[str]] = None,
         limit: int = 100,
-        offset: int = 0,
-        sort_by: str = None,
         random_sort: bool = False,
     ) -> List[Dict]:
         """
@@ -154,8 +138,6 @@ class MediaCache:
             genres: Filter by genres (case-insensitive)
             exclude_rating_keys: Set of rating keys to exclude
             limit: Maximum number of items to return
-            offset: Number of items to skip
-            sort_by: Sort by this field
             random_sort: Whether to randomly shuffle results
 
         Returns:
@@ -182,16 +164,9 @@ class MediaCache:
             exclude_keys = {str(key) for key in exclude_rating_keys}
             items = [item for item in items if str(item.get("rating_key")) not in exclude_keys]
 
-        # Sort the results
         if random_sort:
             random.shuffle(items)
-        elif sort_by:
-            items.sort(key=lambda x: x.get(sort_by, ""), reverse=True)
-
-        # Apply pagination
-        paginated_items = items[offset : offset + limit]
-
-        return paginated_items
+        return items[:limit]
 
     async def load_cache_from_disk(self) -> None:
         """Load the media cache from disk."""
@@ -264,19 +239,27 @@ class MediaCache:
         for lib in libraries:
             logger.info(f"Processing library: {lib['section_name']} (ID: {lib['section_id']}, Type: {lib['section_type']})")
 
-        tasks = []
-        for library in libraries:
-            tasks.append(self._process_library(library))
-
         # Process all libraries concurrently with limits
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*(self._process_library(lib) for lib in libraries), return_exceptions=True)
 
-        # Flatten the results and filter out any exceptions
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error(f"Error processing library: {result}")
-            elif isinstance(result, list):
+        failed = set()
+        for library, result in zip(libraries, results):
+            if isinstance(result, list):
                 all_media_items.extend(result)
+            else:
+                failed.add(str(library["section_id"]))
+                logger.error(f"Library {library['section_name']} couldn't be read"
+                             + (f": {result}" if isinstance(result, Exception) else ""))
+        if failed and len(failed) == len(libraries):
+            return []  # nothing new at all: update_cache keeps the old cache and stays stale
+        if failed:
+            # Keep the titles we had for libraries that couldn't be read, rather than dropping them.
+            # Items cached before section_id was recorded count as belonging to a failed library.
+            fresh = {str(item["rating_key"]) for item in all_media_items}
+            kept = [item for key, item in self.media_items.items() if key not in fresh
+                    and (item.get("section_id") is None or str(item["section_id"]) in failed)]
+            logger.info(f"Kept {len(kept)} cached titles from {len(failed)} unreadable libraries")
+            all_media_items.extend(kept)
 
         # Filter out low-quality/empty entries before returning
         filtered_items = self._filter_quality_items(all_media_items)
@@ -328,26 +311,21 @@ class MediaCache:
 
         return filtered_items
 
-    async def _process_library(self, library: Dict) -> List[Dict]:
-        """Process a single library to extract media items."""
+    async def _process_library(self, library: Dict) -> Optional[List[Dict]]:
+        """A library's items with fresh metadata; None when its title list couldn't be read."""
         library_items = []
+        section_id = str(library["section_id"])
         try:
             logger.info(
                 f"Fetching media items for library: {library['section_name']} (ID: {library['section_id']})"
             )
 
-            # Fetch basic media info for this library
-            response = await self.tautulli.get_library_media_info(
-                section_id=library["section_id"],
-                length=10000,  # Maximum items to fetch
-                include_metadata=0,  # Don't include full metadata in this call
-            )
-
-            if not response or response.get("response", {}).get("result") != "success":
+            # Every title in the library, a page at a time (one call would cap big libraries).
+            media_items = await self.tautulli.get_library_media_rows(library["section_id"])
+            if media_items is None:
                 logger.error(f"Failed to fetch media info for library {library['section_id']}")
-                return library_items
+                return None
 
-            media_items = response.get("response", {}).get("data", {}).get("data", [])
             if not media_items:
                 logger.info(f"No media items found in library {library['section_name']}")
                 return library_items
@@ -375,7 +353,8 @@ class MediaCache:
                     # A failed fetch keeps the title we already had rather than dropping it.
                     item = result or self.media_items.get(str(key))
                     if item:
-                        library_items.append(item)
+                        # section_id lets a later refresh keep this library's titles if it can't be read.
+                        library_items.append({**item, "section_id": section_id})
 
                 # Longer pause between batches to avoid API rate limits
                 await asyncio.sleep(0.5)
@@ -386,8 +365,9 @@ class MediaCache:
             return library_items
 
         except Exception as e:
+            # A half-read library would drop the rest of its titles; treat it as unreadable instead.
             logger.error(f"Error processing library {library.get('section_name', 'unknown')}: {e}")
-            return library_items
+            return None
 
     @staticmethod
     def _types_for(media_type: Optional[str]) -> Set[str]:

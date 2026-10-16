@@ -8,7 +8,6 @@ from typing import Optional
 import nextcord
 from nextcord.ext import commands
 
-from config import config
 from errors import LoggedView
 from slash_commands import command_paths, is_admin, plex
 from ui.embeds import Reply, card, set_thumbnail
@@ -59,29 +58,11 @@ def _slash_usage(path: str, command) -> str:
     return " ".join(parts)
 
 
-def _requires_admin(command) -> bool:
-    # The bot only uses has_permissions(administrator=True), so any such check means admin-only.
-    return any(check.__qualname__.startswith("has_permissions.") for check in command.checks)
+def collect_help_entries(bot) -> list:
+    """Help text generated from the slash commands themselves, so it can't drift out of date.
 
-
-def _runnable_commands(commands_):
-    """Visible prefix commands, with a group replaced by its own subcommands.
-
-    cog.get_commands() returns only top-level commands, so a group such as `plex chart`
-    would otherwise show up as one line and hide hours, days, users, ... The group itself
-    is dropped: it is just the umbrella its subcommands are listed under.
+    Old prefix commands aren't listed: typing one gets pointed at its slash command (errors.ErrorHandler).
     """
-    for command in commands_:
-        if command.hidden:
-            continue
-        if isinstance(command, commands.Group):
-            yield from _runnable_commands(sorted(command.commands, key=lambda c: c.name))
-        else:
-            yield command
-
-
-def collect_help_entries(bot, prefix: str) -> list:
-    """Help text generated from the commands themselves, so it can't drift out of date."""
     entries = []
     for path, command in command_paths(bot):
         cog_category = getattr(getattr(command, "parent_cog", None), "help_category", None)
@@ -91,18 +72,6 @@ def collect_help_entries(bot, prefix: str) -> list:
         entries.append(
             HelpEntry(_slash_usage(path, command), command.description or "", category, EXAMPLES.get(path))
         )
-    for cog in bot.cogs.values():
-        category = getattr(cog, "help_category", None)
-        if category is None:
-            continue
-        for command in _runnable_commands(cog.get_commands()):
-            usage = f"{prefix}{command.qualified_name} {command.signature}".strip()
-            description = (command.help or "").strip().split("\n")[0]
-            entry_category = "admin" if _requires_admin(command) else category
-            entries.append(
-                HelpEntry(usage, description, entry_category,
-                          EXAMPLES.get(f"{prefix}{command.qualified_name}"))
-            )
     return entries
 
 
@@ -177,9 +146,8 @@ class UtilityCommands(commands.Cog):
 
     @plex.subcommand(name="help", description="Show what PlexBot can do")
     async def help(self, interaction: nextcord.Interaction):
-        prefix = config.get("core", "prefix", "plex ")
         admin = is_admin(interaction.user, interaction.guild_id)
-        entries = visible_entries(collect_help_entries(self.bot, prefix), admin)
+        entries = visible_entries(collect_help_entries(self.bot), admin)
         reply = help_overview(entries)
         reply.view = HelpView(entries)
         await reply.send(interaction, ephemeral=True)

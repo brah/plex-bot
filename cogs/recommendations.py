@@ -4,7 +4,6 @@
 
 import asyncio
 import logging
-import random
 from collections import Counter
 from typing import List
 
@@ -161,10 +160,9 @@ class Recommendations(commands.Cog):
         if not genres:
             return genres, []
         candidates = await self.media_cache.get_items(
-            genres=genres, exclude_rating_keys=keys, limit=50, random_sort=True,
+            genres=genres, exclude_rating_keys=keys, limit=_PICKS, random_sort=True,
         )
-        random.shuffle(candidates)
-        return genres, candidates[:_PICKS]
+        return genres, candidates
 
     async def _viewer_counts(self, picks: list) -> list:
         responses = await asyncio.gather(*(self.tautulli.get_item_user_stats(p["rating_key"]) for p in picks))
@@ -190,14 +188,14 @@ class Recommendations(commands.Cog):
                 interaction, ephemeral=True, replace_placeholder=True)
             return
 
-        response = await self.tautulli.get_history({
-            "user": mapping["plex_username"], "length": 10000, "order_column": "date", "order_dir": "desc",
+        # Every play, not just the latest page: anything left out could be recommended as unwatched.
+        history = await self.tautulli.get_history_rows({
+            "user": mapping["plex_username"], "order_column": "date", "order_dir": "desc",
         })
-        if not Tautulli.check_response(response):
+        if history is None:
             logger.error("Failed to retrieve watch history from Tautulli.")
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
-        history = (Tautulli.get_response_data(response, {}) or {}).get("data") or []
         if not history:
             await empty_state(f"**{name}** hasn't watched anything yet, so there's nothing to go on.").send(
                 interaction)

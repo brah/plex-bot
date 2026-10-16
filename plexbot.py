@@ -23,18 +23,22 @@ from slash_commands import SlashGroups, admin_check
 
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
+from utilities import RedactSecrets
 
 # Configure logging
+_log_handlers = [
+    logging.StreamHandler(),
+    # Capped so `plex logs` can always DM the full file within Discord's 10 MB
+    # upload limit (alongside a matches file that is at most as large).
+    RotatingFileHandler("plexbot.log", maxBytes=4_000_000, backupCount=3, encoding="utf-8"),
+]
+for _handler in _log_handlers:
+    _handler.addFilter(RedactSecrets())
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.StreamHandler(),
-        # Capped so `plex logs` can always DM the full file within Discord's 10 MB
-        # upload limit (alongside a matches file that is at most as large).
-        RotatingFileHandler("plexbot.log", maxBytes=4_000_000, backupCount=3, encoding="utf-8"),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger("plexbot")
 
@@ -51,8 +55,8 @@ async def initialize_resources():
     tautulli_ip = config.get("tautulli", "ip")
     tautulli_apikey = config.get("tautulli", "apikey")
     tautulli_https = config.get("tautulli", "use_https", False)
+    # Each client opens its shared HTTP session on its first request.
     tautulli = Tautulli(api_key=tautulli_apikey, tautulli_ip=tautulli_ip, use_https=tautulli_https)
-    tautulli.initialize()
     resources["tautulli"] = tautulli
 
     # Test Tautulli connection
@@ -67,9 +71,7 @@ async def initialize_resources():
     tmdb_api_key = config.get("tmdb", "apikey")
     if tmdb_api_key:
         logger.info("Initializing TMDB client...")
-        tmdb = TMDB(api_key=tmdb_api_key)
-        tmdb.initialize()
-        resources["tmdb"] = tmdb
+        resources["tmdb"] = TMDB(api_key=tmdb_api_key)
     else:
         resources["tmdb"] = None
         logger.info("No TMDB API key provided, TMDB features will be disabled.")
