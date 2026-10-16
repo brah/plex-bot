@@ -24,7 +24,7 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
 - A working **Tautulli** setup ([Tautulli GitHub](https://github.com/Tautulli/Tautulli))
 - **Discord Bot Token** ([Discord Developer Portal](https://discord.com/developers/applications))
 - Optional: **qBittorrent** for download tracking
-- Optional: **TMDB API Key** for enhanced metadata
+- Optional: **TMDB API Key**, for richer metadata (work in progress: no command uses it yet)
 
 ### Installation
 
@@ -75,6 +75,7 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
        },
        "discord": {
            "server_id": "<Your Discord Server ID>",
+           "admin_ids": [],
            "top_role_id": 123456789,
            "second_role_id": 123456789,
            "third_role_id": 123456789,
@@ -95,7 +96,11 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
 
    *Note: `top_role_id`, `second_role_id`, and `third_role_id` are role IDs which you've created to highlight the top 3 media watchers on your server.*
 
-   *`server_id` registers slash commands to your server so they appear instantly; if left blank they register globally, which can take up to an hour. `stream_manager_ids` lists Discord user or role IDs (besides admins) allowed to stop streams from `/plex watchers`. Set `show_recent_viewers` to `true` to have `/plex watchers` list the last three viewers and what they watched when nobody's streaming; it's off by default because that card is public. If slash commands never appear, re-invite the bot with the `applications.commands` scope.*
+   *`server_id` registers slash commands to your server so they appear instantly; if left blank they register globally, which can take up to an hour.*
+
+   *Bot admins can use `/plexadmin` and stop streams. They are the Discord administrators of `server_id`, plus every user or role listed in `admin_ids`. Being an administrator of any other server doesn't count, because anyone can invite a public bot to their own server: with `server_id` blank, only `admin_ids` grants admin, so set one of the two. Discord shows `/plexadmin` only to administrators; to let someone in `admin_ids` who isn't one see it, allow it for them under **Server Settings → Integrations**.*
+
+   *`stream_manager_ids` lists Discord user or role IDs (besides bot admins) allowed to stop streams from `/plex watchers`. Set `show_recent_viewers` to `true` to have `/plex watchers` list the last three viewers and what they watched when nobody's streaming; it's off by default because that card is public. If slash commands never appear, re-invite the bot with the `applications.commands` scope.*
 
 4. Run the bot:
 
@@ -107,7 +112,7 @@ Being a hobby project, don't be surprised by the use of AI models in commits —
 
 PlexBot now uses a unified configuration system that organizes settings into logical sections:
 
-- **core**: Basic bot settings (token, prefix)
+- **core**: Basic bot settings (token, prefix, log level)
 - **tautulli**: Tautulli API connection settings
 - **discord**: Discord server and role settings
 - **qbittorrent**: qBittorrent connection settings
@@ -117,9 +122,7 @@ PlexBot now uses a unified configuration system that organizes settings into log
 - **defaults**: Default values for commands
 - **charts**: Chart visualization settings
 - **commands**: Command-specific settings
-- **api**: API request settings
-- **media_types**: Media type mappings
-- **colors**: Visualization color schemes
+- **colors**: Chart colors
 
 #### Migrating to the New Configuration System
 
@@ -215,7 +218,7 @@ detach (`Ctrl+A D` / `Ctrl+B D`).
 
 ## Commands
 
-Every command is a slash command: type `/plex` in Discord to see them all. Admin-only commands live under `/plexadmin`, which only admins can see. Typing an old `plex ` command replies with its new name.
+Every command is a slash command: type `/plex` in Discord to see them all. Admin-only commands live under `/plexadmin`, for bot admins (see `admin_ids` above). Typing an old `plex ` command replies with its new name.
 
 | Command | Description |
 |---------|-------------|
@@ -274,7 +277,6 @@ Admins can also run `/plexadmin logs` in Discord: the bot replies privately with
 - **errors/**: Error handling system
 - **cogs/**: Command modules
   - **media_commands.py**: Media-related commands
-  - **plex_data.py**: Data collection and processing
   - **plex_stats.py**: Statistics commands
   - **recommendations.py**: Recommendation system
   - **server_commands.py**: Server management
@@ -294,7 +296,6 @@ Admins can also run `/plexadmin logs` in Discord: the bot replies privately with
 The bot includes a robust error handling system that provides:
 - Consistent error messages to users
 - Detailed logging for troubleshooting
-- Custom exceptions for specific error cases
 
 If you experience issues, check the console output or log file for detailed error information.
 
@@ -306,8 +307,7 @@ You can customize the appearance of bot messages by modifying the UI settings in
 
 ```json
 "ui": {
-    "plex_embed_color": 15040013,
-    "plex_image": "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png"
+    "plex_embed_color": 15040013
 }
 ```
 
@@ -330,7 +330,6 @@ Adjust default command behaviors:
 ```json
 "defaults": {
     "recent_count": 10,
-    "stats_duration": 7,
     "time_range": 30
 }
 ```

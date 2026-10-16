@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import nextcord
 from PIL import Image
 
+from tautulli_wrapper import Tautulli
+
 MOVIE_PLAYING = {
     "session_id": "abc", "session_key": "1", "media_type": "movie", "state": "playing",
     "friendly_name": "Alice", "username": "alice", "user_thumb": "https://plex.tv/users/1/avatar",
@@ -102,7 +104,16 @@ class FakeTautulli:
         self.history_calls.append(params)
         if not self.history_reachable:
             return None
-        return self._ok({"data": self.history})
+        rows = self.history
+        if params and "start" in params:  # a paged request (Tautulli.get_history_rows)
+            rows = rows[params["start"]:params["start"] + params["length"]]
+        return self._ok({"data": rows})
+
+    get_history_rows = Tautulli.get_history_rows
+    server_id = Tautulli.server_id
+    _pms_identifier = None
+    check_response = staticmethod(Tautulli.check_response)
+    get_response_data = staticmethod(Tautulli.get_response_data)
 
     async def terminate_session(self, session_key=None, session_id=None, message=None):
         self.terminated.append((session_id, message))
@@ -174,12 +185,11 @@ class FakeTautulli:
 
 def patch_images(monkeypatch):
     """Make every Plex image fetch return a tiny valid PNG instead of hitting the network."""
-    import ui.images
 
-    async def fake_fetch(*args, **kwargs):
-        return io.BytesIO(_png())
+    async def fake_image(self, key, width=300, height=450, fallback=None):
+        return _png() if key else None
 
-    monkeypatch.setattr(ui.images, "fetch_plex_image", fake_fetch)
+    monkeypatch.setattr(FakeTautulli, "get_image", fake_image, raising=False)
 
 
 class FakeMessage:

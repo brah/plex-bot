@@ -4,9 +4,8 @@
 # Discord
 nextcord==3.2.0
 
-# HTTP / async I/O
+# HTTP
 aiohttp==3.14.5
-aiofiles==25.1.0
 
 # External service clients
 qbittorrent-api==2026.10.0

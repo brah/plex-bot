@@ -9,7 +9,6 @@ import aiohttp
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.tautulli_wrapper")
-logger.setLevel(logging.INFO)
 
 
 _RATING_KEY_REQUIRED = "rating_key is required; see Tautulli API Reference."
@@ -25,6 +24,7 @@ class Tautulli:
         self.tautulli_api_url = f"{self.protocol}://{self.tautulli_ip}/api/v2"
         self.session: Optional[aiohttp.ClientSession] = None
         self.request_timeout = 30
+        self._pms_identifier: Optional[str] = None  # cached by server_id()
         if not use_https:
             logger.warning("Tautulli connection using HTTP — API key will be sent in plaintext. "
                            "Set 'use_https: true' in tautulli config for encrypted connections.")
@@ -88,6 +88,48 @@ class Tautulli:
         """Get the Tautulli history."""
         return await self.api_call("get_history", params)
 
+    async def get_history_rows(self, params: Dict[str, Any], page: int = 1000) -> Optional[list]:
+        """Every history row matching params, a page at a time; None when Tautulli didn't answer.
+
+        get_history returns at most `length` rows, newest first, so one call over a long window on a
+        busy server would silently lose the oldest plays. Bound the rows with params (e.g. "after").
+        """
+        rows: list = []
+        while True:
+            response = await self.get_history({**params, "start": len(rows), "length": page})
+            if not self.check_response(response):
+                return None
+            batch = (self.get_response_data(response, {}) or {}).get("data") or []
+            rows.extend(batch)
+            if len(batch) < page:
+                return rows
+
+    async def get_image(
+        self, key: Optional[str], width: int = 300, height: int = 450, fallback: Optional[str] = None
+    ) -> Optional[bytes]:
+        """A Plex image (poster, art, preview frame) through Tautulli's image proxy, or None.
+
+        fallback names the stock image Tautulli substitutes when the real one is missing
+        (e.g. "poster"); without it a missing image is None, never a placeholder.
+        """
+        if not key or not key.strip():
+            return None
+        self._ensure_session()
+        params = {"cmd": "pms_image_proxy", "apikey": self.api_key, "img": key.strip(),
+                  "width": width, "height": height}
+        if fallback:
+            params["fallback"] = fallback
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with self.session.get(self.tautulli_api_url, params=params, timeout=timeout) as response:
+                if response.status == 200 and "image" in (response.content_type or ""):
+                    return await response.read()
+                logger.warning(f"Failed to fetch image: status={response.status}, "
+                               f"content_type={response.content_type}")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error(f"Error fetching image {key}: {e}")
+        return None
+
     async def get_settings(self) -> Optional[Dict[str, Any]]:
         """Get Tautulli's settings (default_timezone, ...)."""
         return await self.api_call("get_settings")
@@ -110,15 +152,6 @@ class Tautulli:
         if media_type:
             params["media_type"] = media_type
         return await self.api_call("get_recently_added", params)
-
-    async def get_collections_table(self, section_id: str) -> Optional[Dict[str, Any]]:
-        """Get the data on the Tautulli collections tables."""
-        if section_id is None:
-            error_msg = "section_id is required; see Tautulli API Reference."
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
-        params = {"section_id": section_id}
-        return await self.api_call("get_collections_table", params)
 
     async def get_item_user_stats(
         self, rating_key: str, params: Dict[str, Any] = None
@@ -158,6 +191,14 @@ class Tautulli:
     async def get_server_info(self) -> Optional[Dict[str, Any]]:
         """Get the PMS server information."""
         return await self.api_call("get_server_info")
+
+    async def server_id(self) -> Optional[str]:
+        """The Plex server's machine identifier, for app.plex.tv links (cached once known)."""
+        if self._pms_identifier is None:
+            response = await self.get_server_info()
+            if self.check_response(response):
+                self._pms_identifier = self.get_response_data(response, {}).get("pms_identifier") or ""
+        return self._pms_identifier or None
 
     async def get_pms_update(self) -> Optional[Dict[str, Any]]:
         """Check whether a Plex Media Server update is available."""
@@ -199,15 +240,6 @@ class Tautulli:
     async def get_libraries(self) -> Optional[Dict[str, Any]]:
         """Get a list of all the libraries."""
         return await self.api_call("get_libraries")
-
-    async def get_library(self, section_id) -> Optional[Dict[str, Any]]:
-        """Get information about a specific library."""
-        if section_id is None:
-            error_msg = "section_id is required."
-            logger.error(error_msg)
-            return {"response": {"result": "error", "message": error_msg}}
-        params = {"section_id": section_id}
-        return await self.api_call("get_library", params)
 
     async def get_library_media_info(
         self,
@@ -254,6 +286,9 @@ class Tautulli:
 
 
 class TMDB:
+    """Work in progress: a TMDB client for richer metadata. It's created when tmdb.apikey is set, but
+    no command uses it yet."""
+
     def __init__(self, api_key: str) -> None:
         logger.info("Initializing TMDB wrapper.")
         self.api_key = api_key

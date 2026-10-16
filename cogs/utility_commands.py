@@ -10,14 +10,13 @@ from nextcord.ext import commands
 
 from config import config
 from errors import LoggedView
-from slash_commands import command_paths, plex
+from slash_commands import command_paths, is_admin, plex
 from ui.embeds import Reply, card, set_thumbnail
 from ui.format import plural, truncate
 from ui.images import mascot
 from ui.theme import Limits, brand_colour
 
 logger = logging.getLogger("plexbot.utility_commands")
-logger.setLevel(logging.INFO)
 
 # (key, emoji, name, summary). Cogs opt in with a `help_category` class attribute.
 CATEGORIES = [
@@ -178,10 +177,9 @@ class UtilityCommands(commands.Cog):
 
     @plex.subcommand(name="help", description="Show what PlexBot can do")
     async def help(self, interaction: nextcord.Interaction):
-        permissions = getattr(interaction.user, "guild_permissions", None)
-        is_admin = bool(permissions and permissions.administrator)
         prefix = config.get("core", "prefix", "plex ")
-        entries = visible_entries(collect_help_entries(self.bot, prefix), is_admin)
+        admin = is_admin(interaction.user, interaction.guild_id)
+        entries = visible_entries(collect_help_entries(self.bot, prefix), admin)
         reply = help_overview(entries)
         reply.view = HelpView(entries)
         await reply.send(interaction, ephemeral=True)

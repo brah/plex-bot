@@ -144,7 +144,7 @@ def test_help_command_without_guild_permissions_hides_admin(monkeypatch):
         bot, _cog = build_bot(FakeTautulli([]))
         utility = help_module.UtilityCommands(bot)
         bot.add_cog(utility)
-        interaction = SimpleNamespace(user=SimpleNamespace(id=1), response=Response())
+        interaction = SimpleNamespace(user=SimpleNamespace(id=1), guild_id=123, response=Response())
         await help_module.UtilityCommands.help.callback(utility, interaction)
 
     asyncio.run(run())
@@ -191,7 +191,10 @@ def test_choosing_overview_returns_to_the_overview_with_its_mascot(monkeypatch):
 
 
 def test_admins_get_the_admin_category(monkeypatch):
+    from config import config
+
     monkeypatch.setattr(help_module, "mascot", lambda slot: None)
+    monkeypatch.setattr(config, "_user_config", {"discord": {"server_id": "123"}})  # admin of this server
     sent = {}
 
     class Response:
@@ -206,7 +209,7 @@ def test_admins_get_the_admin_category(monkeypatch):
         utility = help_module.UtilityCommands(bot)
         bot.add_cog(utility)
         user = SimpleNamespace(id=1, guild_permissions=SimpleNamespace(administrator=True))
-        interaction = SimpleNamespace(user=user, response=Response())
+        interaction = SimpleNamespace(user=user, guild_id=123, response=Response())
         await help_module.UtilityCommands.help.callback(utility, interaction)
 
     asyncio.run(run())

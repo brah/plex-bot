@@ -9,11 +9,9 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
-import aiofiles
 
 # Configure logging
 logger = logging.getLogger("plexbot.media_cache")
-logger.setLevel(logging.INFO)
 
 
 class MediaCache:
@@ -42,6 +40,7 @@ class MediaCache:
         self.last_updated: Optional[datetime] = None
         self.cache_lock = asyncio.Lock()
         self.semaphore = asyncio.Semaphore(10)  # Limit concurrent API requests
+        self._refresh: Optional[asyncio.Task] = None  # a background update_cache, while it runs
 
     async def initialize(self) -> None:
         """Initialize the cache by loading from disk and updating if needed."""
@@ -63,8 +62,7 @@ class MediaCache:
                     self.media_items = {str(item["rating_key"]): item for item in new_items}
                     self.last_updated = datetime.now()
 
-                    # Save the updated cache to disk
-                    await self.save_cache_to_disk()
+                    await self._write_items_to_disk(list(self.media_items.values()))
                     logger.info(f"Media cache initialized with {len(self.media_items)} items")
                 else:
                     logger.warning("No media items found during initialization")
@@ -86,9 +84,26 @@ class MediaCache:
         return elapsed < self.update_interval
 
     async def ensure_cache_valid(self) -> None:
-        """Check if cache needs updating and update if necessary."""
-        if not self.is_cache_valid():
+        """Refresh a stale cache. Callers only wait when there's nothing to serve yet.
+
+        A full refresh asks Tautulli about every title, which takes minutes on a big library, so a
+        stale cache keeps serving its items while the refresh runs in the background.
+        """
+        if self.is_cache_valid():
+            return
+        if not self.media_items:
             await self.update_cache()
+        elif self._refresh is None or self._refresh.done():
+            self._refresh = asyncio.create_task(self.update_cache())
+
+    async def close(self) -> None:
+        """Stop a background refresh, so it doesn't outlive the Tautulli session it uses."""
+        if self._refresh is not None and not self._refresh.done():
+            self._refresh.cancel()
+            try:
+                await self._refresh
+            except asyncio.CancelledError:
+                pass
 
     async def update_cache(self) -> None:
         """Update the media cache with fresh data from Tautulli."""
@@ -113,9 +128,6 @@ class MediaCache:
                     self.media_items = {str(item["rating_key"]): item for item in new_items}
                     self.last_updated = datetime.now()
 
-                    # We already hold cache_lock here, so snapshot and write directly.
-                    # Calling save_cache_to_disk() would re-acquire the same non-reentrant
-                    # asyncio.Lock from this task and deadlock.
                     items_snapshot = list(self.media_items.values())
                     await self._write_items_to_disk(items_snapshot)
                     logger.info(f"Media cache updated with {len(self.media_items)} items")
@@ -123,19 +135,6 @@ class MediaCache:
                     logger.warning("No media items found during update")
             except Exception as e:
                 logger.error(f"Failed to update media cache: {e}")
-
-    async def get_item(self, rating_key: str) -> Optional[Dict]:
-        """
-        Get a specific media item by its rating key.
-
-        Args:
-            rating_key: The rating key of the media item
-
-        Returns:
-            The media item dictionary or None if not found
-        """
-        await self.ensure_cache_valid()
-        return self.media_items.get(str(rating_key))
 
     async def get_items(
         self,
@@ -167,18 +166,9 @@ class MediaCache:
         # Create a copy of all items as a list
         items = list(self.media_items.values())
 
-        # Apply media type filter
-        if media_type:
-            if media_type.lower() == "tv":
-                valid_media_types = ["show", "episode"]
-            elif media_type.lower() == "movie":
-                valid_media_types = ["movie"]
-            else:
-                valid_media_types = [media_type.lower()]
-
-            items = [
-                item for item in items if item.get("media_type", "unknown").lower() in valid_media_types
-            ]
+        types = self._types_for(media_type)
+        if types:
+            items = [item for item in items if item.get("media_type", "unknown").lower() in types]
 
         # Apply genre filter
         if genres:
@@ -203,79 +193,6 @@ class MediaCache:
 
         return paginated_items
 
-    async def search(self, query: str, limit: int = 10, include_partial_matches: bool = True) -> List[Dict]:
-        """
-        Search for media items by title with improved matching.
-
-        Args:
-            query: The search query
-            limit: Maximum number of results to return
-            include_partial_matches: If True, includes partial matches in results
-
-        Returns:
-            List of media items matching the search query
-        """
-        if not query:
-            logger.warning("Empty search query provided")
-            return []
-        
-        query = query.lower()
-        logger.debug(f"Searching for '{query}' in media cache")
-        await self.ensure_cache_valid()
-
-        # Early check if cache is empty
-        if not self.media_items:
-            logger.warning("MediaCache is empty during search")
-            return []
-
-        # Count total items before search for debugging
-        total_items = len(self.media_items)
-        logger.debug(f"Searching through {total_items} total items in media cache")
-        
-        # Log some sample titles from the cache to verify content
-        sample_titles = [item.get("title", "Unknown") 
-                        for i, item in enumerate(list(self.media_items.values())[:5])]
-        logger.debug(f"Sample titles in cache: {sample_titles}")
-
-        # First pass: exact match on title
-        exact_matches = []
-        partial_matches = []
-        
-        for rating_key, item in self.media_items.items():
-            title = item.get("title", "").lower()
-            media_type = item.get("media_type", "unknown").lower()
-            
-            # Skip items without a title
-            if not title:
-                continue
-                
-            # Check for exact match
-            if query == title:
-                logger.debug(f"Found exact match: {title} ({media_type}, key: {rating_key})")
-                exact_matches.append(item)
-            # Check for partial match if enabled
-            elif include_partial_matches and query in title:
-                logger.debug(f"Found partial match: {title} ({media_type}, key: {rating_key})")
-                partial_matches.append(item)
-                
-            # Break if we have enough results
-            if len(exact_matches) + len(partial_matches) >= limit:
-                break
-        
-        # Combine results, prioritizing exact matches
-        matching_items = exact_matches + partial_matches
-        matching_items = matching_items[:limit]
-        
-        logger.info(f"Search for '{query}' found {len(matching_items)} results "
-                    f"({len(exact_matches)} exact, {len(partial_matches)} partial)")
-        
-        # Log all found items for debugging
-        for idx, item in enumerate(matching_items):
-            logger.debug(f"Result {idx+1}: {item.get('title')} "
-                        f"({item.get('media_type')}, key: {item.get('rating_key')})")
-        
-        return matching_items
-
     async def load_cache_from_disk(self) -> None:
         """Load the media cache from disk."""
         if not self.cache_file_path.exists():
@@ -284,31 +201,19 @@ class MediaCache:
             return
 
         try:
-            async with self.cache_lock:
-                async with aiofiles.open(self.cache_file_path, "r", encoding="utf-8") as f:
-                    contents = await f.read()
-                data = json.loads(contents)
-
-                # Support both the current wrapped format ({"updated_at", "items"})
-                # and the legacy bare-list format. Restoring the real timestamp is
-                # what lets cache freshness (update_interval) survive a restart.
-                if isinstance(data, dict):
-                    items = data.get("items", [])
-                    self.last_updated = self._parse_timestamp(data.get("updated_at"))
-                else:
-                    items = data
-                    # Legacy file with no embedded timestamp: fall back to its mtime.
-                    self.last_updated = datetime.fromtimestamp(self.cache_file_path.stat().st_mtime)
-
-                # Convert the list to a dictionary for faster lookups
-                self.media_items = {str(item["rating_key"]): item for item in items}
-
-            logger.info(
-                f"Media cache loaded from {self.cache_file_path} with {len(self.media_items)} items"
-            )
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error loading cache: {e}")
-            self.media_items = {}
+            data = json.loads(await asyncio.to_thread(self.cache_file_path.read_text, encoding="utf-8"))
+            # Support both the current wrapped format ({"updated_at", "items"})
+            # and the legacy bare-list format. Restoring the real timestamp is
+            # what lets cache freshness (update_interval) survive a restart.
+            if isinstance(data, dict):
+                items = data.get("items", [])
+                self.last_updated = self._parse_timestamp(data.get("updated_at"))
+            else:
+                items = data
+                # Legacy file with no embedded timestamp: fall back to its mtime.
+                self.last_updated = datetime.fromtimestamp(self.cache_file_path.stat().st_mtime)
+            self.media_items = {str(item["rating_key"]): item for item in items}
+            logger.info(f"Media cache loaded from {self.cache_file_path} with {len(self.media_items)} items")
         except Exception as e:
             logger.error(f"Failed to load media cache from disk: {e}")
             self.media_items = {}
@@ -323,61 +228,27 @@ class MediaCache:
         except (ValueError, TypeError):
             return None
 
-    async def save_cache_to_disk(self) -> None:
-        """Snapshot the cache under the lock, then write it to disk.
-
-        Use this from callers that do NOT already hold ``cache_lock``.
-        """
-        async with self.cache_lock:
-            # Snapshot inside the lock to avoid holding it during slow file I/O.
-            # The empty-cache guard lives in _write_items_to_disk (the single writer).
-            items_list = list(self.media_items.values())
-
-        await self._write_items_to_disk(items_list)
-
     async def _write_items_to_disk(self, items_list: List[Dict]) -> None:
-        """Atomically write a snapshot of media items to disk.
+        """Write a snapshot of media items to disk, atomically (a temp file swapped in).
 
-        This performs no locking; the caller passes a consistent snapshot. It is
-        therefore safe to call whether or not ``cache_lock`` is held, which is why
-        ``update_cache`` (which holds the lock) calls it directly — re-acquiring a
-        non-reentrant ``asyncio.Lock`` from the same task would deadlock.
+        Takes no lock, so update_cache can call it while holding cache_lock.
         """
-        self.cache_file_path.parent.mkdir(parents=True, exist_ok=True)
         if not items_list:
             logger.warning("Attempted to write empty cache to disk")
             return
-
+        # Persist the timestamp alongside the items so freshness survives a restart.
+        data = {"updated_at": (self.last_updated or datetime.now()).isoformat(), "items": items_list}
         try:
-            logger.info(f"Saving media cache to {self.cache_file_path}")
-
-            # Use a temporary file for safety, then atomically replace.
-            temp_file = self.cache_file_path.with_suffix(".tmp")
-
-            # Persist the timestamp alongside the items so freshness survives a
-            # restart (otherwise a cache loaded from disk looks brand-new).
-            updated_at = (self.last_updated or datetime.now()).isoformat()
-
-            # Stream items in chunks, yielding to the event loop periodically.
-            chunk_size = 100
-            async with aiofiles.open(temp_file, "w", encoding="utf-8") as f:
-                await f.write('{"updated_at": ' + json.dumps(updated_at) + ', "items": [\n')
-                for i, item in enumerate(items_list):
-                    json_str = json.dumps(item, ensure_ascii=False)
-                    if i < len(items_list) - 1:
-                        json_str += ","
-                    await f.write(json_str + "\n")
-                    if i % chunk_size == 0 and i > 0:
-                        await asyncio.sleep(0)
-                await f.write("]}\n")
-
-            # os.replace is atomic on most platforms.
-            if temp_file.exists():
-                os.replace(str(temp_file), str(self.cache_file_path))
-
+            await asyncio.to_thread(self._replace_file, data)
             logger.info(f"Media cache saved to {self.cache_file_path}")
         except Exception as e:
             logger.error(f"Failed to save media cache to disk: {e}")
+
+    def _replace_file(self, data: dict) -> None:
+        self.cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_file = self.cache_file_path.with_suffix(".tmp")
+        temp_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(temp_file, self.cache_file_path)
 
     async def _fetch_all_media_items(self) -> List[Dict]:
         """
@@ -497,11 +368,14 @@ class MediaCache:
                 batch_tasks = [self._fetch_item_metadata(key) for key in batch_keys]
                 batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
 
-                for result in batch_results:
+                for key, result in zip(batch_keys, batch_results):
                     if isinstance(result, Exception):
                         logger.error(f"Exception while fetching metadata: {result}")
-                    elif result:
-                        library_items.append(result)
+                        result = None
+                    # A failed fetch keeps the title we already had rather than dropping it.
+                    item = result or self.media_items.get(str(key))
+                    if item:
+                        library_items.append(item)
 
                 # Longer pause between batches to avoid API rate limits
                 await asyncio.sleep(0.5)
@@ -558,109 +432,15 @@ class MediaCache:
     async def refresh(self) -> None:
         """Fetch the whole library again now, even if the cache is still fresh.
 
-        The current items stay in use until the new ones arrive.
+        The current items stay in use until the new ones arrive. A background refresh already
+        under way is waited for instead of starting a second one.
         """
+        if self._refresh is not None and not self._refresh.done():
+            await self._refresh
+            return
         async with self.cache_lock:
             self.last_updated = None
         await self.update_cache()
-
-    async def search_by_prefix(self, query: str, limit: int = 10) -> List[Dict]:
-        """
-        Search for media items where the title starts with the given prefix.
-        
-        This is useful for autocomplete-style searches and can help find items
-        that might be missed by the regular search.
-        
-        Args:
-            query: The title prefix to search for
-            limit: Maximum number of results to return
-            
-        Returns:
-            List of media items matching the search prefix
-        """
-        if not query:
-            return []
-            
-        query = query.lower()
-        await self.ensure_cache_valid()
-        
-        matching_items = []
-        
-        for item in self.media_items.values():
-            title = item.get("title", "").lower()
-            if title.startswith(query):
-                matching_items.append(item)
-                if len(matching_items) >= limit:
-                    break
-                    
-        logger.info(f"Prefix search for '{query}' found {len(matching_items)} results")
-        return matching_items
-
-    # Add this enhanced search method that combines multiple search approaches
-    async def enhanced_search(self, query: str, media_type: str = None, limit: int = 10) -> List[Dict]:
-        """
-        Enhanced search that combines multiple search techniques to find media items.
-        
-        Args:
-            query: The search query
-            media_type: Optional media type to filter results (movie, tv, etc.)
-            limit: Maximum number of results to return
-            
-        Returns:
-            List of media items matching the search criteria
-        """
-        if not query:
-            return []
-            
-        query = query.lower()
-        await self.ensure_cache_valid()
-        
-        # First try the normal search
-        normal_results = await self.search(query, limit=limit)
-        
-        # If we didn't get enough results, try prefix search
-        if len(normal_results) < limit:
-            prefix_results = await self.search_by_prefix(query, limit=limit)
-            
-            # Merge results, avoiding duplicates
-            seen_keys = {item["rating_key"] for item in normal_results}
-            for item in prefix_results:
-                if item["rating_key"] not in seen_keys and len(normal_results) < limit:
-                    normal_results.append(item)
-                    seen_keys.add(item["rating_key"])
-        
-        # If we still don't have enough, try a more fuzzy approach - searching words
-        if len(normal_results) < limit and " " in query:
-            # Split the query into words and search for each word
-            words = query.split()
-            for word in words:
-                if len(word) < 3:  # Skip very short words
-                    continue
-                    
-                word_results = await self.search(word, limit=limit)
-                
-                # Add any new results
-                for item in word_results:
-                    if item["rating_key"] not in seen_keys and len(normal_results) < limit:
-                        normal_results.append(item)
-                        seen_keys.add(item["rating_key"])
-        
-        # Filter by media type if specified
-        if media_type and normal_results:
-            if media_type.lower() == "tv":
-                valid_types = ["show", "episode"]
-            elif media_type.lower() == "movie":
-                valid_types = ["movie"]
-            else:
-                valid_types = [media_type.lower()]
-                
-            normal_results = [
-                item for item in normal_results 
-                if item.get("media_type", "unknown").lower() in valid_types
-            ]
-        
-        logger.info(f"Enhanced search for '{query}' found {len(normal_results)} results")
-        return normal_results
 
     async def _fetch_item_metadata(self, rating_key: str) -> Optional[Dict]:
         """Fetch and process metadata for a single media item."""

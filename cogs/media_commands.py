@@ -30,7 +30,6 @@ from ui.theme import Colour, Limits, brand_colour
 from utilities import format_duration
 
 logger = logging.getLogger("plexbot.media_commands")
-logger.setLevel(logging.INFO)
 
 
 # --- title lookups -------------------------------------------------------------
@@ -371,7 +370,10 @@ class MediaCommands(commands.Cog):
 
     async def find_rating_key(self, query: str, kind: str) -> Optional[str]:
         if query.startswith(_KEY_PREFIX):
-            return query[len(_KEY_PREFIX):]
+            # Only keys the suggestions could have offered: a typed key could reach any Plex item,
+            # photos and home videos included.
+            key = query[len(_KEY_PREFIX):]
+            return key if self.media_cache and key in self.media_cache.media_items else None
         section_type, _label = _KINDS[kind]
         key = await self._search_libraries(query, section_type)
         if key:

@@ -68,6 +68,15 @@ class TestLookup:
         assert "**Alice** (3)" in embed.description and "Mallory" not in embed.description  # ignored user
         assert [f.filename for f in sent["files"]] == ["poster.jpg", "art.jpg"]
 
+    def test_typed_key_outside_the_cache_is_refused(self, monkeypatch):
+        # Rating keys count up, so a typed key could reach any Plex item (photos, home videos).
+        recorder = Recorder(monkeypatch)
+        tautulli = _tautulli()
+        tautulli.metadata = {**tautulli.metadata, "999": {"title": "Holiday photos"}}
+        _run(lambda bot, cog: MediaCommands.movie.callback(cog, interaction(bot), title="key:999"), tautulli)
+        sent = recorder.last("followup")
+        assert sent["ephemeral"] is True and "isn't in the library" in sent["embeds"][0].description
+
     def test_typed_title_found_in_its_library_only(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         _run(lambda bot, cog: MediaCommands.tv.callback(cog, interaction(bot), title="severance"))

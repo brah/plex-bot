@@ -18,7 +18,6 @@ import nextcord
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
 from ui.format import is_truthy
-from utilities import fetch_plex_image
 
 logger = logging.getLogger("plexbot.ui.images")
 
@@ -71,17 +70,13 @@ async def plex_image(
     if not key:
         return None
     try:
-        buffer = await asyncio.wait_for(
-            fetch_plex_image(
-                tautulli.tautulli_ip, key, width, height,
-                use_https=tautulli.use_https, api_key=tautulli.api_key, fallback=fallback,
-            ),
-            timeout=IMAGE_TIMEOUT,
+        data = await asyncio.wait_for(
+            tautulli.get_image(key, width, height, fallback=fallback), timeout=IMAGE_TIMEOUT
         )
     except asyncio.TimeoutError:
         logger.warning(f"Timed out fetching Plex image {key}")
         return None
-    return Attachment(filename, buffer.getvalue()) if buffer else None
+    return Attachment(filename, data) if data else None
 
 
 def poster_key(session: dict) -> Optional[str]:
