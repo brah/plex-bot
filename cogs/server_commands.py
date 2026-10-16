@@ -36,7 +36,7 @@ from ui.embeds import (
     ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail, success,
 )
 from ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
-from ui.images import STRIP_POSTERS, current_frame, mascot, plex_image, poster_key, poster_strip
+from ui.images import STRIP_POSTERS, current_frame, fetch_poster_strip, mascot, plex_image, poster_key
 from ui.theme import Colour
 
 # Configure logging for this module
@@ -291,7 +291,6 @@ class WatchersView(LoggedView):
     def __init__(self, cog: "ServerCommands", sessions: list, timeout: float = 600):
         super().__init__(timeout=timeout)
         self.cog = cog
-        self.message = None
         self.set_sessions(sessions)
 
     def set_sessions(self, sessions: list) -> None:
@@ -326,14 +325,6 @@ class WatchersView(LoggedView):
             return
         reply = await self.cog.render_watchers(activity, self)
         await reply.edit(interaction)
-
-    async def on_timeout(self):
-        # Expired controls are removed; the embed's "updated" time shows its age.
-        if self.message:
-            try:
-                await self.message.edit(view=None)
-            except nextcord.HTTPException:
-                pass
 
 
 # --- /plex status helpers ----------------------------------------------------
@@ -511,7 +502,6 @@ class StatusView(LoggedView):
     def __init__(self, plex_status: PlexStatus, timeout: float = 600):
         super().__init__(timeout=timeout)
         self.plex_status = plex_status
-        self.message = None
 
     @nextcord.ui.button(label="Plex services", emoji="\U0001F4E1", style=nextcord.ButtonStyle.secondary)
     async def services_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
@@ -520,13 +510,6 @@ class StatusView(LoggedView):
         if latest is not None:
             self.plex_status = latest
         await services_card(self.plex_status, now=nextcord.utils.utcnow()).send(interaction, ephemeral=True)
-
-    async def on_timeout(self):
-        if self.message:
-            try:
-                await self.message.edit(view=None)
-            except nextcord.HTTPException:
-                pass
 
 
 class ServerCommands(commands.Cog):
@@ -719,13 +702,8 @@ class ServerCommands(commands.Cog):
             reply = empty_state(await self._nobody_watching(), hint="Hit Refresh to check again.")
             reply.view = view
             return reply
-        posters = await asyncio.gather(*(
-            plex_image(self.tautulli, poster_key(s), filename=f"poster-{i}.jpg", width=200, height=300)
-            for i, s in enumerate(sessions[:STRIP_POSTERS])
-        ))
-        strip = await asyncio.to_thread(
-            poster_strip, [p.data for p in posters if p], extra=max(0, len(sessions) - STRIP_POSTERS)
-        )
+        strip = await fetch_poster_strip(self.tautulli, [poster_key(s) for s in sessions],
+                                         extra=max(0, len(sessions) - STRIP_POSTERS))
         embed = stream_overview(
             sessions, bandwidth_kbps=to_int(activity.get("total_bandwidth")), strip=strip,
             updated=nextcord.utils.utcnow(), name=self._mention,

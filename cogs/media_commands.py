@@ -22,10 +22,10 @@ from media_cache import MediaCache
 from media_details import MediaDetails, TautulliUnavailable
 from slash_commands import plex, plexadmin
 from tautulli_wrapper import Tautulli
-from ui.cards import media_icon, session_title
+from ui.cards import genre_label, media_icon, session_title
 from ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail
 from ui.format import file_size, join, plural, progress_bar, timestamp, to_int, truncate
-from ui.images import STRIP_POSTERS, mascot, plex_image, poster_key, poster_strip
+from ui.images import STRIP_POSTERS, fetch_poster_strip, mascot, poster_key
 from ui.theme import Colour, Limits, brand_colour
 from utilities import format_duration
 
@@ -120,18 +120,9 @@ class RecentView(LoggedView):
     def __init__(self, cog: "MediaCommands", entries: list, timeout: float = 600):
         super().__init__(timeout=timeout)
         self.cog = cog
-        self.message = None
         choices = _recent_choices(entries)
         if choices:
             self.add_item(RecentDetailsSelect(choices))
-
-    async def on_timeout(self):
-        # Expired controls are removed rather than greyed out.
-        if self.message:
-            try:
-                await self.message.edit(view=None)
-            except nextcord.HTTPException:
-                pass
 
 
 # --- /plex random ----------------------------------------------------------------
@@ -147,7 +138,6 @@ class RandomView(LoggedView):
         self.cog = cog
         self.author_id = author_id
         self.pool = pool
-        self.message = None
         self._unseen: list = []
 
     def pick(self) -> dict:
@@ -172,13 +162,6 @@ class RandomView(LoggedView):
             await service_down("Tautulli").send(interaction, ephemeral=True)
             return
         await reply.edit(interaction)
-
-    async def on_timeout(self):
-        if self.message:
-            try:
-                await self.message.edit(view=None)
-            except nextcord.HTTPException:
-                pass
 
 
 # --- /plex downloading -------------------------------------------------------------
@@ -244,7 +227,6 @@ class DownloadsView(LoggedView):
     def __init__(self, cog: "MediaCommands", timeout: float = 600):
         super().__init__(timeout=timeout)
         self.cog = cog
-        self.message = None
 
     @nextcord.ui.button(label="Refresh", emoji="\U0001F504", style=nextcord.ButtonStyle.secondary)
     async def refresh_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
@@ -256,13 +238,6 @@ class DownloadsView(LoggedView):
             return
         reply.view = self
         await reply.edit(interaction)
-
-    async def on_timeout(self):
-        if self.message:
-            try:
-                await self.message.edit(view=None)
-            except nextcord.HTTPException:
-                pass
 
 
 # --- /plexadmin cache ----------------------------------------------------------------
@@ -277,9 +252,10 @@ def cache_status(media_cache: MediaCache, note: Optional[str] = None) -> Reply:
         join([f"**{plural(len(items), 'item')}**", plural(movies, "movie"), plural(shows, "show")]),
         join([
             f"Updated {timestamp(updated)}" if updated else "Never updated",
-            f"refreshes every {format_duration(media_cache.update_interval)}",
+            f"new titles every {format_duration(media_cache.update_interval)}",
         ]),
-        "-# Used by /plex random and the title suggestions on /plex movie and /plex tv.",
+        "-# Used by /plex random and the title suggestions on /plex movie and /plex tv. "
+        "Refresh now also re-reads genres and summaries.",
     ]
     if note:
         lines.append(note)
@@ -486,7 +462,7 @@ class MediaCommands(commands.Cog):
         genres = self.media_cache.genres(kind) if self.media_cache else []
         matches = [g for g in genres if g.startswith(typed)] + [g for g in genres if typed in g and not g.startswith(typed)]
         await interaction.response.send_autocomplete(
-            {g[:1].upper() + g[1:]: g for g in matches[:Limits.SELECT_OPTIONS]}
+            {genre_label(g): g for g in matches[:Limits.SELECT_OPTIONS]}
         )
 
     # --- /plex recent ---------------------------------------------------------------
@@ -514,13 +490,8 @@ class MediaCommands(commands.Cog):
         if not entries:
             await empty_state("Nothing's been added recently.").send(interaction)
             return
-        posters = await asyncio.gather(*(
-            plex_image(self.tautulli, poster_key(e), filename=f"poster-{i}.jpg", width=200, height=300)
-            for i, e in enumerate(entries[:STRIP_POSTERS])
-        ))
-        strip = await asyncio.to_thread(
-            poster_strip, [p.data for p in posters if p], extra=max(0, len(entries) - STRIP_POSTERS)
-        )
+        strip = await fetch_poster_strip(self.tautulli, [poster_key(e) for e in entries],
+                                         extra=max(0, len(entries) - STRIP_POSTERS))
         view = RecentView(self, entries)
         reply = Reply([recent_overview(entries, strip=strip)], [strip] if strip else [], view=view)
         view.message = bot_token_handle(interaction, await reply.send(interaction))

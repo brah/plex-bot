@@ -127,7 +127,7 @@ def setup_default_config():
     tmdb.add("apikey", "", "TMDB API key")
 
     ui = config.add_section("ui", "User interface settings")
-    ui.add("plex_embed_color", 0xE5A00D, "Embed color for Plex embeds (hex)")
+    ui.add("plex_embed_color", 0xE5A00D, 'Embed color: a number (15040013) or hex text ("#E5A00D")')
 
     cache = config.add_section("cache", "Cache settings")
     cache.add("update_interval", 3600, "Cache update interval in seconds (default 1 hour)")

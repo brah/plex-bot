@@ -127,11 +127,23 @@ async def _reply_privately(interaction: nextcord.Interaction, reply) -> None:
 
 
 class LoggedView(nextcord.ui.View):
-    """View whose callback errors are logged and answered privately.
+    """View whose callback errors are logged and answered privately, and whose controls are
+    removed from `message` when it times out (rather than left greyed out).
 
-    nextcord's default prints them to stderr, so they never reach plexbot.log and the
+    nextcord's default prints callback errors to stderr, so they never reach plexbot.log and the
     user just sees "This interaction failed".
     """
+
+    # The message the controls sit under, once sent: ideally a bot-token handle (bot_token_handle),
+    # since the command's interaction webhook expires after 15 minutes.
+    message = None
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except nextcord.HTTPException:
+                pass
 
     async def on_error(self, error: Exception, item: nextcord.ui.Item, interaction: nextcord.Interaction):
         from ui.embeds import unexpected_error

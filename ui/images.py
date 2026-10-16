@@ -141,6 +141,16 @@ def poster_strip(
     return Attachment(filename, out.getvalue())
 
 
+async def fetch_poster_strip(tautulli, keys: Sequence[Optional[str]], *, extra: int = 0) -> Optional[Attachment]:
+    """The poster strip for the first STRIP_POSTERS image keys (missing posters are left out), drawn
+    in a worker thread so it never blocks the bot; None when no poster could be fetched."""
+    posters = await asyncio.gather(*(
+        plex_image(tautulli, key, filename=f"poster-{i}.jpg", width=200, height=300)
+        for i, key in enumerate(keys[:STRIP_POSTERS])
+    ))
+    return await asyncio.to_thread(poster_strip, [p.data for p in posters if p], extra=extra)
+
+
 def dominant_colour(data: bytes) -> Optional[int]:
     """The most common vivid colour in an image (0xRRGGBB), for tinting a media card."""
     try:

@@ -104,15 +104,23 @@ class UserMappings:
     _mappings: Optional[List[Dict[str, Any]]] = None
     _mapping_file = "map.json"
     _unreadable = False  # the file exists but couldn't be read; saving is refused
+    _unreadable_version = None  # the file's modified time when it couldn't be read
 
     @classmethod
     def _path(cls) -> Path:
         return Path(cls._mapping_file)
 
     @classmethod
+    def _version(cls):
+        try:
+            return cls._path().stat().st_mtime_ns
+        except OSError:
+            return None
+
+    @classmethod
     def load_user_mappings(cls) -> List[Dict[str, Any]]:
-        """The mappings (read once, then kept in memory)."""
-        if cls._mappings is None:
+        """The mappings (read once, then kept in memory). An unreadable file is read again once it changes."""
+        if cls._mappings is None or (cls._unreadable and cls._version() != cls._unreadable_version):
             cls._unreadable = False
             try:
                 raw = json.loads(cls._path().read_text(encoding="utf-8"))
@@ -125,6 +133,7 @@ class UserMappings:
             except (OSError, ValueError) as err:  # JSONDecodeError and UnicodeDecodeError are ValueErrors
                 logger.error(f"Couldn't read {cls._mapping_file}; links and ignores are off until it's fixed: {err}")
                 cls._unreadable = True
+                cls._unreadable_version = cls._version()
                 cls._mappings = []
         return cls._mappings
 
@@ -156,11 +165,6 @@ class UserMappings:
             temporary.unlink(missing_ok=True)
         cls._mappings = data
         logger.info("User mappings saved.")
-
-    @classmethod
-    def reload(cls) -> None:
-        """Forget what's in memory; the next read loads map.json again."""
-        cls._mappings = None
 
     @classmethod
     def get_mapping_by_discord_id(cls, discord_id: str) -> Dict[str, Any]:
@@ -317,11 +321,15 @@ def format_duration(seconds: int) -> str:
 
 # No git checkout is normal (the Docker image has neither git nor .git), so a failure is debug
 # noise, not an error; the startup log already shows the version as "unknown".
+# A hung `git fetch` (unreachable remote) would hold up the presence loop, which waits on this.
+_GIT_TIMEOUT = 30
+
+
 def get_git_revision_short_hash() -> str:
     """Get the current git commit short hash."""
     try:
         return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL, timeout=_GIT_TIMEOUT
         ).decode("ascii").strip()
     except Exception as e:
         logger.debug(f"Couldn't read the git revision: {e}")
@@ -331,9 +339,10 @@ def get_git_revision_short_hash() -> str:
 def get_git_revision_short_hash_latest() -> str:
     """Get the latest git commit short hash from origin."""
     try:
-        subprocess.check_call(["git", "fetch"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.check_call(["git", "fetch"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              timeout=_GIT_TIMEOUT)
         return subprocess.check_output(
-            ["git", "rev-parse", "--short", "origin/HEAD"], stderr=subprocess.DEVNULL
+            ["git", "rev-parse", "--short", "origin/HEAD"], stderr=subprocess.DEVNULL, timeout=_GIT_TIMEOUT
         ).decode("ascii").strip()
     except Exception as e:
         logger.debug(f"Couldn't read the latest git revision: {e}")

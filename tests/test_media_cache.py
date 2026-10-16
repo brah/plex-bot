@@ -18,8 +18,10 @@ class LibraryTautulli(FakeTautulli):
         self.metadata = {key: {"title": title, "media_type": "movie", "genres": ["Drama"]}
                          for key, title in titles.items()}
         self.failing = set()
+        self.asked = []  # rating keys get_metadata was called for
 
     async def get_metadata(self, rating_key):
+        self.asked.append(str(rating_key))
         if str(rating_key) in self.failing:
             return None
         return await super().get_metadata(rating_key)
@@ -41,7 +43,8 @@ def _titles(items):
 
 
 def test_stale_cache_answers_at_once_and_refreshes_in_the_background(tmp_path):
-    cache = _stale_cache(LibraryTautulli({"1": "New title"}), tmp_path, [_item("1", "Old title")])
+    tautulli = LibraryTautulli({"1": "Renamed in Plex", "2": "Added"})
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Old title")])
 
     async def run():
         served = await cache.get_items()
@@ -52,9 +55,20 @@ def test_stale_cache_answers_at_once_and_refreshes_in_the_background(tmp_path):
 
     served = asyncio.run(run())
     assert _titles(served) == ["Old title"]
-    assert _titles(cache.media_items.values()) == ["New title"]
+    # Only the new title is looked up; a cached one keeps its metadata until Refresh now.
+    assert tautulli.asked == ["2"]
+    assert _titles(cache.media_items.values()) == ["Added", "Old title"]
     assert cache.is_cache_valid()
-    assert json.loads((tmp_path / "cache.json").read_text(encoding="utf-8"))["items"][0]["title"] == "New title"
+    saved = json.loads((tmp_path / "cache.json").read_text(encoding="utf-8"))["items"]
+    assert _titles(saved) == ["Added", "Old title"]
+
+
+def test_refresh_now_reads_every_title_again_and_drops_removed_ones(tmp_path):
+    tautulli = LibraryTautulli({"1": "Renamed in Plex"})
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Old title"), _item("2", "Deleted from Plex")])
+    asyncio.run(cache.refresh())
+    assert tautulli.asked == ["1"]
+    assert _titles(cache.media_items.values()) == ["Renamed in Plex"]
 
 
 def test_empty_cache_waits_for_the_first_fetch(tmp_path):

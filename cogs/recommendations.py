@@ -17,10 +17,10 @@ from media_cache import MediaCache
 from media_details import MediaDetails, TautulliUnavailable
 from slash_commands import plex
 from tautulli_wrapper import Tautulli
-from ui.cards import media_icon, session_title
+from ui.cards import genre_label, media_icon, session_title
 from ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down
 from ui.format import join, plural, to_int, truncate
-from ui.images import plex_image, poster_key, poster_strip
+from ui.images import fetch_poster_strip, poster_key
 from ui.theme import Limits, brand_colour
 from utilities import UserMappings, ignored_usernames
 
@@ -29,10 +29,6 @@ logger = logging.getLogger("plexbot.recommendations")
 _PICKS = 3
 _TOP_GENRES = 3
 _SUMMARY = 150
-
-
-def _genre(name: str) -> str:
-    return name[:1].upper() + name[1:]
 
 
 def watched_keys(history: list) -> set:
@@ -58,11 +54,11 @@ def viewer_count(user_rows, ignored: set) -> int:
 
 
 def overview_card(picks: list, counts: list, genres: List[str], *, strip) -> nextcord.Embed:
-    blocks = ["-# Based on their favourite genres: " + ", ".join(f"**{_genre(g)}**" for g in genres)]
+    blocks = ["-# Based on their favourite genres: " + ", ".join(f"**{genre_label(g)}**" for g in genres)]
     for number, (item, count) in enumerate(zip(picks, counts), 1):
         summary = truncate(item.get("summary") or "No description available.", _SUMMARY)
         details = join([
-            ", ".join(_genre(g) for g in (item.get("genres") or [])[:3]),
+            ", ".join(genre_label(g) for g in (item.get("genres") or [])[:3]),
             f"watched by {plural(count, 'person', 'people')}" if count else "nobody's watched it yet",
         ])
         blocks.append(
@@ -88,7 +84,6 @@ class RecommendationView(LoggedView):
         self.author_id = author_id
         self.picks = picks
         self.overview = overview
-        self.message = None
         for index in range(len(picks)):
             button = nextcord.ui.Button(label=str(index + 1), style=nextcord.ButtonStyle.primary)
             button.callback = self._detail_callback(index)
@@ -132,14 +127,6 @@ class RecommendationView(LoggedView):
         self.back_button.disabled = True
         self.overview.view = self
         await self.overview.edit(interaction)
-
-    async def on_timeout(self):
-        # Expired controls are removed rather than greyed out.
-        if self.message:
-            try:
-                await self.message.edit(view=None)
-            except nextcord.HTTPException:
-                pass
 
 
 class Recommendations(commands.Cog):
@@ -212,12 +199,10 @@ class Recommendations(commands.Cog):
                 interaction)
             return
 
-        counts, posters = await asyncio.gather(
+        counts, strip = await asyncio.gather(
             self._viewer_counts(picks),
-            asyncio.gather(*(plex_image(self.tautulli, poster_key(p), filename=f"poster-{i}.jpg", width=200,
-                                        height=300) for i, p in enumerate(picks))),
+            fetch_poster_strip(self.tautulli, [poster_key(p) for p in picks]),
         )
-        strip = await asyncio.to_thread(poster_strip, [p.data for p in posters if p])
         embed = overview_card(picks, counts, genres, strip=strip)
         embed.set_author(name=truncate(member.display_name, Limits.AUTHOR), icon_url=member.display_avatar.url)
         overview = Reply([embed], [strip] if strip else [])

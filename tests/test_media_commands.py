@@ -272,7 +272,7 @@ class TestCacheAdmin:
         status = recorder.last("send_message")
         assert status["ephemeral"] is True and isinstance(view, CacheView)
         assert status["embeds"][0].description.startswith("**4 items** · 3 movies · 1 show")
-        assert "refreshes every 1h" in status["embeds"][0].description
+        assert "new titles every 1h" in status["embeds"][0].description
         assert refreshed == [True]
         assert "Refreshing" in recorder.last("edit_message")["embeds"][0].description
         assert "✅ Refreshed" in recorder.last("edit_original_message")["embeds"][0].description

@@ -225,10 +225,7 @@ class Tautulli:
         else:
             params["session_id"] = session_id
         response = await self.api_call("terminate_session", params)
-        if response and response.get("response", {}).get("result") == "success":
-            return 200
-        else:
-            return 400
+        return 200 if self.check_response(response) else 400
 
     async def get_library_user_stats(self, section_id: str = None) -> Optional[Dict[str, Any]]:
         """Get user stats for a library."""

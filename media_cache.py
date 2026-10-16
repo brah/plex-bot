@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
+from tautulli_wrapper import Tautulli
+
 # Configure logging
 logger = logging.getLogger("plexbot.media_cache")
 
@@ -91,8 +93,12 @@ class MediaCache:
             except asyncio.CancelledError:
                 pass
 
-    async def update_cache(self) -> None:
-        """Update the media cache with fresh data from Tautulli."""
+    async def update_cache(self, full: bool = False) -> None:
+        """Update the media cache from Tautulli: the title list, plus metadata for new titles.
+
+        full also fetches metadata again for every title already cached (genres or summaries
+        changed in Plex); that's one call per title, minutes on a big library.
+        """
         async with self.cache_lock:
             if self.is_cache_valid():
                 # Another process might have updated the cache while we were waiting for the lock
@@ -102,12 +108,12 @@ class MediaCache:
             try:
                 # Check Tautulli connection first
                 test_response = await self.tautulli.get_server_info()
-                if not test_response or test_response.get("response", {}).get("result") != "success":
+                if not Tautulli.check_response(test_response):
                     logger.error("Tautulli connection test failed")
                     return
 
                 # Fetch and process all media items
-                new_items = await self._fetch_all_media_items()
+                new_items = await self._fetch_all_media_items(full)
 
                 # Update the cache with new items
                 if new_items:
@@ -225,7 +231,7 @@ class MediaCache:
         temp_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         os.replace(temp_file, self.cache_file_path)
 
-    async def _fetch_all_media_items(self) -> List[Dict]:
+    async def _fetch_all_media_items(self, full: bool = False) -> List[Dict]:
         """
         Fetch all media items from Tautulli and gather their metadata.
 
@@ -240,7 +246,8 @@ class MediaCache:
             logger.info(f"Processing library: {lib['section_name']} (ID: {lib['section_id']}, Type: {lib['section_type']})")
 
         # Process all libraries concurrently with limits
-        results = await asyncio.gather(*(self._process_library(lib) for lib in libraries), return_exceptions=True)
+        results = await asyncio.gather(*(self._process_library(lib, full) for lib in libraries),
+                                       return_exceptions=True)
 
         failed = set()
         for library, result in zip(libraries, results):
@@ -311,8 +318,9 @@ class MediaCache:
 
         return filtered_items
 
-    async def _process_library(self, library: Dict) -> Optional[List[Dict]]:
-        """A library's items with fresh metadata; None when its title list couldn't be read."""
+    async def _process_library(self, library: Dict, full: bool = False) -> Optional[List[Dict]]:
+        """A library's items (metadata fetched for new titles, or all of them when full); None when
+        its title list couldn't be read."""
         library_items = []
         section_id = str(library["section_id"])
         try:
@@ -332,9 +340,15 @@ class MediaCache:
 
             logger.info(f"Processing {len(media_items)} items from library '{library['section_name']}'")
 
-            # Collect all rating keys for the metadata fetch
-            rating_keys = [item["rating_key"] for item in media_items]
-            
+            # Titles already cached keep their metadata; only new ones (or all, when full) are fetched.
+            rating_keys = []
+            for row in media_items:
+                cached = None if full else self.media_items.get(str(row["rating_key"]))
+                if cached:
+                    library_items.append({**cached, "section_id": section_id})
+                else:
+                    rating_keys.append(row["rating_key"])
+
             # Process rating keys in smaller batches to improve reliability
             batch_size = 10  # Reduced from 20 to 10 for better reliability
             for i in range(0, len(rating_keys), batch_size):
@@ -420,7 +434,7 @@ class MediaCache:
             return
         async with self.cache_lock:
             self.last_updated = None
-        await self.update_cache()
+        await self.update_cache(full=True)
 
     async def _fetch_item_metadata(self, rating_key: str) -> Optional[Dict]:
         """Fetch and process metadata for a single media item."""
@@ -432,8 +446,8 @@ class MediaCache:
                     logger.error(f"No response for metadata request on rating_key {rating_key}")
                     return None
 
-                if metadata_response.get("response", {}).get("result") == "success":
-                    metadata = metadata_response.get("response", {}).get("data", {})
+                if Tautulli.check_response(metadata_response):
+                    metadata = Tautulli.get_response_data(metadata_response, {})
                     genres = [genre.lower() for genre in metadata.get("genres", [])]
 
                     # Create a standardized item structure with only necessary fields
@@ -463,11 +477,11 @@ class MediaCache:
         """Fetch all libraries from Tautulli."""
         response = await self.tautulli.get_libraries()
 
-        if not response or response.get("response", {}).get("result") != "success":
+        if not Tautulli.check_response(response):
             logger.error("Failed to fetch libraries from Tautulli")
             return []
 
-        libraries = response.get("response", {}).get("data", [])
+        libraries = Tautulli.get_response_data(response, [])
         # Only include libraries with supported media types
         filtered_libraries = [
             lib for lib in libraries if lib["section_type"] in ("movie", "show", "episode")
