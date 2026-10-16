@@ -6,16 +6,14 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
-from io import BytesIO
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
-import aiohttp
-from nextcord import File
 from nextcord.utils import escape_markdown
 
+from ui.format import to_int
+
 logger = logging.getLogger("plexbot.utilities")
-logger.setLevel(logging.INFO)
 
 
 # Bot configuration lives in the `config` package (config/__init__.py).
@@ -241,6 +239,22 @@ def viewer_avatar(bot, row: Dict[str, Any]) -> Optional[str]:
     return thumb if thumb.startswith("http") else None
 
 
+def library_totals(rows) -> dict:
+    """Sum Tautulli's library rows into movie, show, episode, artist and track counts."""
+    totals = {"movies": 0, "shows": 0, "episodes": 0, "artists": 0, "tracks": 0}
+    for row in rows or []:
+        kind = row.get("section_type")
+        if kind == "movie":
+            totals["movies"] += to_int(row.get("count"))
+        elif kind == "show":
+            totals["shows"] += to_int(row.get("count"))
+            totals["episodes"] += to_int(row.get("child_count"))
+        elif kind == "artist":
+            totals["artists"] += to_int(row.get("count"))
+            totals["tracks"] += to_int(row.get("child_count"))
+    return totals
+
+
 def format_duration(seconds: int) -> str:
     """Format a number of seconds into a compact duration like '2d 5h 30m'.
 
@@ -281,83 +295,3 @@ def get_git_revision_short_hash_latest() -> str:
     except Exception as e:
         logger.error(f"Failed to get latest git revision: {e}")
         return "unknown"
-
-
-async def fetch_plex_image(
-    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450,
-    use_https: bool = False, api_key: str = "", fallback: Optional[str] = "poster"
-) -> Optional[BytesIO]:
-    """
-    Fetch an image from the Plex/Tautulli server.
-
-    Args:
-        tautulli_ip: The IP address of the Tautulli server
-        thumb_key: The thumbnail key from Plex
-        width: The desired width of the image
-        height: The desired height of the image
-        use_https: Whether to use HTTPS
-        api_key: Tautulli API key (required for authenticated image proxy)
-        fallback: Image Tautulli substitutes when the real one is missing (None to fail instead)
-
-    Returns:
-        BytesIO object containing the image data, or None if the fetch failed
-    """
-    if not thumb_key or not thumb_key.strip():
-        return None
-
-    try:
-        protocol = "https" if use_https else "http"
-        url = f"{protocol}://{tautulli_ip}/api/v2"
-        params = {
-            "cmd": "pms_image_proxy",
-            "img": thumb_key.strip(),
-            "width": width,
-            "height": height,
-        }
-        # Tautulli substitutes a generic image when the real one is missing; callers that
-        # want "no image" instead (e.g. a stream's current frame) pass fallback=None.
-        if fallback:
-            params["fallback"] = fallback
-        if api_key:
-            params["apikey"] = api_key
-
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, params=params) as response:
-                if response.status == 200 and "image" in (response.content_type or ""):
-                    return BytesIO(await response.read())
-                else:
-                    logger.warning(f"Failed to fetch image: status={response.status}, content_type={response.content_type}")
-                    return None
-    except Exception as e:
-        logger.error(f"Error fetching image: {e}", exc_info=True)
-        return None
-
-
-async def prepare_thumbnail_for_embed(
-    tautulli_ip: str, thumb_key: str, width: int = 300, height: int = 450,
-    use_https: bool = False, api_key: str = ""
-) -> Tuple[Optional[File], Optional[str]]:
-    """
-    Prepares a thumbnail for inclusion in a Discord embed.
-
-    Args:
-        tautulli_ip: The IP address of the Tautulli server
-        thumb_key: The thumbnail key from Plex
-        width: The desired width of the image
-        height: The desired height of the image
-        use_https: Whether to use HTTPS for the image request
-        api_key: Tautulli API key for authenticated access
-
-    Returns:
-        A tuple containing (File, attachment_url) or (None, None) if preparation failed
-    """
-    if not thumb_key:
-        return None, None
-
-    image_data = await fetch_plex_image(tautulli_ip, thumb_key, width, height, use_https=use_https, api_key=api_key)
-    if image_data:
-        file = File(fp=image_data, filename="image.jpg")
-        attachment_url = "attachment://image.jpg"
-        return file, attachment_url
-    return None, None

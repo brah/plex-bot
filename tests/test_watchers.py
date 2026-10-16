@@ -3,9 +3,12 @@
 import asyncio
 from types import SimpleNamespace
 
+import nextcord
+import pytest
+
 from cogs.server_commands import _can_manage_streams, _session_choices, _session_label
 from errors import invoked_command_path, slash_equivalent
-from slash_commands import command_paths
+from slash_commands import admin_check, command_paths
 from tautulli_wrapper import Tautulli
 
 
@@ -17,30 +20,95 @@ def _member(member_id=1, role_ids=(), admin=False):
     )
 
 
+GUILD = 123
+
+
+@pytest.fixture
+def configured(monkeypatch):
+    """Set discord config values for one test: configured(server_id="123", admin_ids=[5])."""
+    from config import config
+
+    def set_discord(**values):
+        monkeypatch.setattr(config, "_user_config", {"discord": values})
+
+    set_discord()
+    return set_discord
+
+
 class TestCanManageStreams:
-    def test_admin(self):
-        assert _can_manage_streams(_member(admin=True), []) is True
+    def test_admin_of_the_configured_server(self, configured):
+        configured(server_id=str(GUILD))
+        assert _can_manage_streams(_member(admin=True), GUILD, []) is True
 
-    def test_listed_user(self):
-        assert _can_manage_streams(_member(member_id=42), [42]) is True
+    def test_admin_of_another_server_is_not_enough(self, configured):
+        configured(server_id=str(GUILD))
+        assert _can_manage_streams(_member(admin=True), 999, []) is False
 
-    def test_listed_role(self):
-        assert _can_manage_streams(_member(role_ids=(7, 8)), [8]) is True
+    def test_without_server_id_discord_admin_is_not_enough(self, configured):
+        assert _can_manage_streams(_member(admin=True), GUILD, []) is False
 
-    def test_string_ids_from_config(self):
-        assert _can_manage_streams(_member(member_id=42), ["42"]) is True
+    def test_admin_ids_work_anywhere(self, configured):
+        configured(admin_ids=["42"])
+        assert _can_manage_streams(_member(member_id=42), 999, []) is True
 
-    def test_not_listed(self):
-        assert _can_manage_streams(_member(member_id=1, role_ids=(7,)), [42, 8]) is False
+    def test_listed_user(self, configured):
+        assert _can_manage_streams(_member(member_id=42), GUILD, [42]) is True
 
-    def test_invalid_ids_ignored(self):
-        assert _can_manage_streams(_member(member_id=1), ["", "abc", None]) is False
+    def test_listed_role(self, configured):
+        assert _can_manage_streams(_member(role_ids=(7, 8)), GUILD, [8]) is True
 
-    def test_user_outside_guild(self):
+    def test_string_ids_from_config(self, configured):
+        assert _can_manage_streams(_member(member_id=42), GUILD, ["42"]) is True
+
+    def test_not_listed(self, configured):
+        assert _can_manage_streams(_member(member_id=1, role_ids=(7,)), GUILD, [42, 8]) is False
+
+    def test_invalid_ids_ignored(self, configured):
+        assert _can_manage_streams(_member(member_id=1), GUILD, ["", "abc", None]) is False
+
+    def test_user_outside_guild(self, configured):
         # A plain User (no roles / guild permissions) can still be listed by ID.
         user = SimpleNamespace(id=42)
-        assert _can_manage_streams(user, [42]) is True
-        assert _can_manage_streams(user, []) is False
+        assert _can_manage_streams(user, None, [42]) is True
+        assert _can_manage_streams(user, None, []) is False
+
+
+class TestAdminCheck:
+    def _interaction(self, name, admin=False, guild_id=GUILD, user_id=1):
+        return SimpleNamespace(data={"name": name}, guild_id=guild_id,
+                               user=_member(member_id=user_id, admin=admin))
+
+    def test_plex_commands_are_open(self, configured):
+        assert admin_check(self._interaction("plex")) is True
+
+    def test_plexadmin_needs_a_bot_admin(self, configured):
+        configured(server_id=str(GUILD), admin_ids=[5])
+        assert admin_check(self._interaction("plexadmin", admin=True)) is True
+        assert admin_check(self._interaction("plexadmin", admin=True, guild_id=999)) is False
+        assert admin_check(self._interaction("plexadmin", user_id=5, guild_id=999)) is True
+        assert admin_check(self._interaction("plexadmin")) is False
+
+    def test_refusal_is_answered_privately(self, monkeypatch, configured):
+        import ui.embeds
+        from errors import ErrorHandler
+
+        monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+        sent = []
+
+        class Response:
+            def is_done(self):
+                return False
+
+            async def send_message(self, content=None, *, ephemeral=False, **kwargs):
+                sent.append((kwargs["embeds"][0].description, ephemeral))
+
+        interaction = SimpleNamespace(
+            data={"name": "plexadmin", "options": [{"type": 1, "name": "logs"}]},
+            user=SimpleNamespace(id=1), response=Response(),
+        )
+        error = nextcord.ApplicationCheckFailure("nope")
+        asyncio.run(ErrorHandler(None).application_error_handler(interaction, error))
+        assert sent == [(sent[0][0], True)] and "`/plexadmin logs`" in sent[0][0]
 
 
 SESSION_A = {"session_id": "abc", "friendly_name": "Alice", "full_title": "The Matrix", "username": "alice"}
@@ -185,3 +253,30 @@ class TestTerminateSession:
     def test_includes_message(self):
         _, captured = self._call(session_id="abc", message="Bye")
         assert captured["params"] == {"message": "Bye", "session_id": "abc"}
+
+
+def test_history_rows_pages_until_a_short_page():
+    """A long window can hold more plays than one get_history call returns; every page is fetched."""
+    client = Tautulli(api_key="k", tautulli_ip="host:8181")
+    plays = [{"row": n} for n in range(5)]
+    calls = []
+
+    async def get_history(params=None):
+        calls.append((params["start"], params["length"]))
+        page = plays[params["start"]:params["start"] + params["length"]]
+        return {"response": {"result": "success", "data": {"data": page}}}
+
+    client.get_history = get_history
+    assert asyncio.run(client.get_history_rows({"after": "2026-01-01"}, page=2)) == plays
+    assert calls == [(0, 2), (2, 2), (4, 2)]
+
+
+def test_history_rows_is_none_when_tautulli_fails_midway():
+    client = Tautulli(api_key="k", tautulli_ip="host:8181")
+    answers = [{"response": {"result": "success", "data": {"data": [{}, {}]}}}, None]
+
+    async def get_history(params=None):
+        return answers.pop(0)
+
+    client.get_history = get_history
+    assert asyncio.run(client.get_history_rows({}, page=2)) is None

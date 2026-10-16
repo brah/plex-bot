@@ -22,12 +22,12 @@ from ui.format import join, plural, to_int, truncate
 from ui.images import plex_image, poster_key, poster_strip
 from ui.theme import Colour, Limits, brand_colour
 from utilities import (
+    library_totals,
     UserMappings, format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_mention,
     viewer_name,
 )
 
 logger = logging.getLogger("plexbot.plex_stats")
-logger.setLevel(logging.INFO)
 
 _MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 _RANKED = 10
@@ -115,19 +115,12 @@ def top_card(rows, *, days: int, name: Callable[[dict], str], all_time: Optional
 
 
 def library_line(rows) -> Optional[str]:
-    movies = shows = episodes = watched = 0
-    for row in rows or []:
-        kind = row.get("section_type")
-        if kind == "movie":
-            movies += to_int(row.get("count"))
-        elif kind == "show":
-            shows += to_int(row.get("count"))
-            episodes += to_int(row.get("child_count"))
-        watched += to_int(row.get("duration"))
+    totals = library_totals(rows)
+    watched = sum(to_int(row.get("duration")) for row in rows or [])
     return join([
-        plural(movies, "movie") if movies else None,
-        plural(shows, "show") if shows else None,
-        plural(episodes, "episode") if episodes else None,
+        plural(totals["movies"], "movie") if totals["movies"] else None,
+        plural(totals["shows"], "show") if totals["shows"] else None,
+        plural(totals["episodes"], "episode") if totals["episodes"] else None,
         f"{format_duration(watched)} watched all time" if watched else None,
     ]) or None
 
@@ -504,19 +497,20 @@ class PlexStats(commands.Cog):
         await interaction.response.defer()
         days = days or 7
         since = datetime.now() - timedelta(days=days)
-        history_r, recent_r = await asyncio.gather(
-            self.tautulli.get_history({
-                "after": since.strftime("%Y-%m-%d"), "order_column": "date", "order_dir": "desc",
-                "length": to_int(config.get("defaults", "history_length", 10000), 10000),
+        rows, recent_r = await asyncio.gather(
+            self.tautulli.get_history_rows({
+                # Tautulli reads "after" as a date in its own timezone: start a day early, then cut
+                # off exactly below (as /plex chart does).
+                "after": (since.date() - timedelta(days=1)).isoformat(),
+                "order_column": "date", "order_dir": "desc",
             }),
             self.tautulli.get_recently_added(count=50),
         )
-        if not Tautulli.check_response(history_r):
+        if rows is None:
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
         cutoff, ignored = since.timestamp(), ignored_usernames()
-        history = [row for row in Tautulli.get_response_data(history_r, {}).get("data") or []
-                   if to_int(row.get("date")) >= cutoff and plex_username(row) not in ignored]
+        history = [row for row in rows if to_int(row.get("date")) >= cutoff and plex_username(row) not in ignored]
         if not history:
             await empty_state(f"Nobody's watched anything in the last {plural(days, 'day')}.").send(interaction)
             return

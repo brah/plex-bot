@@ -114,9 +114,7 @@ def migrate_config(legacy_json_config, bot_config_class, output_file="config.jso
         "tmdb": {
             "apikey": legacy_json_config.get("tmdb_apikey", ""),
         },
-        "defaults": {
-            "stats_duration": legacy_json_config.get("default_duration", 7),
-        },
+        "defaults": {},
     }
 
     # Migrate data from bot_config if available
@@ -124,17 +122,6 @@ def migrate_config(legacy_json_config, bot_config_class, output_file="config.jso
         # UI settings
         new_config["ui"] = {
             "plex_embed_color": getattr(bot_config_class, "PLEX_EMBED_COLOR", 0xE5A00D),
-            "plex_image": getattr(
-                bot_config_class,
-                "PLEX_IMAGE",
-                "https://images-na.ssl-images-amazon.com/images/I/61-kdNZrX9L.png",
-            ),
-            "qbit_embed_color": getattr(bot_config_class, "QBIT_EMBED_COLOR", 0x6C81DF),
-            "qbit_image": getattr(
-                bot_config_class,
-                "QBIT_IMAGE",
-                "https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/New_qBittorrent_Logo.svg/1200px-New_qBittorrent_Logo.svg.png",
-            ),
         }
 
         # Cache settings
@@ -147,7 +134,6 @@ def migrate_config(legacy_json_config, bot_config_class, output_file="config.jso
         new_config["defaults"].update(
             {
                 "recent_count": getattr(bot_config_class, "DEFAULT_RECENT_COUNT", 10),
-                "history_length": getattr(bot_config_class, "DEFAULT_HISTORY_LENGTH", 10000),
                 "time_range": getattr(bot_config_class, "DEFAULT_TIME_RANGE", 30),
             }
         )
@@ -157,8 +143,6 @@ def migrate_config(legacy_json_config, bot_config_class, output_file="config.jso
             "width": getattr(bot_config_class, "CHART_WIDTH", 14),
             "height": getattr(bot_config_class, "CHART_HEIGHT", 6),
             "dpi": getattr(bot_config_class, "CHART_DPI", 100),
-            "date_format": getattr(bot_config_class, "CHART_DATE_FORMAT", "%Y-%m-%d"),
-            "month_format": getattr(bot_config_class, "CHART_MONTH_FORMAT", "%b %Y"),
         }
 
         # Command settings
@@ -166,25 +150,11 @@ def migrate_config(legacy_json_config, bot_config_class, output_file="config.jso
             "recommendation_timeout": getattr(bot_config_class, "RECOMMENDATION_TIMEOUT", 180),
         }
 
-        # API settings
-        new_config["api"] = {
-            "max_concurrent_requests": getattr(bot_config_class, "MAX_CONCURRENT_REQUESTS", 10),
-            "request_timeout": getattr(bot_config_class, "API_REQUEST_TIMEOUT", 30),
-            "retry_limit": getattr(bot_config_class, "API_RETRY_LIMIT", 3),
-        }
-
-        # Media types mapping
-        if hasattr(bot_config_class, "MEDIA_TYPE_MAPPING"):
-            new_config["media_types"] = bot_config_class.MEDIA_TYPE_MAPPING
-
         # Visualization colors
         new_config["colors"] = {
             "plex_orange": getattr(bot_config_class, "PLEX_ORANGE", "#E5A00D"),
             "plex_grey_dark": getattr(bot_config_class, "PLEX_GREY_DARK", "#1B1B1B"),
         }
-
-        if hasattr(bot_config_class, "PLEX_COLORS"):
-            new_config["colors"]["media_types"] = bot_config_class.PLEX_COLORS
 
     # Save the new configuration
     output_path = Path(output_file)

@@ -19,7 +19,7 @@ from nextcord.ext import commands
 # Import our new configuration and error handling systems
 from config import config
 from errors import ErrorHandler
-from slash_commands import SlashGroups
+from slash_commands import SlashGroups, admin_check
 
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
@@ -88,31 +88,11 @@ async def initialize_resources():
 
 
 async def load_cogs(bot):
-    """Load all cogs from the cogs directory with proper dependency ordering."""
-    logger.info("Starting to load cogs with prioritized ordering")
-
-    # Priority loading order - these cogs must be loaded first (none at the moment)
-    priority_cogs = []
-
-    # Load priority cogs first
-    for cog_name in priority_cogs:
-        try:
-            bot.load_extension(cog_name)
-            logger.info(f"Loaded priority cog: {cog_name}")
-        except Exception as e:
-            logger.exception(f"Failed to load priority cog {cog_name}: {e}")
-
-    # Then load all remaining cogs
-    cog_directory = Path("cogs")
-    for cog_file in cog_directory.glob("*.py"):
+    """Load every cog in the cogs directory."""
+    for cog_file in sorted(Path("cogs").glob("*.py")):
         if cog_file.name.startswith("_"):
-            continue  # Skip any files that start with an underscore
-
-        cog_name = f"cogs.{cog_file.stem}"
-        # Skip cogs that were already loaded in priority list
-        if cog_name in priority_cogs:
             continue
-
+        cog_name = f"cogs.{cog_file.stem}"
         try:
             bot.load_extension(cog_name)
             logger.info(f"Loaded cog: {cog_name}")
@@ -128,6 +108,7 @@ def install_slash_groups(bot) -> None:
     across nextcord's READY state reset and every reconnect.
     """
     bot.add_cog(SlashGroups())
+    bot.add_application_command_check(admin_check)
 
 
 class PlexBot(commands.Bot):
@@ -174,7 +155,7 @@ class PlexBot(commands.Bot):
 
         logger.info("Closing shared resources...")
         resources = getattr(self, "shared_resources", None) or {}
-        for name in ("tautulli", "tmdb"):
+        for name in ("media_cache", "tautulli", "tmdb"):
             client = resources.get(name)
             if client is not None:
                 try:
@@ -191,6 +172,13 @@ def main():
     if not config.initialize():
         logger.error("Failed to initialize configuration system. Run migrate_config.py first if needed.")
         return
+
+    log_level = str(config.get("core", "log_level", "INFO")).upper()
+    if log_level not in logging.getLevelNamesMapping():
+        logger.warning(f"Unknown core.log_level {log_level!r}; using INFO.")
+        log_level = "INFO"
+    # The bot's own loggers only: DEBUG on the root would also flood the log with nextcord's gateway chatter.
+    logging.getLogger("plexbot").setLevel(log_level)
 
     # Get core configuration
     token = config.get("core", "token")
@@ -215,6 +203,8 @@ def main():
     else:
         guild_ids = None
         logger.info("No discord.server_id set; slash commands register globally (may take up to an hour).")
+        if not config.get("discord", "admin_ids", []):
+            logger.warning("Neither discord.server_id nor discord.admin_ids is set, so nobody can use /plexadmin.")
 
     bot = PlexBot(
         command_prefix=[bot_prefix, bot_prefix.title()],

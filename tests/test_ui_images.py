@@ -25,9 +25,15 @@ def png(colour=(255, 0, 0), size=(200, 300)) -> bytes:
 
 
 class FakeTautulli:
-    tautulli_ip = "host:8181"
-    use_https = False
-    api_key = "key"
+    """Records image requests; answers with `image` (bytes, None, or a coroutine function)."""
+
+    def __init__(self, image=b"img"):
+        self.image = image
+        self.calls = []
+
+    async def get_image(self, key, width=300, height=450, fallback=None):
+        self.calls.append((key, width, height, fallback))
+        return await self.image() if callable(self.image) else self.image
 
 
 class TestAttachment:
@@ -55,46 +61,28 @@ class TestMascot:
 
 
 class TestPlexImage:
-    def test_wraps_fetch(self, monkeypatch):
-        calls = {}
-
-        async def fake_fetch(ip, key, width, height, *, use_https, api_key, fallback):
-            calls.update(ip=ip, key=key, width=width, height=height, fallback=fallback)
-            return io.BytesIO(b"img")
-
-        monkeypatch.setattr(images, "fetch_plex_image", fake_fetch)
-        result = asyncio.run(plex_image(FakeTautulli(), "/library/1/thumb", filename="p.jpg"))
+    def test_wraps_get_image(self):
+        tautulli = FakeTautulli()
+        result = asyncio.run(plex_image(tautulli, "/library/1/thumb", filename="p.jpg"))
         assert result == Attachment("p.jpg", b"img")
-        assert calls == dict(
-            ip="host:8181", key="/library/1/thumb", width=300, height=450, fallback=None
-        )
+        assert tautulli.calls == [("/library/1/thumb", 300, 450, None)]
 
-    def test_explicit_fallback_is_passed_through(self, monkeypatch):
-        seen = []
+    def test_explicit_fallback_is_passed_through(self):
+        tautulli = FakeTautulli()
+        asyncio.run(plex_image(tautulli, "/x", filename="p.jpg", fallback="poster"))
+        assert tautulli.calls[0][3] == "poster"
 
-        async def fake_fetch(ip, key, width, height, *, use_https, api_key, fallback):
-            seen.append(fallback)
-            return io.BytesIO(b"img")
-
-        monkeypatch.setattr(images, "fetch_plex_image", fake_fetch)
-        asyncio.run(plex_image(FakeTautulli(), "/x", filename="p.jpg", fallback="poster"))
-        assert seen == ["poster"]
-
-    def test_missing_key_or_failed_fetch_is_none(self, monkeypatch):
-        async def failed(*args, **kwargs):
-            return None
-
-        monkeypatch.setattr(images, "fetch_plex_image", failed)
-        assert asyncio.run(plex_image(FakeTautulli(), "", filename="p.jpg")) is None
-        assert asyncio.run(plex_image(FakeTautulli(), "/x", filename="p.jpg")) is None
+    def test_missing_key_or_failed_fetch_is_none(self):
+        tautulli = FakeTautulli(image=None)
+        assert asyncio.run(plex_image(tautulli, "", filename="p.jpg")) is None
+        assert asyncio.run(plex_image(tautulli, "/x", filename="p.jpg")) is None
 
     def test_slow_fetch_gives_up(self, monkeypatch):
-        async def hangs(*args, **kwargs):
+        async def hangs():
             await asyncio.sleep(10)
 
-        monkeypatch.setattr(images, "fetch_plex_image", hangs)
         monkeypatch.setattr(images, "IMAGE_TIMEOUT", 0.05)
-        assert asyncio.run(plex_image(FakeTautulli(), "/x", filename="p.jpg")) is None
+        assert asyncio.run(plex_image(FakeTautulli(image=hangs), "/x", filename="p.jpg")) is None
 
 
 class TestSessionImages:
@@ -105,19 +93,13 @@ class TestSessionImages:
         assert poster_key({"media_type": "movie", "thumb": "/movie"}) == "/movie"
         assert poster_key({"media_type": "movie"}) is None
 
-    def test_current_frame_needs_preview_thumbnails(self, monkeypatch):
-        seen = []
-
-        async def fake_fetch(ip, key, width, height, *, use_https, api_key, fallback):
-            seen.append((key, width, height, fallback))
-            return io.BytesIO(b"frame")
-
-        monkeypatch.setattr(images, "fetch_plex_image", fake_fetch)
+    def test_current_frame_needs_preview_thumbnails(self):
+        tautulli = FakeTautulli(image=b"frame")
         with_index = {"bif_thumb": "/library/parts/9/indexes/sd/60000", "indexes": 1}
-        assert asyncio.run(current_frame(FakeTautulli(), with_index)).data == b"frame"
-        assert seen == [("/library/parts/9/indexes/sd/60000", 640, 360, None)]
-        assert asyncio.run(current_frame(FakeTautulli(), {"bif_thumb": "/x", "indexes": 0})) is None
-        assert asyncio.run(current_frame(FakeTautulli(), {"indexes": 1})) is None
+        assert asyncio.run(current_frame(tautulli, with_index)).data == b"frame"
+        assert tautulli.calls == [("/library/parts/9/indexes/sd/60000", 640, 360, None)]
+        assert asyncio.run(current_frame(tautulli, {"bif_thumb": "/x", "indexes": 0})) is None
+        assert asyncio.run(current_frame(tautulli, {"indexes": 1})) is None
 
 
 class TestPosterStrip:
@@ -163,21 +145,15 @@ def test_mascot_slots_are_named_consistently(slot):
 
 
 class FakeImageSession:
-    """Stands in for aiohttp.ClientSession; records the params of the image request."""
+    """Stands in for Tautulli's aiohttp session; records the params of each image request."""
 
-    requests = []
+    closed = False
 
-    def __init__(self, *args, **kwargs):
-        pass
+    def __init__(self):
+        self.requests = []
 
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    def get(self, url, params=None):
-        FakeImageSession.requests.append(dict(params or {}))
+    def get(self, url, params=None, timeout=None):
+        self.requests.append(params)
 
         class Response:
             status = 200
@@ -195,14 +171,14 @@ class FakeImageSession:
         return Response()
 
 
-@pytest.mark.parametrize("kwargs, expected", [({}, "poster"), ({"fallback": None}, None)])
-def test_fetch_plex_image_fallback_param(monkeypatch, kwargs, expected):
-    import utilities
+@pytest.mark.parametrize("kwargs, expected", [({"fallback": "poster"}, "poster"), ({}, None)])
+def test_get_image_fallback_param(kwargs, expected):
+    from tautulli_wrapper import Tautulli
 
-    FakeImageSession.requests = []
-    monkeypatch.setattr(utilities.aiohttp, "ClientSession", FakeImageSession)
-    result = asyncio.run(utilities.fetch_plex_image("host:8181", "/library/x", api_key="key", **kwargs))
-    assert result is not None and result.read() == b"jpeg"
-    (params,) = FakeImageSession.requests
+    tautulli = Tautulli(api_key="key", tautulli_ip="host:8181")
+    tautulli.session = FakeImageSession()  # the client's own session, reused for every image
+    assert asyncio.run(tautulli.get_image("/library/x", **kwargs)) == b"jpeg"
+    (params,) = tautulli.session.requests
+    assert params["img"] == "/library/x" and params["cmd"] == "pms_image_proxy"
     assert params.get("fallback") == expected
     assert ("fallback" in params) is (expected is not None)

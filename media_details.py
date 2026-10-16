@@ -46,20 +46,11 @@ def watch_stats(user_rows, time_rows, display_name, ignored: set) -> str:
 
 
 class MediaDetails:
-    """Renders an item's card from Tautulli; keeps the server id for app.plex.tv links."""
+    """Renders an item's card from Tautulli."""
 
     def __init__(self, bot, tautulli):
         self.bot = bot
         self.tautulli = tautulli
-        self._pms_identifier: Optional[str] = None
-
-    async def server_id(self) -> Optional[str]:
-        """The Plex server's machine identifier (cached)."""
-        if self._pms_identifier is None:
-            response = await self.tautulli.get_server_info()
-            if Tautulli.check_response(response):
-                self._pms_identifier = Tautulli.get_response_data(response, {}).get("pms_identifier") or ""
-        return self._pms_identifier or None
 
     async def render(self, rating_key: str, footer: Optional[str] = None) -> Optional[Reply]:
         """The item's card with its watch stats; None when Tautulli has no such item.
@@ -70,7 +61,7 @@ class MediaDetails:
             self.tautulli.get_metadata(rating_key),
             self.tautulli.get_item_user_stats(rating_key),
             self.tautulli.get_item_watch_time_stats(rating_key),
-            self.server_id(),
+            self.tautulli.server_id(),
         )
         if not Tautulli.check_response(metadata_r):
             raise TautulliUnavailable()

@@ -20,6 +20,34 @@ the cog whose class defines it::
 import nextcord
 from nextcord.ext import commands
 
+from config import config
+
+
+def listed(user, ids) -> bool:
+    """Whether the user, or one of their roles, is in a list of Discord IDs (ints or digit strings)."""
+    wanted = {int(raw) for raw in ids or [] if str(raw).strip().isdigit()}
+    return user.id in wanted or any(role.id in wanted for role in getattr(user, "roles", []))
+
+
+def is_admin(user, guild_id) -> bool:
+    """Bot admins: anyone in discord.admin_ids, plus Discord administrators of discord.server_id.
+
+    Administrator of any other server doesn't count: anyone can invite a public bot to their own
+    server, so with no server_id set only discord.admin_ids grants admin.
+    """
+    if listed(user, config.get("discord", "admin_ids", [])):
+        return True
+    server_id = str(config.get("discord", "server_id") or "").strip()
+    permissions = getattr(user, "guild_permissions", None)
+    return bool(server_id) and str(guild_id) == server_id and bool(permissions and permissions.administrator)
+
+
+def admin_check(interaction: nextcord.Interaction) -> bool:
+    """Global check: /plexadmin needs a bot admin. Discord's own permission only hides the command."""
+    if (interaction.data or {}).get("name") != "plexadmin":
+        return True
+    return is_admin(interaction.user, interaction.guild_id)
+
 
 class SlashGroups(commands.Cog):
     """Owns the /plex and /plexadmin group roots.

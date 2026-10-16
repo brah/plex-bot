@@ -17,6 +17,7 @@ from nextcord.ext import commands, tasks
 from config import config
 from errors import LoggedModal, LoggedView
 from utilities import (
+    library_totals,
     get_git_revision_short_hash,
     get_git_revision_short_hash_latest,
     ignored_usernames,
@@ -24,7 +25,7 @@ from utilities import (
     viewer_mention,
 )
 from plex_status import PlexStatus, card_summary, fetch_status, services_card
-from slash_commands import plex, plexadmin
+from slash_commands import is_admin, listed, plex, plexadmin
 from tautulli_wrapper import Tautulli
 from ui.cards import (
     plex_web_link, recent_viewer_entry, session_title, session_user, stream_detail, stream_overview,
@@ -38,7 +39,6 @@ from ui.theme import Colour
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
-logger.setLevel(logging.INFO)
 
 # --- /plexadmin logs helpers ---------------------------------------------------------
 
@@ -219,20 +219,9 @@ def _session_choices(sessions: list[dict], query: str) -> dict[str, str]:
     return choices
 
 
-def _can_manage_streams(user, manager_ids) -> bool:
-    """Admins, plus any user or role listed in discord.stream_manager_ids, may stop streams."""
-    permissions = getattr(user, "guild_permissions", None)
-    if permissions is not None and permissions.administrator:
-        return True
-    ids = set()
-    for raw in manager_ids or []:
-        try:
-            ids.add(int(raw))
-        except (TypeError, ValueError):
-            continue
-    if user.id in ids:
-        return True
-    return any(role.id in ids for role in getattr(user, "roles", []))
+def _can_manage_streams(user, guild_id, manager_ids) -> bool:
+    """Bot admins, plus any user or role listed in discord.stream_manager_ids, may stop streams."""
+    return is_admin(user, guild_id) or listed(user, manager_ids)
 
 
 def _find_session(activity: dict, session_id: str) -> dict | None:
@@ -283,7 +272,7 @@ class StreamDetailView(LoggedView):
 
     @nextcord.ui.button(label="Stop this stream", emoji="\U0001F6D1", style=nextcord.ButtonStyle.danger)
     async def stop_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        if not self.cog.can_manage(interaction.user):
+        if not self.cog.can_manage(interaction):
             await error_state(ErrorKind.PERMISSION, _NO_STREAM_PERMISSION).send(interaction, ephemeral=True)
             return
         await interaction.response.send_modal(
@@ -365,22 +354,6 @@ class WatchersView(LoggedView):
 
 
 # --- /plex status helpers ----------------------------------------------------
-
-
-def library_totals(rows) -> dict:
-    """Sum Tautulli's get_libraries rows into movie, show, episode, artist and track counts."""
-    totals = {"movies": 0, "shows": 0, "episodes": 0, "artists": 0, "tracks": 0}
-    for row in rows or []:
-        kind = row.get("section_type")
-        if kind == "movie":
-            totals["movies"] += to_int(row.get("count"))
-        elif kind == "show":
-            totals["shows"] += to_int(row.get("count"))
-            totals["episodes"] += to_int(row.get("child_count"))
-        elif kind == "artist":
-            totals["artists"] += to_int(row.get("count"))
-            totals["tracks"] += to_int(row.get("child_count"))
-    return totals
 
 
 # Library sizes: Tautulli's media info is slow to build the first time, so wait briefly and
@@ -579,7 +552,6 @@ class ServerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
-        self._pms_identifier: str | None = None  # cached by _server_id()
         self._section_sizes: dict[str, tuple[float, int]] = {}  # section_id -> (fetched at, bytes)
         self._display_streams = True  # presence alternates between stream stats and a help hint
         self.status_task.start()  # type: ignore[attr-defined]
@@ -711,7 +683,6 @@ class ServerCommands(commands.Cog):
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
         server = Tautulli.get_response_data(server_r, {})
-        self._pms_identifier = server.get("pms_identifier") or self._pms_identifier
 
         reply = build_status_reply(
             server, libraries, data(activity_r, None), data(update_r, None), plex_status,
@@ -725,8 +696,9 @@ class ServerCommands(commands.Cog):
 
     # --- /plex watchers ----------------------------------------------------
 
-    def can_manage(self, user) -> bool:
-        return _can_manage_streams(user, config.get("discord", "stream_manager_ids", []))
+    def can_manage(self, interaction: nextcord.Interaction) -> bool:
+        return _can_manage_streams(interaction.user, interaction.guild_id,
+                                   config.get("discord", "stream_manager_ids", []))
 
     async def fetch_activity(self) -> dict | None:
         response = await self.tautulli.get_activity()
@@ -778,14 +750,6 @@ class ServerCommands(commands.Cog):
         )
         return Reply([embed], [strip] if strip else [], view=view)
 
-    async def _server_id(self) -> str | None:
-        """The Plex server's machine identifier, for app.plex.tv links (cached)."""
-        if self._pms_identifier is None:
-            response = await self.tautulli.get_server_info()
-            if Tautulli.check_response(response):
-                self._pms_identifier = Tautulli.get_response_data(response, {}).get("pms_identifier") or ""
-        return self._pms_identifier or None
-
     async def show_stream_detail(self, interaction: nextcord.Interaction, session_id: str,
                                  watchers_view: "WatchersView") -> None:
         await interaction.response.defer(ephemeral=True, with_message=True)
@@ -812,13 +776,13 @@ class ServerCommands(commands.Cog):
         embed = stream_detail(
             session,
             avatar_url=viewer_avatar(self.bot, session),
-            link=plex_web_link(await self._server_id(), session.get("rating_key")),
+            link=plex_web_link(await self.tautulli.server_id(), session.get("rating_key")),
             frame=frame,
             poster=poster,
             now=nextcord.utils.utcnow(),
         )
         view = StreamDetailView(self, session_id, _session_label(session), watchers_view,
-                                can_stop=self.can_manage(interaction.user))
+                                can_stop=self.can_manage(interaction))
         await Reply([embed], [a for a in (frame, poster) if a], view=view).send(interaction, ephemeral=True)
 
     async def stop_stream(self, actor, session_id: str, message: str | None) -> tuple[bool, str]:
@@ -855,7 +819,7 @@ class ServerCommands(commands.Cog):
         ),
     ):
         if stop:
-            if not self.can_manage(interaction.user):
+            if not self.can_manage(interaction):
                 await error_state(ErrorKind.PERMISSION, _NO_STREAM_PERMISSION).send(
                     interaction, ephemeral=True
                 )
@@ -877,7 +841,7 @@ class ServerCommands(commands.Cog):
 
     @watchers.on_autocomplete("stop")
     async def _watchers_stop_autocomplete(self, interaction: nextcord.Interaction, stop: str):
-        if not self.can_manage(interaction.user):
+        if not self.can_manage(interaction):
             await interaction.response.send_autocomplete({})
             return
         activity = await self.fetch_activity()

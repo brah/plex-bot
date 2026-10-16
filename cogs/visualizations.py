@@ -15,7 +15,6 @@ import tzlocal
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
-from config import config
 from plex_users import PlexUsers
 from slash_commands import plex
 from tautulli_wrapper import Tautulli
@@ -26,7 +25,6 @@ from ui.theme import Colour, Limits, brand_colour
 from utilities import ignored_usernames, plex_username, viewer_avatar, viewer_name
 
 logger = logging.getLogger("plexbot.visualizations")
-logger.setLevel(logging.INFO)
 
 Play = Tuple[datetime, dict]  # when it started (in the server's timezone), the history row
 Chart = Tuple[str, Callable]  # the one-line takeaway, and a no-argument renderer for a worker thread
@@ -179,18 +177,17 @@ class Visualizations(commands.Cog):
         params = {
             # Tautulli's "after" is a whole date; the exact cutoff is applied below.
             "after": (since.date() - timedelta(days=1)).isoformat(),
-            "length": to_int(config.get("defaults", "history_length", 10000), 10000),
             "order_column": "date", "order_dir": "desc",
         }
         if person:
             params["user_id"] = person.get("user_id")
-        response = await self.tautulli.get_history(params)
-        if not Tautulli.check_response(response):
+        rows = await self.tautulli.get_history_rows(params)
+        if rows is None:
             logger.error("Failed to retrieve watch history from Tautulli.")
             return None
         ignored = set() if person else ignored_usernames()
         plays = []
-        for row in (Tautulli.get_response_data(response, {}) or {}).get("data") or []:
+        for row in rows:
             started = to_int(row.get("started")) or to_int(row.get("date"))
             if not started or plex_username(row) in ignored:
                 continue

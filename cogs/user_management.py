@@ -14,14 +14,13 @@ from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
 from plex_users import PlexUsers
-from slash_commands import plexadmin
+from slash_commands import is_admin, plexadmin
 from ui.embeds import ErrorKind, Reply, card, error_state, service_down, success
 from ui.format import join, plural, truncate
 from ui.theme import Colour, Limits
 from utilities import MappingsUnavailable, UserMappings
 
 logger = logging.getLogger("plexbot.user_management")
-logger.setLevel(logging.INFO)
 
 _UNREADABLE = (
     "map.json couldn't be read, so nothing can be changed until it's fixed (saving would wipe it)."
@@ -218,11 +217,17 @@ class UserManagement(commands.Cog):
     @link.on_autocomplete("plex_user")
     @ignore.on_autocomplete("plex_user")
     async def _plex_user_autocomplete(self, interaction: nextcord.Interaction, plex_user: str):
-        await interaction.response.send_autocomplete(await self._choices(plex_user))
+        await self._autocomplete(interaction, plex_user)
 
     @unlink.on_autocomplete("plex_user")
     async def _linked_user_autocomplete(self, interaction: nextcord.Interaction, plex_user: str):
-        await interaction.response.send_autocomplete(await self._choices(plex_user, linked_only=True))
+        await self._autocomplete(interaction, plex_user, linked_only=True)
+
+    async def _autocomplete(self, interaction: nextcord.Interaction, typed: str, *, linked_only=False):
+        # Command checks don't run for autocomplete, so the user list needs its own gate.
+        choices = await self._choices(typed, linked_only=linked_only) if is_admin(
+            interaction.user, interaction.guild_id) else {}
+        await interaction.response.send_autocomplete(choices)
 
 
 def setup(bot):

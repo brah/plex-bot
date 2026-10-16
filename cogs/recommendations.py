@@ -26,7 +26,6 @@ from ui.theme import Limits, brand_colour
 from utilities import UserMappings, ignored_usernames
 
 logger = logging.getLogger("plexbot.recommendations")
-logger.setLevel(logging.INFO)
 
 _PICKS = 3
 _TOP_GENRES = 3
