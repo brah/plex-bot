@@ -234,7 +234,7 @@ Every command is a slash command: type `/plex` in Discord to see them all. Admin
 | `/plex downloading` | What qBittorrent is downloading, with progress and time left |
 | `/plex recommend [member]` | Three unwatched picks in someone's favourite genres (default: you); the numbered buttons open each pick |
 | `/plex top [days]` | Top watchers by watch time, with medals. Defaults to the last 7 days; that default ranking also updates the top-three roles |
-| `/plex stats [days]` | Library totals and the most popular movies and shows, with posters |
+| `/plex stats [days]` | Server stats in four pages (Overview, Movies, TV, Users) behind buttons: plays and watch time per type, the most popular titles with posters, top platforms, peak concurrent streams, per-library breakdowns, library totals, and the top viewers of all time |
 | `/plex shows` | Top TV watchers of all time |
 | `/plex history [user]` | Recent plays on the server, or one person's (names are suggested as you type) |
 | `/plex hot [days]` | What's been popular lately: trending titles, new hits, most active, binges |

@@ -13,12 +13,13 @@ from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
 from config import config
+from errors import LoggedView
 from plex_users import PlexUsers
 from slash_commands import plex
 from tautulli_wrapper import Tautulli
 from ui.cards import media_icon, recent_viewer_line, session_title
-from ui.embeds import Reply, card, empty_state, service_down
-from ui.format import join, plural, to_int, truncate
+from ui.embeds import Reply, bot_token_handle, card, empty_state, service_down
+from ui.format import join, plural, timestamp, to_int, truncate
 from ui.images import plex_image, poster_key, poster_strip
 from ui.theme import Colour, Limits, brand_colour
 from utilities import (
@@ -137,22 +138,183 @@ def popular_lines(rows, limit: int = 5) -> Optional[str]:
     return "\n".join(lines) or None
 
 
-def stats_card(libraries, movies, shows, *, days: int, strip) -> nextcord.Embed:
-    """The popular titles for the window, with the all-time library totals tucked into the footer."""
-    window = f"last {plural(days, 'day')}"
-    embed = card(title="📊 Server stats", colour=brand_colour())
+_POPULAR = 10  # titles on the movie and TV pages
+_TEASER = 3  # of those, on the overview
+_WATCH_TIME = 5
+_PLATFORMS = 3
+_ALL_TIME = 36500  # days: home stats has no "all time" option
+# The home-stats cards /plex stats reads, with their extra get_home_stats params.
+_STATS = {
+    "popular_movies": {"stats_count": _POPULAR},
+    "popular_tv": {"stats_count": _POPULAR},
+    "top_tv": {"stats_count": _WATCH_TIME, "stats_type": "duration"},
+    "top_libraries": {"stats_count": 50},  # every library, so the per-type sums are whole
+    "top_platforms": {"stats_count": _PLATFORMS},
+    "most_concurrent": {},
+    # The Users page is all time, whatever the days option.
+    # shortcut: the viewer count and total stop at 100 viewers; page the stat if a server has more.
+    "top_users": {"stats_count": 100, "stats_type": "duration", "time_range": _ALL_TIME},
+}
+_SECTION_KINDS = {"movie": "🎬 Movies", "show": "📺 TV", "artist": "🎵 Music"}
+
+
+def _usage(rows) -> tuple:
+    """Plays and seconds watched, summed over top_libraries rows."""
+    return (sum(to_int(row.get("total_plays")) for row in rows),
+            sum(to_int(row.get("total_duration")) for row in rows))
+
+
+def _usage_line(rows) -> Optional[str]:
+    plays, seconds = _usage(rows)
+    return f"**{plural(plays, 'play')}** · **{format_duration(seconds)}** watched" if plays else None
+
+
+def peak_line(rows) -> Optional[str]:
+    """The most streams at once in the window, and when ("6 streams at once · <date>")."""
+    streams = next((row for row in rows if row.get("title") == "Concurrent Streams"), None)
+    count = to_int((streams or {}).get("count"))
+    if not count:
+        return None
+    started = to_int(streams.get("started"))
+    return join([f"{plural(count, 'stream')} at once", timestamp(started, "d") if started else None])
+
+
+def platform_lines(rows) -> Optional[str]:
+    return "\n".join(
+        f"**{_escaped(row.get('platform'), 40)}** · {plural(to_int(row.get('total_plays')), 'play')}"
+        for row in rows[:_PLATFORMS]
+    ) or None
+
+
+def watch_time_lines(rows) -> Optional[str]:
+    return "\n".join(
+        f"`{rank}.` **{_escaped(session_title(row))}** · {format_duration(to_int(row.get('total_duration')))}"
+        for rank, row in enumerate(rows[:_WATCH_TIME], 1)
+    ) or None
+
+
+def overview_card(stats: dict, libraries, *, days: int, strip) -> nextcord.Embed:
+    """The window at a glance: plays per media type, the top three of each, platforms, the busiest moment."""
+    by_kind = defaultdict(list)
+    for row in stats["top_libraries"]:
+        by_kind[row.get("section_type")].append(row)
+    embed = card(title="📊 Server stats", colour=brand_colour(), description=join([
+        f"-# Last {plural(days, 'day')}", _usage_line(stats["top_libraries"]),
+    ], sep="\n"))
+    for kind, heading in _SECTION_KINDS.items():
+        if by_kind[kind]:
+            plays, seconds = _usage(by_kind[kind])
+            embed.add_field(name=heading, value=f"{plural(plays, 'play')}\n{format_duration(seconds)}", inline=True)
+    movies, shows = stats["popular_movies"], stats["popular_tv"]
     for heading, rows in (("🎬 Top movies", movies), ("📺 Top shows", shows)):
-        lines = popular_lines(rows)
+        lines = popular_lines(rows, _TEASER)
         if lines:
-            embed.add_field(name=f"{heading} · {window}", value=truncate(lines, Limits.FIELD_VALUE), inline=False)
+            embed.add_field(name=heading, value=truncate(lines, Limits.FIELD_VALUE), inline=False)
     if not (movies or shows):
-        embed.add_field(name="Top titles", value=f"Nothing was watched in the {window}.", inline=False)
+        embed.add_field(name="Top titles", value=f"Nothing was watched in the last {plural(days, 'day')}.",
+                        inline=False)
+    for heading, value in (("📱 Platforms", platform_lines(stats["top_platforms"])),
+                           ("📈 Busiest", peak_line(stats["most_concurrent"]))):
+        if value:
+            embed.add_field(name=heading, value=value, inline=True)
     if strip:
         embed.set_image(url=strip.url)
     totals = library_line(libraries)
     if totals:
         embed.set_footer(text=totals)
     return embed
+
+
+def media_card(kind: str, stats: dict, libraries, *, days: int, strip) -> nextcord.Embed:
+    """The movie (kind "movie") or TV ("show") page: the top ten, per-library plays and library totals."""
+    movie = kind == "movie"
+    sections = [row for row in stats["top_libraries"] if row.get("section_type") == kind]
+    embed = card(
+        title="🎬 Movie stats" if movie else "📺 TV stats", colour=Colour.MOVIE if movie else Colour.TV,
+        description=join([f"-# Last {plural(days, 'day')}", _usage_line(sections)], sep="\n"),
+    )
+    popular = popular_lines(stats["popular_movies" if movie else "popular_tv"], _POPULAR)
+    embed.add_field(name="🔥 Most popular", inline=False, value=truncate(
+        popular or f"Nothing was watched in the last {plural(days, 'day')}.", Limits.FIELD_VALUE))
+    # For movies this is nearly the list above; for TV it's where the binges show.
+    watch_time = None if movie else watch_time_lines(stats["top_tv"])
+    if watch_time:
+        embed.add_field(name="⏱️ Most watch time", value=truncate(watch_time, Limits.FIELD_VALUE), inline=False)
+    if len(sections) > 1:
+        lines = "\n".join(
+            join([f"**{_escaped(row.get('section_name'), 40)}**", plural(to_int(row.get("total_plays")), "play"),
+                  format_duration(to_int(row.get("total_duration")))])
+            for row in sections
+        )
+        embed.add_field(name="📚 By library", value=truncate(lines, Limits.FIELD_VALUE), inline=False)
+    if strip:
+        embed.set_image(url=strip.url)
+    totals = library_line([row for row in libraries if row.get("section_type") == kind])
+    if totals:
+        embed.set_footer(text=totals)
+    return embed
+
+
+def users_card(rows, *, name: Callable[[dict], str], avatar: Optional[str]) -> nextcord.Embed:
+    """The Users page: all-time watch time and plays per viewer, the top three with what they last watched."""
+    lines = ["-# All time · by watch time", ""]
+    for rank, row in enumerate(rows[:_RANKED], 1):
+        if rank == _PODIUM + 1:
+            lines.append("")
+        lines.append(join([f"{rank_prefix(rank)} **{name(row)}**", format_duration(to_int(row.get("total_duration"))),
+                           plural(to_int(row.get("total_plays")), "play")]))
+        last, when = _last_watched(row), to_int(row.get("last_play"))
+        if last and rank <= _PODIUM:
+            lines.append(join([f"-# Last watched {_escaped(last)}", timestamp(when) if when else None]))
+    if not rows:
+        lines.append("Nobody's watched anything yet.")
+    embed = card(title="👥 User stats", description="\n".join(lines), colour=Colour.GOLD)
+    if avatar:
+        embed.set_thumbnail(url=avatar)
+    if rows:
+        total = sum(to_int(row.get("total_duration")) for row in rows)
+        embed.set_footer(text=f"{plural(len(rows), 'viewer')} · {format_duration(total)} together")
+    return embed
+
+
+_PAGE_EMOJI = {"Overview": "📊", "Movies": "🎬", "TV": "📺", "Users": "👥"}
+
+
+class StatsPageButton(nextcord.ui.Button):
+    def __init__(self, label: str):
+        super().__init__(label=label, emoji=_PAGE_EMOJI[label], style=nextcord.ButtonStyle.secondary)
+
+    async def callback(self, interaction: nextcord.Interaction):
+        view: StatsView = self.view
+        view.message = interaction.message  # bot-token handle; the command's webhook expires
+        await interaction.response.edit_message(**view.show(self.label).edit_payload())
+
+
+class StatsView(LoggedView):
+    """Page buttons under the public /plex stats message. Anyone can flip it; the data was fetched once."""
+
+    def __init__(self, pages: dict, timeout: float = 600):
+        """pages: _PAGE_EMOJI label -> (embed, poster strip or None), in button order."""
+        super().__init__(timeout=timeout)
+        self.pages = {label: Reply([embed], [strip] if strip else [], view=self)
+                      for label, (embed, strip) in pages.items()}
+        self.message = None
+        for label in pages:
+            self.add_item(StatsPageButton(label))
+
+    def show(self, label: str) -> Reply:
+        """The page's reply, with its button highlighted."""
+        for button in self.children:
+            button.style = nextcord.ButtonStyle.primary if button.label == label else nextcord.ButtonStyle.secondary
+        return self.pages[label]
+
+    async def on_timeout(self):
+        # Expired controls are removed; the page on show stays.
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except nextcord.HTTPException:
+                pass
 
 
 # --- /plex shows -----------------------------------------------------------------
@@ -395,7 +557,7 @@ class PlexStats(commands.Cog):
 
     # --- /plex stats -------------------------------------------------------------
 
-    @plex.subcommand(description="Library totals and the most popular movies and shows")
+    @plex.subcommand(description="Server stats, with pages for movies and TV")
     async def stats(
         self,
         interaction: nextcord.Interaction,
@@ -405,22 +567,33 @@ class PlexStats(commands.Cog):
     ):
         await interaction.response.defer()
         days = days or to_int(config.get("defaults", "time_range", 30), 30)
-        movies_r, shows_r, libraries_r = await asyncio.gather(
-            self.tautulli.get_most_watched_movies(time_range=days),
-            self.tautulli.get_most_watched_shows(time_range=days),
+        *responses, libraries_r = await asyncio.gather(
+            *(self.tautulli.get_home_stats(params={"stat_id": stat_id, "time_range": days, **params})
+              for stat_id, params in _STATS.items()),
             self.tautulli.get_libraries_table(),
         )
-        movies, shows = self._rows(movies_r), self._rows(shows_r)
-        if movies is None and shows is None:
+        stats = {stat_id: self._rows(response) for stat_id, response in zip(_STATS, responses)}
+        if all(rows is None for rows in stats.values()):
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
-        movies, shows = movies or [], shows or []
+        stats = {stat_id: rows or [] for stat_id, rows in stats.items()}
         libraries = []
         if Tautulli.check_response(libraries_r):
             libraries = (Tautulli.get_response_data(libraries_r, {}) or {}).get("data") or []
-        strip = await _poster_strip(self.tautulli, movies[:3] + shows[:3])
-        embed = stats_card(libraries, movies, shows, days=days, strip=strip)
-        await Reply([embed], [strip] if strip else []).send(interaction)
+        movies, shows = stats["popular_movies"], stats["popular_tv"]
+        ignored = ignored_usernames()
+        users = [row for row in stats["top_users"] if plex_username(row) not in ignored]
+        strips = await asyncio.gather(*(
+            _poster_strip(self.tautulli, rows) for rows in (movies[:3] + shows[:3], movies, shows)
+        ))
+        view = StatsView({
+            "Overview": (overview_card(stats, libraries, days=days, strip=strips[0]), strips[0]),
+            "Movies": (media_card("movie", stats, libraries, days=days, strip=strips[1]), strips[1]),
+            "TV": (media_card("show", stats, libraries, days=days, strip=strips[2]), strips[2]),
+            "Users": (users_card(users, name=self._mention,
+                                 avatar=viewer_avatar(self.bot, users[0]) if users else None), None),
+        })
+        view.message = bot_token_handle(interaction, await view.show("Overview").send(interaction))
 
     # --- /plex shows -------------------------------------------------------------
 
