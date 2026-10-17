@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Unbuffered stdout/stderr so `docker logs` is live; no .pyc clutter in layers.
 ENV PYTHONUNBUFFERED=1 \
