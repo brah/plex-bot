@@ -33,6 +33,7 @@ CI (`.github/workflows/ci.yml`) runs ruff, a compileall smoke test over a hard-c
 
 - `config.json`, `map.json` and `cache/` hold secrets or user data and are gitignored (`*.json` except `config.example.json`). Never commit them or print their secrets.
 - README screenshots (`docs/screenshots/`) are static images and must never show real Plex or Discord user names.
+- `docs/social/preview.png` is the GitHub social preview, rendered from `preview.html` with headless Edge at `--window-size=1280,640`. It is uploaded by hand under Settings → General (no API).
 - When a command changes, update the README commands table.
 - Don't drop user-visible features in cosmetic changes. README prose is plain, user-facing English.
 

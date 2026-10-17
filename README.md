@@ -1,5 +1,12 @@
 # Plex-Bot
 
+[![CI](https://github.com/brah/plex-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/brah/plex-bot/actions/workflows/ci.yml)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/github/license/brah/plex-bot)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](#deployment)
+
+**[Setup](#setup)** · **[Configuration](#configuration)** · **[Commands](#commands)** · **[Deployment](#deployment)** · **[Troubleshooting](#troubleshooting)**
+
 A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautulli/Tautulli) and answers with slash commands: who's watching, what's popular, who watches most, charts, recommendations and library lookups.
 
 <table>
@@ -162,3 +169,7 @@ Tests need neither Discord nor Tautulli.
 ## A note on AI
 
 This is a hobby project, so don't be surprised to find AI in the commits. Use whatever tools help you build and contribute.
+
+## License
+
+[MIT](LICENSE)

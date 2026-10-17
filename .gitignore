@@ -140,6 +140,7 @@ dmypy.json
 # AI / ML
 repomix-output.txt
 repomix-output.xml
-# Agent worktrees and plan-execution scratch
+# Agent worktrees, plan-execution scratch and AI planning docs (local only)
 .claude/worktrees/
 .superpowers/
+docs/superpowers/
