@@ -122,6 +122,24 @@ def test_ctrl_c_still_exits_cleanly(monkeypatch):
     plexbot.main()  # no SystemExit
 
 
+@pytest.mark.parametrize("legacy", [None, True])
+def test_message_content_intent_only_for_legacy_text_commands(monkeypatch, legacy):
+    from types import SimpleNamespace
+
+    plexbot = _patch_main_config(monkeypatch)
+    get = plexbot.config.get
+    monkeypatch.setattr(plexbot.config, "get", lambda section, key, default=None: (
+        legacy if (section, key) == ("core", "legacy_text_commands") else get(section, key, default)))
+    seen = {}
+    monkeypatch.setattr(plexbot.PlexBot, "run", lambda self, token: seen.update(bot=self))
+    plexbot.main()
+    bot = seen["bot"]
+    assert bot.intents.members and bot.intents.message_content is bool(legacy)
+    prefixes = bot.command_prefix(SimpleNamespace(user=SimpleNamespace(id=1)), None)
+    assert "<@1> " in prefixes  # "@PlexBot top" is answered either way
+    assert ("plex " in prefixes) is bool(legacy)
+
+
 def test_view_error_card_is_the_oops_state(monkeypatch):
     import ui.embeds
 

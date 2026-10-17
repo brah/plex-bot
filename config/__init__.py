@@ -88,6 +88,8 @@ def setup_default_config():
     core = config.add_section("core", "Core bot settings")
     core.add("token", "", "Discord bot token", required=True)
     core.add("prefix", "plex ", "Prefix of the old text commands, so they can point at their slash command")
+    core.add("legacy_text_commands", False,
+             "Answer old prefix commands with their slash name; needs Discord's Message Content intent")
     core.add("log_level", "INFO", "Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
 
     tautulli = config.add_section("tautulli", "Tautulli API settings")

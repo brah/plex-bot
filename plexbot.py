@@ -23,6 +23,7 @@ from slash_commands import SlashGroups, admin_check
 
 from tautulli_wrapper import Tautulli, TMDB
 from media_cache import MediaCache
+from ui.format import is_truthy
 from utilities import RedactSecrets
 
 # Configure logging
@@ -190,10 +191,11 @@ def main():
 
     # Create the bot and configure intents
     intents = nextcord.Intents.default()
-    intents.message_content = True
     intents.members = True
-
-    # Initialize bot with the prefix from configuration
+    # Message content (a privileged intent) only serves the old prefix commands' redirect. Without it,
+    # Discord still sends the text of messages that mention the bot, so "@PlexBot status" is answered.
+    legacy = is_truthy(config.get("core", "legacy_text_commands", False))
+    intents.message_content = legacy
     bot_prefix = config.get("core", "prefix")
 
     # Register slash commands to the configured server: guild commands update
@@ -208,8 +210,9 @@ def main():
         if not config.get("discord", "admin_ids", []):
             logger.warning("Neither discord.server_id nor discord.admin_ids is set, so nobody can use /plexadmin.")
 
+    prefix = commands.when_mentioned_or(bot_prefix, bot_prefix.title()) if legacy else commands.when_mentioned
     bot = PlexBot(
-        command_prefix=[bot_prefix, bot_prefix.title()],
+        command_prefix=prefix,
         intents=intents,
         help_command=None,
         default_guild_ids=guild_ids,
