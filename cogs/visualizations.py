@@ -1,9 +1,14 @@
 # cogs/visualizations.py
 
-"""/plex chart hours, days, users, media and months: when and what people watch, as charts."""
+"""/plex chart hours, days, users, media and months: when and what people watch, as charts.
+
+Every chart comes with a dropdown to switch chart and buttons to change the window, and
+/plex stats borrows the day-by-day chart for its Activity page.
+"""
 
 import asyncio
 import logging
+import os
 from collections import Counter
 from datetime import date, datetime, timedelta, tzinfo
 from functools import partial
@@ -15,12 +20,14 @@ import tzlocal
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
+from errors import LoggedView
 from plex_users import PlexUsers
 from slash_commands import plex
 from tautulli_wrapper import Tautulli
 from ui.charts import bar_chart, stacked_day_chart
-from ui.embeds import Reply, card, empty_state, service_down, set_image
+from ui.embeds import Reply, bot_token_handle, card, empty_state, service_down, set_image
 from ui.format import join, plural, to_int, truncate
+from ui.images import Attachment
 from ui.theme import Colour, Limits, brand_colour
 from utilities import ignored_usernames, plex_username, viewer_avatar, viewer_name
 
@@ -133,6 +140,7 @@ _CHARTS = {
     "media": ("🎞️ Movies and TV, day by day", 30, False),
     "months": ("📈 Plays by month", 365, False),
 }
+_WINDOWS = {"7 days": 7, "30 days": 30, "90 days": 90, "1 year": 365}  # the window buttons under a chart
 
 
 def _user_option():
@@ -208,27 +216,17 @@ class Visualizations(commands.Cog):
             return media_chart(plays, today=today, days=days)
         return months_chart(plays, today=today, days=days)
 
-    async def send_chart(self, interaction: nextcord.Interaction, kind: str, user: Optional[str],
-                         days: Optional[int]) -> None:
-        await interaction.response.defer()
-        title, default_days, shows_zone = _CHARTS[kind]
-        days = days or default_days
-        person = None
-        if user:
-            person, ok = await self.users.resolve(interaction, user)
-            if not ok:
-                return
-        plays = await self.plays(person, days)
-        if plays is None:
-            await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
-            return
-        who = escape_markdown(self.users.name(person)) if person else None
+    async def chart_reply(self, view: "ChartView") -> Reply:
+        """The view's chart as it stands (view.plays already fetched), with the view under it."""
+        title, _default_days, shows_zone = _CHARTS[view.kind]
+        person, days, plays = view.person, view.days, view.plays
         if not plays:
-            message = f"**{who}** hasn't" if who else "Nobody has"
-            await empty_state(f"{message} watched anything in the last {plural(days, 'day')}.").send(interaction)
-            return
+            who = f"**{escape_markdown(self.users.name(person))}** hasn't" if person else "Nobody has"
+            reply = empty_state(f"{who} watched anything in the last {plural(days, 'day')}.", title=title)
+            reply.view = view
+            return reply
         zone = await self.timezone()
-        takeaway, render = self._build(kind, plays, days, datetime.now(zone).date())
+        takeaway, render = self._build(view.kind, plays, days, datetime.now(zone).date())
         image = await asyncio.to_thread(render)
         context = join([
             f"Last {plural(days, 'day')}",
@@ -240,7 +238,47 @@ class Visualizations(commands.Cog):
             embed.set_author(name=truncate(self.users.name(person), Limits.AUTHOR),
                              icon_url=viewer_avatar(self.bot, person) or None)
         set_image(embed, image)
-        await Reply([embed], [image] if image else []).send(interaction)
+        return Reply([embed], [image] if image else [], view=view)
+
+    async def send_chart(self, interaction: nextcord.Interaction, kind: str, user: Optional[str],
+                         days: Optional[int]) -> None:
+        await interaction.response.defer()
+        person = None
+        if user:
+            person, ok = await self.users.resolve(interaction, user)
+            if not ok:
+                return
+        view = ChartView(self, kind, person, days or _CHARTS[kind][1])
+        reply = await view.render()
+        if reply is None:
+            await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
+            return
+        view.message = bot_token_handle(interaction, await reply.send(interaction))
+
+    async def activity_page(self, days: int) -> Optional[Tuple[nextcord.Embed, Optional[Attachment]]]:
+        """/plex stats' Activity page: everyone's movies and TV day by day, with the busiest hour, day
+        and viewer; None if Tautulli didn't answer."""
+        plays = await self.plays(None, days)
+        if plays is None:
+            return None
+        title, context = "📈 Activity", f"Last {plural(days, 'day')}"
+        if not plays:
+            return card(title=title, description=f"-# {context}\nNobody has watched anything.",
+                        colour=brand_colour()), None
+        zone = await self.timezone()
+        takeaway, render = media_chart(plays, today=datetime.now(zone).date(), days=days)
+        image = await asyncio.to_thread(render)
+        lines = [
+            "-# " + join([context, plural(len(plays), "play"), f"times in {zone} ({utc_offset(zone)})"]),
+            takeaway,
+            "",
+            hours_chart(plays)[0],
+            days_chart(plays)[0],
+            users_chart(plays, lambda row: viewer_name(self.bot, row))[0],
+        ]
+        embed = card(title=title, description="\n".join(lines), colour=brand_colour())
+        set_image(embed, image)
+        return embed, image
 
     # --- /plex chart ... ---------------------------------------------------------
 
@@ -278,6 +316,85 @@ class Visualizations(commands.Cog):
     @chart_months.on_autocomplete("user")
     async def _chart_user_autocomplete(self, interaction: nextcord.Interaction, user: str):
         await interaction.response.send_autocomplete(await self.users.choices(user))
+
+
+class ChartKindSelect(nextcord.ui.StringSelect):
+    def __init__(self, current: str, kinds):
+        options = []
+        for kind in kinds:
+            emoji, label = _CHARTS[kind][0].split(" ", 1)
+            options.append(nextcord.SelectOption(label=label, emoji=emoji, value=kind, default=kind == current))
+        # nextcord 3.2 StringSelect never generates a custom_id itself (see StreamDetailsSelect).
+        super().__init__(custom_id=os.urandom(16).hex(), options=options, row=0)
+
+    async def callback(self, interaction: nextcord.Interaction):
+        await self.view.update(interaction, kind=self.values[0])
+
+
+class ChartWindowButton(nextcord.ui.Button):
+    def __init__(self, label: str, days: int, current: int):
+        style = nextcord.ButtonStyle.primary if days == current else nextcord.ButtonStyle.secondary
+        super().__init__(label=label, style=style, row=1)
+        self.days = days
+
+    async def callback(self, interaction: nextcord.Interaction):
+        await self.view.update(interaction, days=self.days)
+
+
+class ChartEveryoneButton(nextcord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Everyone", emoji="👥", style=nextcord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: nextcord.Interaction):
+        await self.view.update(interaction, everyone=True)
+
+
+class ChartView(LoggedView):
+    """Controls under a public /plex chart: pick the chart, the window, or drop the person filter.
+    Anyone can use them. Plays are fetched once per window and person, so switching chart is free."""
+
+    def __init__(self, cog: Visualizations, kind: str, person: Optional[dict], days: int, timeout: float = 600):
+        super().__init__(timeout=timeout)
+        self.cog, self.kind, self.person, self.days = cog, kind, person, days
+        self.plays: Optional[List[Play]] = None
+        self._lock = asyncio.Lock()  # one change at a time, so a chart never mixes two clicks' state
+
+    async def render(self) -> Optional[Reply]:
+        """The current chart with fresh controls; None if Tautulli didn't answer."""
+        if self.plays is None:
+            self.plays = await self.cog.plays(self.person, self.days)
+            if self.plays is None:
+                return None
+        self.clear_items()
+        # One person's "most active viewers" is a single bar, so Users is only offered for everyone.
+        self.add_item(ChartKindSelect(self.kind, [k for k in _CHARTS if not (self.person and k == "users")]))
+        for label, days in _WINDOWS.items():
+            self.add_item(ChartWindowButton(label, days, self.days))
+        if self.person:
+            self.add_item(ChartEveryoneButton())
+        return await self.cog.chart_reply(self)
+
+    async def update(self, interaction: nextcord.Interaction, *, kind: Optional[str] = None,
+                     days: Optional[int] = None, everyone: bool = False) -> None:
+        await interaction.response.defer()
+        self.message = interaction.message  # bot-token handle; the command's webhook expires
+        async with self._lock:
+            before = (self.kind, self.days, self.person, self.plays)
+            if kind:
+                self.kind = kind
+                if kind == "months":  # a bar a month: under a year that's only a bar or two
+                    days = max(self.days, _CHARTS["months"][1])
+            if days and days != self.days:
+                self.days, self.plays = days, None
+            if everyone and self.person:
+                self.person, self.plays = None, None
+            reply = await self.render()
+            if reply is None:
+                # The message still shows the old chart, so the next click must start from it.
+                self.kind, self.days, self.person, self.plays = before
+                await service_down("Tautulli").send(interaction, ephemeral=True)
+                return
+            await reply.edit(interaction)
 
 
 def setup(bot):

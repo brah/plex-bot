@@ -234,7 +234,7 @@ Every command is a slash command: type `/plex` in Discord to see them all. Admin
 | `/plex downloading` | What qBittorrent is downloading, with progress and time left |
 | `/plex recommend [member]` | Three unwatched picks in someone's favourite genres (default: you); the numbered buttons open each pick |
 | `/plex top [days]` | Top watchers by watch time, with medals. Defaults to the last 7 days; that default ranking also updates the top-three roles |
-| `/plex stats [days]` | Server stats in four pages (Overview, Movies, TV, Users) behind buttons: plays and watch time per type, the most popular titles with posters, top platforms, peak concurrent streams, per-library breakdowns, library totals, and the top viewers of all time |
+| `/plex stats [days]` | Server stats in five pages (Overview, Movies, TV, Users, Activity) behind buttons: plays and watch time per type, the most popular titles with posters, top platforms, peak concurrent streams, per-library breakdowns, library totals, the top viewers of all time, and a day-by-day movies and TV chart with the busiest hour, day and viewer |
 | `/plex shows` | Top TV watchers of all time |
 | `/plex history [user]` | Recent plays on the server, or one person's (names are suggested as you type) |
 | `/plex hot [days]` | What's been popular lately: trending titles, new hits, most active, binges |
@@ -249,6 +249,8 @@ Every command is a slash command: type `/plex` in Discord to see them all. Admin
 | `/plexadmin link <plex_user> <member>` | Links a Plex user to a Discord member, so the bot shows their Discord name and avatar, gives top-watcher roles and can recommend for them; replaces either side's old link (admin only) |
 | `/plexadmin unlink <plex_user>` | Removes a Plex user's link (admin only) |
 | `/plexadmin ignore <plex_user>` | Leaves a Plex user out of stats, charts and lists, or brings them back (admin only) |
+
+Every `/plex chart` has a dropdown underneath to switch to another chart, and buttons to change the window (7 days, 30 days, 90 days, 1 year). One person's chart also gets an **Everyone** button. Anyone in the channel can use them.
 
 Library sizes on `/plex status` come from Tautulli. Movie sizes appear on their own; for TV and music, run **Calculate Total File Sizes** on the library's Media Info tab in Tautulli once.
 

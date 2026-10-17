@@ -6,7 +6,8 @@ import asyncio
 import logging
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
-from typing import Callable, Optional
+from functools import partial
+from typing import Awaitable, Callable, Optional
 
 import nextcord
 from nextcord.ext import commands
@@ -266,7 +267,7 @@ def users_card(rows, *, name: Callable[[dict], str], avatar: Optional[str]) -> n
     return embed
 
 
-_PAGE_EMOJI = {"Overview": "📊", "Movies": "🎬", "TV": "📺", "Users": "👥"}
+_PAGE_EMOJI = {"Overview": "📊", "Movies": "🎬", "TV": "📺", "Users": "👥", "Activity": "📈"}
 
 
 class StatsPageButton(nextcord.ui.Button):
@@ -276,18 +277,34 @@ class StatsPageButton(nextcord.ui.Button):
     async def callback(self, interaction: nextcord.Interaction):
         view: StatsView = self.view
         view.message = interaction.message  # bot-token handle; the command's webhook expires
-        await interaction.response.edit_message(**view.show(self.label).edit_payload())
+        view.latest = self.label
+        if self.label in view.pages:
+            await interaction.response.edit_message(**view.show(self.label).edit_payload())
+            return
+        await interaction.response.defer()
+        built = await view.lazy[self.label]()
+        if built is None:
+            await service_down("Tautulli").send(interaction, ephemeral=True)
+            return
+        embed, image = built
+        view.pages[self.label] = Reply([embed], [image] if image else [], view=view)
+        if view.latest == self.label:  # else another page was clicked while this one loaded
+            await view.show(self.label).edit(interaction)
 
 
 class StatsView(LoggedView):
     """Page buttons under the public /plex stats message. Anyone can flip it; the data was fetched once."""
 
-    def __init__(self, pages: dict, timeout: float = 600):
-        """pages: _PAGE_EMOJI label -> (embed, poster strip or None), in button order."""
+    def __init__(self, pages: dict, lazy: Optional[dict] = None, timeout: float = 600):
+        """pages: _PAGE_EMOJI label -> (embed, image or None), in button order.
+        lazy: label -> async () -> (embed, image or None), or None when Tautulli failed. Built on first
+        click, so the slow pages don't hold up the command."""
         super().__init__(timeout=timeout)
         self.pages = {label: Reply([embed], [strip] if strip else [], view=self)
                       for label, (embed, strip) in pages.items()}
-        for label in pages:
+        self.lazy: dict[str, Callable[[], Awaitable]] = lazy or {}
+        self.latest = next(iter(pages), None)  # the page clicked last
+        for label in [*pages, *self.lazy]:
             self.add_item(StatsPageButton(label))
 
     def show(self, label: str) -> Reply:
@@ -566,13 +583,14 @@ class PlexStats(commands.Cog):
         strips = await asyncio.gather(*(
             _poster_strip(self.tautulli, rows) for rows in (movies[:6] + shows[:6], movies, shows)
         ))
+        charts = self.bot.get_cog("Visualizations")  # the Activity page's chart lives there
         view = StatsView({
             "Overview": (overview_card(stats, libraries, days=days, strip=strips[0]), strips[0]),
             "Movies": (media_card("movie", stats, libraries, days=days, strip=strips[1]), strips[1]),
             "TV": (media_card("show", stats, libraries, days=days, strip=strips[2]), strips[2]),
             "Users": (users_card(users, name=self._mention,
                                  avatar=viewer_avatar(self.bot, users[0]) if users else None), None),
-        })
+        }, lazy={"Activity": partial(charts.activity_page, days)} if charts else None)
         view.message = bot_token_handle(interaction, await view.show("Overview").send(interaction))
 
     # --- /plex shows -------------------------------------------------------------
