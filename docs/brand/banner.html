@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Fredoka:wght@500&display=block" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1280px; height: 360px; background: transparent; overflow: hidden; }
+  .card { position: absolute; inset: 0; border-radius: 28px; overflow: hidden;
+          background: radial-gradient(ellipse 60% 90% at 50% 105%, #5a2a4a 0%, #2a1630 55%, #170c1c 100%); }
+  /* glow of the screen behind the stage */
+  .glow { position: absolute; left: 50%; top: -120px; width: 900px; height: 420px; transform: translateX(-50%);
+          background: radial-gradient(ellipse at center, rgba(255, 214, 140, .22), transparent 65%); }
+  .curtain { position: absolute; top: 0; bottom: 0; width: 170px;
+             background: repeating-linear-gradient(90deg, #7d1428 0 14px, #a51d35 14px 30px, #8c1830 30px 42px); }
+  .curtain.left { left: 0; border-bottom-right-radius: 100% 30%; box-shadow: 8px 0 24px rgba(0,0,0,.45); }
+  .curtain.right { right: 0; border-bottom-left-radius: 100% 30%; box-shadow: -8px 0 24px rgba(0,0,0,.45); }
+  .valance { position: absolute; top: 0; left: 0; right: 0; height: 34px;
+             background: radial-gradient(circle at 40px -6px, #a51d35 38px, transparent 39px) 0 0 / 80px 34px repeat-x;
+             filter: drop-shadow(0 6px 6px rgba(0,0,0,.4)); }
+  .bulbs { position: absolute; left: 190px; right: 190px; height: 14px;
+           background: radial-gradient(circle, #fff3c4 0 3px, #ffc84a 4px, rgba(255,200,74,.35) 6px, transparent 8px) 0 0 / 28px 14px repeat-x; }
+  .bulbs { top: 48px; }
+  .stage { position: absolute; left: 0; right: 0; bottom: 0; height: 44px;
+           background: linear-gradient(#6b4226 0 4px, #4a2c1a 4px, #2e1a10); box-shadow: 0 -10px 30px rgba(255, 200, 120, .12); }
+  .shadow { position: absolute; left: 290px; bottom: 34px; width: 170px; height: 22px; border-radius: 50%;
+            background: rgba(0, 0, 0, .45); filter: blur(6px); }
+  .kernel { position: absolute; left: 226px; bottom: 16px; width: 330px; height: 330px; }
+  .title { position: absolute; left: 600px; top: 104px; }
+  h1 { font: 104px/1 "Lilita One", "Arial Black", sans-serif; margin: 0; color: #FFF4DC; letter-spacing: 1px;
+       text-shadow: 0 0 18px rgba(255, 200, 74, .55), 0 6px 0 #2B2D31; }
+  h1 span { color: #F5B42A; }
+  p { font: 500 34px/1.2 "Fredoka", "Segoe UI", sans-serif; margin: 18px 0 0 6px; color: #F2C9A8; }
+  .pop { position: absolute; width: 58px; height: 58px; }
+  .spark { position: absolute; color: #FFE39A; font: 26px/1 sans-serif; text-shadow: 0 0 10px #ffc84a; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <g id="pop">
+      <g fill="#2B2D31"><circle cx="-17" cy="6" r="36"/><circle cx="8" cy="-15" r="36"/>
+        <circle cx="19" cy="11" r="34"/><circle cx="-9" cy="-19" r="30"/></g>
+      <g fill="#FFF8E6"><circle cx="-17" cy="6" r="24"/><circle cx="8" cy="-15" r="24"/>
+        <circle cx="19" cy="11" r="22"/><circle cx="-9" cy="-19" r="18"/></g>
+      <g fill="#FFE39A"><circle cx="-17" cy="6" r="24"/><circle cx="19" cy="11" r="22"/></g>
+      <g fill="#FFF8E6"><circle cx="8" cy="-15" r="24"/><circle cx="-9" cy="-19" r="18"/></g>
+    </g>
+  </defs>
+</svg>
+<div class="card">
+  <div class="glow"></div>
+  <div class="bulbs"></div>
+  <div class="stage"></div>
+  <div class="shadow"></div>
+  <img class="kernel" src="../../assets/mascot/mascot-wave.svg" alt="">
+  <div class="title">
+    <h1>Plex<span>-Bot</span></h1>
+    <p>Now showing in your Discord</p>
+  </div>
+  <svg class="pop" style="left:228px; top:70px; transform:rotate(-25deg) scale(.8)" viewBox="-60 -60 120 120"><use href="#pop"/></svg>
+  <svg class="pop" style="left:520px; top:64px; transform:rotate(40deg) scale(.65)" viewBox="-60 -60 120 120"><use href="#pop"/></svg>
+  <svg class="pop" style="left:1040px; top:226px; transform:rotate(110deg) scale(.7)" viewBox="-60 -60 120 120"><use href="#pop"/></svg>
+  <svg class="pop" style="left:1000px; top:70px; transform:rotate(-70deg) scale(.55)" viewBox="-60 -60 120 120"><use href="#pop"/></svg>
+  <span class="spark" style="left:300px; top:150px">✦</span>
+  <span class="spark" style="left:585px; top:250px; font-size:18px">✦</span>
+  <span class="spark" style="left:1060px; top:96px; font-size:20px">✦</span>
+  <span class="spark" style="left:960px; top:270px; font-size:16px">✦</span>
+  <div class="curtain left"></div>
+  <div class="curtain right"></div>
+  <div class="valance"></div>
+</div>
+</body></html>

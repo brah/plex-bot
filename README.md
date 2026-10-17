@@ -1,4 +1,6 @@
-# Plex-Bot
+<div align="center">
+
+<img src="docs/brand/banner.webp" alt="Plex-Bot: now showing in your Discord" width="100%">
 
 [![CI](https://github.com/brah/plex-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/brah/plex-bot/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)
@@ -6,6 +8,8 @@
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](#deployment)
 
 **[Setup](#setup)** · **[Configuration](#configuration)** · **[Commands](#commands)** · **[Deployment](#deployment)** · **[Troubleshooting](#troubleshooting)**
+
+</div>
 
 A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautulli/Tautulli) and answers with slash commands: who's watching, what's popular, who watches most, charts, recommendations and library lookups.
 
