@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +34,7 @@ def find_browser() -> str:
 
 
 def render(browser: str, svg: Path, png: Path, size: int) -> None:
+    png.unlink(missing_ok=True)
     subprocess.run(
         [
             browser, "--headless=new", "--disable-gpu", "--hide-scrollbars",
@@ -41,6 +43,13 @@ def render(browser: str, svg: Path, png: Path, size: int) -> None:
         ],
         check=True, capture_output=True, timeout=60,
     )
+    # Edge's launcher can exit before its child writes the file: wait until its size stops changing.
+    deadline, last = time.monotonic() + 30, -1
+    while (size := png.stat().st_size if png.exists() else 0) == 0 or size != last:
+        if time.monotonic() > deadline:
+            sys.exit(f"The browser never wrote {png}.")
+        last = size
+        time.sleep(0.2)
 
 
 def main() -> None:
