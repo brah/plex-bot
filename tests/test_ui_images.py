@@ -15,6 +15,7 @@ from ui.images import (
     plex_image,
     poster_key,
     poster_strip,
+    sectioned_strip,
 )
 
 
@@ -134,6 +135,23 @@ class TestPosterStrip:
         assert poster_strip([b"not an image"]) is None
         assert poster_strip([]) is None
         assert poster_strip([b"junk", png()]).filename == "posters.png"
+
+
+class TestSectionedStrip:
+    def test_a_row_per_section_behind_its_divider(self):
+        strip = sectioned_strip([("MOVIES", 0xE5A00D, [png()] * 3), ("TV", 0x4A90D9, [png((0, 0, 255))])], gap=8)
+        with Image.open(io.BytesIO(strip.data)) as im:
+            assert im.size == (4 * 200 + 3 * 8, 2 * 300 + 8)  # the widest row: divider + 3 posters
+            assert im.getpixel((100, 150))[:3] == (32, 34, 37)  # the MOVIES divider leads the first row
+            assert im.getpixel((2, 150))[:3] == (0xE5, 0xA0, 0x0D)  # edged in the movie colour
+            assert im.getpixel((208 + 100, 308 + 150))[:3] == (0, 0, 255)  # TV's poster, after its divider
+            assert im.getpixel((2 * 208 + 100, 308 + 150))[3] == 0  # the shorter row leaves the rest clear
+
+    def test_sections_without_posters_are_left_out(self):
+        strip = sectioned_strip([("MOVIES", 0xE5A00D, []), ("TV", 0x4A90D9, [png()])], gap=8)
+        with Image.open(io.BytesIO(strip.data)) as im:
+            assert im.size == (2 * 200 + 8, 300)
+        assert sectioned_strip([("MOVIES", 0xE5A00D, [b"junk"])]) is None
 
 
 class TestDominantColour:

@@ -138,9 +138,9 @@ def setup_default_config():
     defaults.add("time_range", 30, "Default time range in days")
 
     charts = config.add_section("charts", "Chart and visualization settings")
-    charts.add("width", 14, "Chart width in inches")
-    charts.add("height", 6, "Chart height in inches")
-    charts.add("dpi", 100, "Chart DPI")
+    charts.add("width", 7, "Chart width in inches")
+    charts.add("height", 3.5, "Chart height in inches")
+    charts.add("dpi", 200, "Chart DPI")
 
     commands = config.add_section("commands", "Command-specific settings")
     commands.add("recommendation_timeout", 180, "Timeout in seconds for recommendation buttons")

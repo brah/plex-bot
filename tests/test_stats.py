@@ -335,6 +335,26 @@ class TestCommands:
         assert [f.filename for f in flipped["files"]] == ["posters.png"]
         assert on_movies[:2] == [ButtonStyle.secondary, ButtonStyle.primary]
 
+    def test_overview_posters_are_only_the_titles_it_lists(self, monkeypatch):
+        recorder = Recorder(monkeypatch)
+        tautulli = FakeTautulli([])
+        tautulli.home_stats = {
+            "popular_movies": [{"title": f"Movie {i}", "media_type": "movie", "thumb": f"/m/{i}"} for i in range(6)],
+            "popular_tv": [{"title": f"Show {i}", "media_type": "show", "thumb": f"/s/{i}"} for i in range(6)],
+        }
+        sections = []
+
+        async def fake_sectioned_strip(tautulli, wanted):
+            sections.extend(wanted)
+            return None
+
+        monkeypatch.setattr(plex_stats, "fetch_sectioned_strip", fake_sectioned_strip)
+        _run(lambda bot, cog: PlexStats.stats.callback(cog, interaction(bot), days=None), tautulli)
+        assert [(heading, keys) for heading, _colour, keys in sections] == [
+            ("MOVIES", ["/m/0", "/m/1", "/m/2"]), ("TV", ["/s/0", "/s/1", "/s/2"])]
+        overview = recorder.last("followup")["embeds"][0]
+        assert [f.name for f in overview.fields if "Top" in f.name] == ["🎬 Top movies", "📺 Top shows"]
+
     def test_stats_tautulli_down(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         _run(lambda bot, cog: PlexStats.stats.callback(cog, interaction(bot), days=7),

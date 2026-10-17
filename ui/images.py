@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 import nextcord
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
@@ -102,11 +102,11 @@ STRIP_POSTERS = 12  # two rows of six; Discord scales a third row's taller image
 _ROW = 6
 
 
-def poster_strip(
-    posters: Sequence[bytes], *, extra: int = 0, filename: str = "posters.png",
-    height: int = 300, gap: int = 8,
-) -> Optional[Attachment]:
-    """Posters at a common height, in rows of at most six split evenly, plus a "+N" tile when more were left out."""
+_TILE = (32, 34, 37, 255)  # Discord's dark grey: the "+N" and section tiles
+
+
+def _tiles(posters: Sequence[bytes], height: int) -> List[Image.Image]:
+    """Each readable poster at a common height; unreadable ones are left out."""
     tiles = []
     for data in posters:
         try:
@@ -116,18 +116,11 @@ def poster_strip(
             continue
         width = max(1, round(rgba.width * height / rgba.height))
         tiles.append(rgba.resize((width, height), Image.Resampling.LANCZOS))
-    if not tiles:
-        return None
-    if extra:
-        tile = Image.new("RGBA", (round(height * 2 / 3), height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(tile)
-        draw.rounded_rectangle((0, 0, tile.width - 1, height - 1), radius=16, fill=(32, 34, 37, 255))
-        draw.text((tile.width / 2, height / 2), f"+{extra}", font=ImageFont.load_default(size=height // 5),
-                  fill=(255, 255, 255, 255), anchor="mm")
-        tiles.append(tile)
+    return tiles
 
-    per_row = math.ceil(len(tiles) / math.ceil(len(tiles) / _ROW))  # 7 tiles -> 4 + 3, not 6 + 1
-    rows = [tiles[i:i + per_row] for i in range(0, len(tiles), per_row)]
+
+def _compose(rows: Sequence[Sequence[Image.Image]], *, filename: str, height: int, gap: int) -> Attachment:
+    """Rows of equal-height tiles, left-aligned, on a transparent canvas."""
     width = max(sum(tile.width for tile in row) + gap * (len(row) - 1) for row in rows)
     canvas = Image.new("RGBA", (width, len(rows) * (height + gap) - gap), (0, 0, 0, 0))
     for r, row in enumerate(rows):
@@ -135,20 +128,88 @@ def poster_strip(
         for tile in row:
             canvas.paste(tile, (x, r * (height + gap)))
             x += tile.width + gap
-
     out = io.BytesIO()
     canvas.save(out, format="PNG")
     return Attachment(filename, out.getvalue())
 
 
+def poster_strip(
+    posters: Sequence[bytes], *, extra: int = 0, filename: str = "posters.png",
+    height: int = 300, gap: int = 8,
+) -> Optional[Attachment]:
+    """Posters at a common height, in rows of at most six split evenly, plus a "+N" tile when more were left out."""
+    tiles = _tiles(posters, height)
+    if not tiles:
+        return None
+    if extra:
+        tile = Image.new("RGBA", (round(height * 2 / 3), height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(tile)
+        draw.rounded_rectangle((0, 0, tile.width - 1, height - 1), radius=16, fill=_TILE)
+        draw.text((tile.width / 2, height / 2), f"+{extra}", font=ImageFont.load_default(size=height // 5),
+                  fill=(255, 255, 255, 255), anchor="mm")
+        tiles.append(tile)
+
+    per_row = math.ceil(len(tiles) / math.ceil(len(tiles) / _ROW))  # 7 tiles -> 4 + 3, not 6 + 1
+    rows = [tiles[i:i + per_row] for i in range(0, len(tiles), per_row)]
+    return _compose(rows, filename=filename, height=height, gap=gap)
+
+
+def section_tile(heading: str, colour: int, height: int = 300) -> Image.Image:
+    """A poster-sized divider reading "TOP" over the heading, edged in the section's colour."""
+    width = round(height * 2 / 3)
+    rgb = ((colour >> 16) & 0xFF, (colour >> 8) & 0xFF, colour & 0xFF, 255)
+    tile = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(tile)
+    draw.rounded_rectangle((0, 0, width - 1, height - 1), radius=16, fill=_TILE, outline=rgb, width=5)
+    draw.text((width / 2, height * 0.40), "TOP", font=ImageFont.load_default(size=height // 10), fill=rgb,
+              anchor="mm")
+    heading_font = ImageFont.load_default(size=height // 7)
+    while heading_font.getlength(heading) > width * 0.85:  # a long heading shrinks to fit the tile
+        heading_font = ImageFont.load_default(size=heading_font.size - 2)
+    draw.text((width / 2, height * 0.55), heading, font=heading_font, fill=(255, 255, 255, 255), anchor="mm")
+    # An arrow pointing along the row (drawn: the built-in font has no arrow glyph).
+    y, half = height * 0.71, height / 30
+    draw.line((width * 0.38, y, width * 0.58, y), fill=rgb, width=max(2, height // 60))
+    draw.polygon([(width * 0.62, y), (width * 0.56, y - half), (width * 0.56, y + half)], fill=rgb)
+    return tile
+
+
+def sectioned_strip(
+    sections: Sequence[Tuple[str, int, Sequence[bytes]]], *, filename: str = "posters.png",
+    height: int = 300, gap: int = 8,
+) -> Optional[Attachment]:
+    """A row per (heading, colour, posters) section: its section_tile, then its posters. Sections with no
+    readable poster are left out."""
+    rows = []
+    for heading, colour, posters in sections:
+        tiles = _tiles(posters, height)
+        if tiles:
+            rows.append([section_tile(heading, colour, height), *tiles])
+    return _compose(rows, filename=filename, height=height, gap=gap) if rows else None
+
+
+async def _fetch_posters(tautulli, keys: Sequence[Optional[str]]) -> List[bytes]:
+    posters = await asyncio.gather(*(
+        plex_image(tautulli, key, filename=f"poster-{i}.jpg", width=200, height=300) for i, key in enumerate(keys)
+    ))
+    return [p.data for p in posters if p]
+
+
 async def fetch_poster_strip(tautulli, keys: Sequence[Optional[str]], *, extra: int = 0) -> Optional[Attachment]:
     """The poster strip for the first STRIP_POSTERS image keys (missing posters are left out), drawn
     in a worker thread so it never blocks the bot; None when no poster could be fetched."""
-    posters = await asyncio.gather(*(
-        plex_image(tautulli, key, filename=f"poster-{i}.jpg", width=200, height=300)
-        for i, key in enumerate(keys[:STRIP_POSTERS])
-    ))
-    return await asyncio.to_thread(poster_strip, [p.data for p in posters if p], extra=extra)
+    posters = await _fetch_posters(tautulli, keys[:STRIP_POSTERS])
+    return await asyncio.to_thread(poster_strip, posters, extra=extra)
+
+
+async def fetch_sectioned_strip(tautulli, sections: Sequence[Tuple[str, int, Sequence[Optional[str]]]]
+                                ) -> Optional[Attachment]:
+    """sectioned_strip for (heading, colour, image keys) sections, fetched together and drawn in a worker
+    thread; None when no poster could be fetched."""
+    fetched = await asyncio.gather(*(_fetch_posters(tautulli, keys) for _heading, _colour, keys in sections))
+    return await asyncio.to_thread(
+        sectioned_strip, [(heading, colour, posters) for (heading, colour, _keys), posters in zip(sections, fetched)]
+    )
 
 
 def dominant_colour(data: bytes) -> Optional[int]:

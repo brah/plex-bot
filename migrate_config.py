@@ -140,9 +140,9 @@ def migrate_config(legacy_json_config, bot_config_class, output_file="config.jso
 
         # Chart settings
         new_config["charts"] = {
-            "width": getattr(bot_config_class, "CHART_WIDTH", 14),
-            "height": getattr(bot_config_class, "CHART_HEIGHT", 6),
-            "dpi": getattr(bot_config_class, "CHART_DPI", 100),
+            "width": getattr(bot_config_class, "CHART_WIDTH", 7),
+            "height": getattr(bot_config_class, "CHART_HEIGHT", 3.5),
+            "dpi": getattr(bot_config_class, "CHART_DPI", 200),
         }
 
         # Command settings
