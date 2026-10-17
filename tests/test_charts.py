@@ -12,7 +12,8 @@ from PIL import Image
 
 import utilities
 from cogs.visualizations import (
-    Visualizations, days_chart, hour_label, hours_chart, media_chart, months_chart, users_chart, utc_offset,
+    WATCH_TIME, Visualizations, days_chart, hour_label, hours_chart, library_chart, media_chart, months_chart,
+    titles_chart, top_titles, users_chart, utc_offset,
 )
 from fakes import GUILD_ID, FakeTautulli, Recorder, interaction
 
@@ -64,7 +65,16 @@ class TestAggregation:
         dates, series = render.args[0], render.args[1]
         assert dates[0] == date(2026, 10, 9) and dates[-1] == date(2026, 10, 15) and len(dates) == 7
         assert series["TV"] == [0, 1, 0, 1, 0, 0, 0] and series["Movie"] == [0, 1, 0, 0, 0, 0, 0]
-        assert takeaway == "2 episodes · 1 movie"  # the September track is outside the window
+        assert takeaway == "2 episodes · 1 movie · 0.4 plays a day"  # the September track is outside the window
+        assert render.keywords["width"] == pytest.approx(0.8)
+
+    def test_media_counts_whole_weeks_past_ninety_days(self):
+        takeaway, render = media_chart(PLAYS, today=date(2026, 10, 15), days=120)
+        dates, series = render.args[0], render.args[1]
+        assert len(dates) == 17 and dates[-1] == date(2026, 10, 9)  # the last week ends today
+        assert series["TV"][-1] == 2 and series["Movie"][-1] == 1 and sum(series["Other"]) == 1
+        assert render.keywords["width"] == pytest.approx(5.6)
+        assert takeaway == "2 episodes · 1 movie · 1 other · 0.2 plays a week"
 
     def test_months_fill_gaps_and_label_years_once(self):
         takeaway, render = months_chart(PLAYS, today=date(2026, 10, 15), days=120)
@@ -74,6 +84,43 @@ class TestAggregation:
         assert takeaway == "Busiest month: **October 2026** · 3 plays"
         across_years, _ = months_chart([], today=date(2026, 2, 1), days=90)[1].args
         assert across_years == ["Nov\n2025", "Dec", "Jan\n2026", "Feb"]
+
+    def test_top_titles_sum_episodes_per_show(self):
+        rows = [
+            {"media_type": "episode", "grandparent_title": "Andor", "grandparent_rating_key": 1, "play_duration": 600},
+            {"media_type": "episode", "grandparent_title": "Andor", "grandparent_rating_key": 1, "play_duration": 600},
+            {"media_type": "episode", "grandparent_title": "Shogun", "grandparent_rating_key": 2,
+             "play_duration": 7200},
+            {"media_type": "movie", "title": "Heat", "year": 1995, "rating_key": 3, "duration": 9000},
+        ]
+        plays = [(_at(2026, 10, 10), row) for row in rows]
+        assert [(row["grandparent_title"], n) for row, n in top_titles(plays, "episode")] == [
+            ("Andor", 2), ("Shogun", 1)]
+        by_time = top_titles(plays, "episode", WATCH_TIME)
+        assert [(row["grandparent_title"], n) for row, n in by_time] == [("Shogun", 7200), ("Andor", 1200)]
+        ranking, render = titles_chart(by_time, [None, None], filename="chart-shows.png", measure=WATCH_TIME)
+        assert ranking == "`1.` **Shogun** · 2h\n`2.` **Andor** · 20m"
+        assert render.args[0] == [2.0, 1200 / 3600] and render.args[3] == ["2h", "20m"]
+        movies = top_titles(plays, "movie")
+        assert titles_chart(movies, [None], filename="x.png")[0] == "`1.` **Heat (1995)** · 1 play"
+
+    def test_library_counts_titles_added_from_zero(self):
+        titles = [(date(2026, 10, 14), "Movies"), (date(2026, 10, 14), "Movies"), (date(2026, 10, 15), "TV shows"),
+                  (date(2020, 1, 1), "Movies")]
+        takeaway, render = library_chart(titles, today=date(2026, 10, 15), days=3)
+        assert takeaway == "**+2 movies** · **+1 show** · now 3 movies and 1 show"
+        dates, running = render.args[0], render.args[1]
+        assert dates == [date(2026, 10, 13), date(2026, 10, 14), date(2026, 10, 15)]
+        assert running == {"Movies": [0, 2, 2], "TV shows": [0, 0, 1]}
+        quiet, _render = library_chart(titles[3:], today=date(2026, 10, 15), days=3)
+        assert quiet == "Nothing added · now 1 movie and 0 shows"
+
+    def test_watch_time_takeaway(self):
+        plays = [(_at(2026, 10, 10), {"media_type": "episode", "play_duration": 5400}),
+                 (_at(2026, 10, 11), {"media_type": "movie", "play_duration": 7200})]
+        takeaway, render = media_chart(plays, today=date(2026, 10, 15), days=7, measure=WATCH_TIME)
+        assert takeaway == "1h 30m of TV · 2h of movies · 30m a day"
+        assert render.keywords["unit"] == "Hours" and sum(render.args[1]["TV"]) == 1.5
 
     def test_utc_offset(self):
         winter = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -93,6 +140,23 @@ class TestRendering:
             assert attachment.filename.startswith("chart-") and attachment.data[:8] == b"\x89PNG\r\n\x1a\n"
             width, height = _png_size(attachment)
             assert width > height > 200
+
+    def test_poster_chart_renders_with_and_without_posters(self):
+        from fakes import _png
+        from ui.charts import poster_chart
+
+        attachment = poster_chart([3, 1], [_png(), None], ["Andor", "Shogun"], ["3", "1"], filename="chart-shows.png")
+        assert attachment.data[:8] == b"\x89PNG\r\n\x1a\n"
+        assert poster_chart([0], [None], ["x"], ["0"], filename="x.png") is None
+
+    def test_library_line_chart_renders(self):
+        from ui.charts import line_chart
+
+        days = [date(2026, 10, 13), date(2026, 10, 14)]
+        attachment = line_chart(days, {"Movies": [0, 2], "TV shows": [0, 0]}, {}, filename="chart-library.png",
+                                unit="Titles added")
+        assert attachment.data[:8] == b"\x89PNG\r\n\x1a\n"
+        assert line_chart(days, {"Movies": [0, 0]}, {}, filename="x.png", unit="x") is None
 
     def test_nothing_to_draw(self):
         from ui.charts import bar_chart, stacked_day_chart
@@ -129,50 +193,85 @@ def _history(*rows_ago):
             for user, hours, kind in rows_ago]
 
 
+def _open(bot, cog, **options):
+    return Visualizations.chart.callback(cog, interaction(bot), **{"user": None, "days": None, **options})
+
+
+def _pick(select, value):
+    select._selected_values = [value]
+    return select
+
+
+def _defaults(select):
+    return [option.value for option in select.options if option.default]
+
+
 class TestCommands:
-    def test_server_chart_skips_ignored_users_and_names_the_timezone(self, monkeypatch):
+    def test_opens_on_plays_per_day_for_everyone(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         tautulli = FakeTautulli([])
-        tautulli.settings = {"default_timezone": "Australia/Sydney"}
-        tautulli.history = _history(("alice", 2, "movie"), ("mallory", 3, "movie"), ("bob", 24 * 40, "movie"))
-        _run(lambda bot, cog: Visualizations.chart_hours.callback(cog, interaction(bot), user=None, days=None),
-             tautulli)
+        tautulli.history = _history(("alice", 2, "episode"), ("mallory", 3, "movie"), ("bob", 24 * 40, "movie"))
+        _run(_open, tautulli)
         params = tautulli.history_calls[-1]
         assert "user_id" not in params and params["after"]
         sent = recorder.last("followup")
         embed = sent["embeds"][0]
-        assert embed.title == "🕘 Busiest hours"
-        assert embed.description.startswith("-# Last 30 days · 1 play · times in Australia/Sydney (UTC+1")
-        assert embed.image.url == "attachment://chart-hours.png"
-        assert [f.filename for f in sent["files"]] == ["chart-hours.png"]
+        assert embed.title == "🎞️ Plays per day"
+        assert embed.description == "-# Last 30 days · 1 play\n1 episode"  # no "0.0 plays a day"
+        assert embed.image.url == "attachment://chart-media.png"
+        assert [f.filename for f in sent["files"]] == ["chart-media.png"]
+        kind, viewer, *buttons = sent["view"].children
+        windows, measures = buttons[:4], buttons[4:]
+        assert [o.label for o in kind.options] == [
+            "Over time", "By hour of day", "By day of week", "Per viewer", "Per month", "Top shows", "Top movies",
+            "Library growth"]
+        assert _defaults(kind) == ["media"]
+        assert [o.label for o in viewer.options] == ["Everyone", "Alice"]  # mallory is ignored
+        assert _defaults(viewer) == ["*everyone"]
+        assert [(b.label, b.style) for b in windows] == [
+            ("7 days", nextcord.ButtonStyle.secondary), ("30 days", nextcord.ButtonStyle.primary),
+            ("90 days", nextcord.ButtonStyle.secondary), ("1 year", nextcord.ButtonStyle.secondary)]
+        assert [(b.label, b.style) for b in measures] == [
+            ("Plays", nextcord.ButtonStyle.primary), ("Watch time", nextcord.ButtonStyle.secondary)]
 
-    def test_one_persons_chart(self, monkeypatch):
+    def test_user_option_starts_on_that_viewer(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         tautulli = FakeTautulli([])
         tautulli.users = [{"user_id": 7, "username": "alice", "friendly_name": "Alice"}]
-        tautulli.history = _history(("alice", 2, "episode"))
-        _run(lambda bot, cog: Visualizations.chart_months.callback(cog, interaction(bot), user="alice", days=None),
-             tautulli)
-        assert tautulli.history_calls[-1]["user_id"] == 7
-        embed = recorder.last("followup")["embeds"][0]
-        assert embed.author.name == "Alice" and embed.description.startswith("-# Last 365 days · 1 play\n")
+        tautulli.history = _history(("alice", 2, "episode"), ("bob", 3, "movie"))
+        _run(lambda bot, cog: _open(bot, cog, user="alice"), tautulli)
+        assert "user_id" not in tautulli.history_calls[-1]  # everyone's, so the viewer dropdown is free
+        sent = recorder.last("followup")
+        embed = sent["embeds"][0]
+        assert embed.author.name == "Alice" and embed.description.startswith("-# Last 30 days · 1 play\n")
+        assert _defaults(sent["view"].children[1]) == ["alice"]
+
+    def test_quiet_user_keeps_their_name(self, monkeypatch):
+        recorder = Recorder(monkeypatch)
+        tautulli = FakeTautulli([])
+        tautulli.users = [{"user_id": 7, "username": "alice", "friendly_name": "Alice"}]
+        tautulli.history = _history(("bob", 3, "movie"))
+        _run(lambda bot, cog: _open(bot, cog, user="alice"), tautulli)
+        sent = recorder.last("followup")
+        assert "**Alice** hasn't watched anything in the last 30 days." in sent["embeds"][0].description
+        assert [o.label for o in sent["view"].children[1].options] == ["Everyone", "Alice", "Bob"]
 
     def test_unknown_user_is_private(self, monkeypatch):
         recorder = Recorder(monkeypatch)
-        _run(lambda bot, cog: Visualizations.chart_days.callback(cog, interaction(bot), user="nobody", days=7),
-             FakeTautulli([]))
+        _run(lambda bot, cog: _open(bot, cog, user="nobody", days=7), FakeTautulli([]))
         sent = recorder.last("followup")
         assert sent["ephemeral"] is True and "No Plex user called **nobody**" in sent["embeds"][0].description
 
-    def test_nothing_watched(self, monkeypatch):
+    def test_nothing_watched_keeps_the_controls(self, monkeypatch):
         recorder = Recorder(monkeypatch)
-        _run(lambda bot, cog: Visualizations.chart_users.callback(cog, interaction(bot), days=7), FakeTautulli([]))
-        assert "Nobody has watched anything in the last 7 days." in recorder.last("followup")["embeds"][0].description
+        _run(lambda bot, cog: _open(bot, cog, days=7), FakeTautulli([]))
+        sent = recorder.last("followup")
+        assert "Nobody has watched anything in the last 7 days." in sent["embeds"][0].description
+        assert sent["embeds"][0].title == "🎞️ Plays per day" and sent["view"].children
 
     def test_tautulli_down(self, monkeypatch):
         recorder = Recorder(monkeypatch)
-        _run(lambda bot, cog: Visualizations.chart_media.callback(cog, interaction(bot), user=None, days=None),
-             FakeTautulli([], reachable=False))
+        _run(_open, FakeTautulli([], reachable=False))
         sent = recorder.last("followup")
         assert sent["ephemeral"] is True and "Couldn't reach **Tautulli**" in sent["embeds"][0].description
 
@@ -197,99 +296,267 @@ class TestCommands:
         assert _run(zones, tautulli) == "Australia/Sydney"
 
 
-def test_chart_commands_registered_with_user_suggestions():
+def test_one_chart_command_with_user_suggestions():
     from cogs.utility_commands import collect_help_entries
     from slash_commands import command_paths
 
     async def run(bot, cog):
-        paths = dict(command_paths(bot))
-        return paths, collect_help_entries(bot)
+        return dict(command_paths(bot)), collect_help_entries(bot)
 
     paths, entries = _run(run, FakeTautulli([]))
-    for kind in ("hours", "days", "media", "months"):
-        assert paths[f"/plex chart {kind}"].options["user"].autocomplete_callback is not None
-    assert "user" not in paths["/plex chart users"].options
-    charts = {e.usage for e in entries if e.category == "charts"}
-    assert charts == {
-        "/plex chart hours [user] [days]", "/plex chart days [user] [days]", "/plex chart users [days]",
-        "/plex chart media [user] [days]", "/plex chart months [user] [days]",
-    }
+    assert [path for path in paths if path.startswith("/plex chart")] == ["/plex chart"]
+    assert paths["/plex chart"].options["user"].autocomplete_callback is not None
+    charts = [(e.usage, e.example) for e in entries if e.category == "charts"]
+    assert charts == [("/plex chart [user] [days]", "/plex chart user:alice days:90")]
 
 
 class TestChartView:
     def _open(self, monkeypatch):
         tautulli = FakeTautulli([])
-        tautulli.users = [{"user_id": 7, "username": "alice", "friendly_name": "Alice"}]
-        tautulli.history = _history(("alice", 2, "episode"), ("bob", 30, "movie"))
-        return Recorder(monkeypatch), tautulli, Visualizations.chart_hours.callback
+        tautulli.settings = {"default_timezone": "Australia/Sydney"}
+        tautulli.history = _history(("alice", 2, "episode"), ("bob", 30, "movie"), ("bob", 31, "movie"))
+        return Recorder(monkeypatch), tautulli
 
     def test_dropdown_switches_chart_without_refetching(self, monkeypatch):
-        recorder, tautulli, command = self._open(monkeypatch)
+        recorder, tautulli = self._open(monkeypatch)
 
         async def run(bot, cog):
-            await command(cog, interaction(bot), user=None, days=None)
+            await _open(bot, cog)
             view = recorder.last("followup")["view"]
-            select = view.children[0]
-            opened = ([o.value for o in select.options if o.default], [b.style for b in view.children[1:]])
-            select._selected_values = ["days"]
-            await select.callback(interaction(bot))
-            return view, opened
+            await _pick(view.children[0], "hours").callback(interaction(bot))
+            return view
 
-        view, (default, styles) = _run(run, tautulli)
-        assert default == ["hours"]
-        assert styles[1] == nextcord.ButtonStyle.primary  # 30 days
+        view = _run(run, tautulli)
         assert len(tautulli.history_calls) == 1
         edited = recorder.last("edit_original_message")
-        assert edited["embeds"][0].title == "📅 Busiest days"
-        assert edited["view"] is view and [o.value for o in view.children[0].options if o.default] == ["days"]
+        embed = edited["embeds"][0]
+        assert embed.title == "🕘 Plays by hour of day"
+        assert "times in Australia/Sydney" in embed.description
+        assert edited["view"] is view and _defaults(view.children[0]) == ["hours"]
 
-    def test_window_button_refetches_and_months_jumps_to_a_year(self, monkeypatch):
-        recorder, tautulli, command = self._open(monkeypatch)
+    def test_viewer_dropdown_filters_without_refetching(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
 
         async def run(bot, cog):
-            await command(cog, interaction(bot), user=None, days=None)
+            await _open(bot, cog)
             view = recorder.last("followup")["view"]
-            await view.children[1].callback(interaction(bot))  # 7 days
-            seven = recorder.last("edit_original_message")["embeds"][0].description
-            view.children[0]._selected_values = ["months"]
-            await view.children[0].callback(interaction(bot))
+            viewers = [(o.label, o.description) for o in view.children[1].options[1:]]
+            await _pick(view.children[1], "alice").callback(interaction(bot))
+            alice = recorder.last("edit_original_message")["embeds"][0]
+            await _pick(view.children[1], "*everyone").callback(interaction(bot))
+            return viewers, alice
+
+        viewers, alice = _run(run, tautulli)
+        assert viewers == [("Bob", "2 plays"), ("Alice", "1 play")]  # most active first, after Everyone
+        assert alice.author.name == "Alice" and alice.description.startswith("-# Last 30 days · 1 play\n")
+        everyone = recorder.last("edit_original_message")["embeds"][0]
+        assert everyone.author.name is None and "3 plays" in everyone.description
+        assert len(tautulli.history_calls) == 1
+
+    def test_plays_per_viewer_is_everyone(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
+
+        async def run(bot, cog):
+            await _open(bot, cog)
+            view = recorder.last("followup")["view"]
+            await _pick(view.children[1], "alice").callback(interaction(bot))
+            await _pick(view.children[0], "users").callback(interaction(bot))
+            return view
+
+        view = _run(run, tautulli)
+        embed = recorder.last("edit_original_message")["embeds"][0]
+        assert embed.title == "👥 Plays per viewer" and embed.author.name is None
+        assert view.viewer is None
+        assert not any(isinstance(c, nextcord.ui.StringSelect) for c in view.children[1:])  # no viewer dropdown
+
+    def test_window_buttons_refetch_and_long_windows_go_weekly(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
+
+        async def run(bot, cog):
+            await _open(bot, cog)
+            view = recorder.last("followup")["view"]
+            await view.children[2].callback(interaction(bot))  # 7 days
+            seven = recorder.last("edit_original_message")["embeds"][0]
+            await view.children[5].callback(interaction(bot))  # 1 year
             return seven, view
 
         seven, view = _run(run, tautulli)
-        assert seven.startswith("-# Last 7 days")
+        assert seven.description.startswith("-# Last 7 days")
+        year = recorder.last("edit_original_message")["embeds"][0]
+        assert year.title == "🎞️ Plays per week" and year.description.startswith("-# Last 365 days")
         assert len(tautulli.history_calls) == 3
-        assert recorder.last("edit_original_message")["embeds"][0].description.startswith("-# Last 365 days")
-        assert view.children[4].style == nextcord.ButtonStyle.primary  # 1 year
+        assert view.children[5].style == nextcord.ButtonStyle.primary
 
-    def test_one_persons_chart_offers_everyone_but_not_users(self, monkeypatch):
-        recorder, tautulli, command = self._open(monkeypatch)
+    def test_plays_per_month_greys_out_short_windows(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
 
         async def run(bot, cog):
-            await command(cog, interaction(bot), user="alice", days=None)
+            await _open(bot, cog)
             view = recorder.last("followup")["view"]
-            kinds = [o.value for o in view.children[0].options]
-            everyone = view.children[-1]
-            await everyone.callback(interaction(bot))
-            return kinds, everyone.label, view
+            await _pick(view.children[0], "months").callback(interaction(bot))
+            return view
 
-        kinds, label, view = _run(run, tautulli)
-        assert "users" not in kinds and label == "Everyone"
-        assert "user_id" not in tautulli.history_calls[-1]
-        assert recorder.last("edit_original_message")["embeds"][0].author.name is None
-        assert "users" in [o.value for o in view.children[0].options]
+        view = _run(run, tautulli)
+        assert recorder.last("edit_original_message")["embeds"][0].description.startswith("-# Last 365 days")
+        assert [(b.label, b.disabled) for b in view.children[2:6]] == [
+            ("7 days", True), ("30 days", True), ("90 days", False), ("1 year", False)]
+
+    def test_top_shows_with_posters_then_watch_time(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
+        for row in tautulli.history:
+            row.update(grandparent_title="Andor", grandparent_rating_key=1, grandparent_thumb="/t/andor",
+                       play_duration=1800)
+        tautulli.history[0].update(grandparent_title="Shogun", grandparent_rating_key=2,
+                                   grandparent_thumb="/t/shogun", play_duration=7200)
+        for row in tautulli.history:
+            row["media_type"] = "episode"
+        fetched = []
+
+        async def get_image(self, key, width=300, height=450, fallback=None):
+            from fakes import _png
+
+            fetched.append(key)
+            return _png()
+
+        monkeypatch.setattr(FakeTautulli, "get_image", get_image, raising=False)
+
+        async def run(bot, cog):
+            await _open(bot, cog)
+            view = recorder.last("followup")["view"]
+            await _pick(view.children[0], "shows").callback(interaction(bot))
+            plays = recorder.last("edit_original_message")
+            await view.children[-1].callback(interaction(bot))  # Watch time
+            return plays, view
+
+        plays, view = _run(run, tautulli)
+        embed = plays["embeds"][0]
+        assert embed.title == "📺 Top shows by plays"
+        assert embed.description.endswith("`1.` **Andor** · 2 plays\n`2.` **Shogun** · 1 play")
+        assert [f.filename for f in plays["files"]] == ["chart-shows.png"]
+        watch = recorder.last("edit_original_message")["embeds"][0]
+        assert watch.title == "📺 Top shows by watch time"
+        assert "· 3h watched" in watch.description
+        assert watch.description.endswith("`1.` **Shogun** · 2h\n`2.` **Andor** · 1h")
+        assert sorted(fetched) == ["/t/andor", "/t/shogun"]  # once each, though drawn twice
+        assert len(tautulli.history_calls) == 1
+        assert view.children[-1].style == nextcord.ButtonStyle.primary
+
+    def test_top_movies_header_counts_only_movies(self, monkeypatch):
+        from fakes import patch_images
+
+        recorder, tautulli = self._open(monkeypatch)
+        patch_images(monkeypatch)
+        tautulli.history[0].update(media_type="movie", title="Heat", rating_key=9, thumb="/t/heat",
+                                   play_duration=3600)
+        for row in tautulli.history[1:]:
+            row.update(media_type="episode", play_duration=7200)
+
+        async def run(bot, cog):
+            await _open(bot, cog)
+            view = recorder.last("followup")["view"]
+            await _pick(view.children[0], "movies").callback(interaction(bot))
+            plays = recorder.last("edit_original_message")["embeds"][0]
+            await view.children[-1].callback(interaction(bot))  # Watch time
+            return plays
+
+        plays = _run(run, tautulli)
+        assert plays.description.startswith("-# Last 30 days · 1 play\n`1.` **Heat** · 1 play")
+        watch = recorder.last("edit_original_message")["embeds"][0]
+        assert watch.description.startswith("-# Last 30 days · 1 play · 1h watched\n")  # not the 4h of TV
+
+    def test_watch_time_over_time_and_no_movies(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
+        for row in tautulli.history:
+            row.update(media_type="episode", play_duration=3600)
+
+        async def run(bot, cog):
+            await _open(bot, cog)
+            view = recorder.last("followup")["view"]
+            await view.children[-1].callback(interaction(bot))  # Watch time
+            over_time = recorder.last("edit_original_message")["embeds"][0]
+            await _pick(view.children[0], "movies").callback(interaction(bot))
+            return over_time
+
+        over_time = _run(run, tautulli)
+        assert over_time.title == "🎞️ Watch time per day"
+        assert over_time.description.startswith("-# Last 30 days · 3 plays · 3h watched\n3h of TV")
+        assert "Nobody has watched any movies in the last 30 days." in \
+            recorder.last("edit_original_message")["embeds"][0].description
+
+    def _library(self, tautulli):
+        now = int(time.time())
+        tautulli.libraries_table = [{"section_id": 1, "section_type": "movie"},
+                                    {"section_id": 2, "section_type": "show"},
+                                    {"section_id": 3, "section_type": "artist"}]  # music isn't counted
+        tautulli.library_items = {
+            "1": [{"title": "Heat", "added_at": now - 2 * 86400}, {"title": "Alien", "added_at": now - 400 * 86400}],
+            "2": [{"title": "Andor", "added_at": now - 60 * 86400}],
+            "3": [{"title": "Abba", "added_at": now - 86400}],
+        }
+        calls = []
+        original = tautulli.get_library_media_info
+
+        async def counted(section_id=None, **kwargs):
+            calls.append(str(section_id))
+            return await original(section_id=section_id, **kwargs)
+
+        tautulli.get_library_media_info = counted
+        return calls
+
+    def test_library_growth_ignores_viewer_and_watch_time(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
+        calls = self._library(tautulli)
+
+        async def run(bot, cog):
+            await _open(bot, cog)
+            view = recorder.last("followup")["view"]
+            await _pick(view.children[0], "library").callback(interaction(bot))
+            month = recorder.last("edit_original_message")
+            controls = [type(c).__name__ for c in view.children]
+            await view.children[3].callback(interaction(bot))  # 90 days
+            return month, controls
+
+        month, controls = _run(run, tautulli)
+        embed = month["embeds"][0]
+        assert embed.title == "📚 Library growth"
+        assert embed.description == "-# Last 30 days\n**+1 movie** · now 2 movies and 1 show"
+        assert [f.filename for f in month["files"]] == ["chart-library.png"]
+        assert controls == ["ChartKindSelect"] + ["ChartWindowButton"] * 4  # no viewer, no plays/watch time
+        ninety = recorder.last("edit_original_message")["embeds"][0]
+        assert ninety.description.startswith("-# Last 90 days\n**+1 movie** · **+1 show**")
+        assert sorted(calls) == ["1", "2"]  # fetched once, though drawn for two windows
+
+    def test_library_unreadable_is_private(self, monkeypatch):
+        recorder, tautulli = self._open(monkeypatch)
+        self._library(tautulli)
+
+        async def down(section_id=None, **kwargs):
+            return None
+
+        tautulli.get_library_media_info = down
+
+        async def run(bot, cog):
+            await _open(bot, cog)
+            view = recorder.last("followup")["view"]
+            await _pick(view.children[0], "library").callback(interaction(bot))
+            return view
+
+        view = _run(run, tautulli)
+        sent = recorder.last("followup")
+        assert sent["ephemeral"] is True and "Couldn't reach **Tautulli**" in sent["embeds"][0].description
+        assert view.kind == "media"  # still on the chart the message shows
 
     def test_tautulli_down_on_a_click_is_private(self, monkeypatch):
-        recorder, tautulli, command = self._open(monkeypatch)
+        recorder, tautulli = self._open(monkeypatch)
 
         async def run(bot, cog):
-            await command(cog, interaction(bot), user=None, days=None)
+            await _open(bot, cog)
             view = recorder.last("followup")["view"]
             tautulli.history_reachable = False
-            await view.children[1].callback(interaction(bot))  # 7 days
+            await view.children[2].callback(interaction(bot))  # 7 days
             sent = recorder.last("followup")
             tautulli.history_reachable = True
-            view.children[0]._selected_values = ["days"]
-            await view.children[0].callback(interaction(bot))
+            await _pick(view.children[0], "days").callback(interaction(bot))
             return sent
 
         sent = _run(run, tautulli)

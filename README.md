@@ -238,11 +238,7 @@ Every command is a slash command: type `/plex` in Discord to see them all. Admin
 | `/plex shows` | Top TV watchers of all time |
 | `/plex history [user]` | Recent plays on the server, or one person's (names are suggested as you type) |
 | `/plex hot [days]` | What's been popular lately: trending titles, new hits, most active, binges |
-| `/plex chart hours [user] [days]` | Which hours of the day people watch, in the Tautulli server's timezone |
-| `/plex chart days [user] [days]` | Which days of the week people watch |
-| `/plex chart users [days]` | Who watches the most |
-| `/plex chart media [user] [days]` | Movies, TV and other plays per day |
-| `/plex chart months [user] [days]` | Plays per month (default: the last year) |
+| `/plex chart [user] [days]` | Charts of what people watch (default: the last 30 days). Opens on plays over time, movies vs TV, per day (per week past 90 days); a dropdown switches to by hour of day, by day of week, per viewer, per month, the top shows and top movies with their posters, or library growth (movies and shows added, counted per title, so a new season of an existing show doesn't count). Another dropdown picks one viewer, and buttons change the window and switch between plays and watch time. Hours and weekdays are in the Tautulli server's timezone |
 | `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
 | `/plexadmin cache` | Shows the media cache behind `/plex random` and title suggestions, with a **Refresh now** button (admin only) |
 | `/plexadmin users` | Every Plex user with their Discord link and whether they're ignored (admin only) |
@@ -250,7 +246,7 @@ Every command is a slash command: type `/plex` in Discord to see them all. Admin
 | `/plexadmin unlink <plex_user>` | Removes a Plex user's link (admin only) |
 | `/plexadmin ignore <plex_user>` | Leaves a Plex user out of stats, charts and lists, or brings them back (admin only) |
 
-Every `/plex chart` has a dropdown underneath to switch to another chart, and buttons to change the window (7 days, 30 days, 90 days, 1 year). One person's chart also gets an **Everyone** button. Anyone in the channel can use them.
+Anyone in the channel can use the controls under a `/plex chart`.
 
 Library sizes on `/plex status` come from Tautulli. Movie sizes appear on their own; for TV and music, run **Calculate Total File Sizes** on the library's Media Info tab in Tautulli once.
 
@@ -319,13 +315,13 @@ The colour can be hex text (`"#E5A00D"`) or the same value as a plain number (`1
 
 ### Chart Customization
 
-Control the appearance of generated charts:
+Control the appearance of generated charts. Discord shows chart images about 430 pixels wide, so a wider canvas makes the text smaller; raise `dpi` for a sharper image instead:
 
 ```json
 "charts": {
-    "width": 14,
-    "height": 6,
-    "dpi": 100
+    "width": 7,
+    "height": 3.5,
+    "dpi": 200
 }
 ```
 

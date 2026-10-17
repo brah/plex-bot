@@ -21,7 +21,7 @@ from tautulli_wrapper import Tautulli
 from ui.cards import media_icon, recent_viewer_line, session_title
 from ui.embeds import Reply, bot_token_handle, card, empty_state, service_down
 from ui.format import join, plural, timestamp, to_int, truncate
-from ui.images import fetch_poster_strip, poster_key
+from ui.images import fetch_poster_strip, fetch_sectioned_strip, poster_key
 from ui.theme import Colour, Limits, brand_colour
 from utilities import (
     library_totals,
@@ -49,9 +49,14 @@ def _escaped(text, limit: int = 80) -> str:
 # (their Discord @mention when linked, else their escaped Plex name).
 
 
+def _poster_keys(rows) -> list:
+    """The rows' distinct poster keys, in order."""
+    return list(dict.fromkeys(key for key in map(poster_key, rows) if key))
+
+
 async def _poster_strip(tautulli, rows) -> Optional[object]:
     """A poster strip for rows (distinct titles, at most STRIP_POSTERS), or None."""
-    return await fetch_poster_strip(tautulli, list(dict.fromkeys(key for key in map(poster_key, rows) if key)))
+    return await fetch_poster_strip(tautulli, _poster_keys(rows))
 
 
 # --- /plex top -------------------------------------------------------------------
@@ -580,9 +585,13 @@ class PlexStats(commands.Cog):
         movies, shows = stats["popular_movies"], stats["popular_tv"]
         ignored = ignored_usernames()
         users = [row for row in stats["top_users"] if plex_username(row) not in ignored]
-        strips = await asyncio.gather(*(
-            _poster_strip(self.tautulli, rows) for rows in (movies[:6] + shows[:6], movies, shows)
-        ))
+        strips = await asyncio.gather(
+            # The overview's posters are exactly the titles it lists, each kind behind its own divider.
+            fetch_sectioned_strip(self.tautulli, [("MOVIES", Colour.MOVIE, _poster_keys(movies[:_TEASER])),
+                                                  ("TV", Colour.TV, _poster_keys(shows[:_TEASER]))]),
+            _poster_strip(self.tautulli, movies),
+            _poster_strip(self.tautulli, shows),
+        )
         charts = self.bot.get_cog("Visualizations")  # the Activity page's chart lives there
         view = StatsView({
             "Overview": (overview_card(stats, libraries, days=days, strip=strips[0]), strips[0]),
