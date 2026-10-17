@@ -214,3 +214,140 @@ def test_chart_commands_registered_with_user_suggestions():
         "/plex chart hours [user] [days]", "/plex chart days [user] [days]", "/plex chart users [days]",
         "/plex chart media [user] [days]", "/plex chart months [user] [days]",
     }
+
+
+class TestChartView:
+    def _open(self, monkeypatch):
+        tautulli = FakeTautulli([])
+        tautulli.users = [{"user_id": 7, "username": "alice", "friendly_name": "Alice"}]
+        tautulli.history = _history(("alice", 2, "episode"), ("bob", 30, "movie"))
+        return Recorder(monkeypatch), tautulli, Visualizations.chart_hours.callback
+
+    def test_dropdown_switches_chart_without_refetching(self, monkeypatch):
+        recorder, tautulli, command = self._open(monkeypatch)
+
+        async def run(bot, cog):
+            await command(cog, interaction(bot), user=None, days=None)
+            view = recorder.last("followup")["view"]
+            select = view.children[0]
+            opened = ([o.value for o in select.options if o.default], [b.style for b in view.children[1:]])
+            select._selected_values = ["days"]
+            await select.callback(interaction(bot))
+            return view, opened
+
+        view, (default, styles) = _run(run, tautulli)
+        assert default == ["hours"]
+        assert styles[1] == nextcord.ButtonStyle.primary  # 30 days
+        assert len(tautulli.history_calls) == 1
+        edited = recorder.last("edit_original_message")
+        assert edited["embeds"][0].title == "📅 Busiest days"
+        assert edited["view"] is view and [o.value for o in view.children[0].options if o.default] == ["days"]
+
+    def test_window_button_refetches_and_months_jumps_to_a_year(self, monkeypatch):
+        recorder, tautulli, command = self._open(monkeypatch)
+
+        async def run(bot, cog):
+            await command(cog, interaction(bot), user=None, days=None)
+            view = recorder.last("followup")["view"]
+            await view.children[1].callback(interaction(bot))  # 7 days
+            seven = recorder.last("edit_original_message")["embeds"][0].description
+            view.children[0]._selected_values = ["months"]
+            await view.children[0].callback(interaction(bot))
+            return seven, view
+
+        seven, view = _run(run, tautulli)
+        assert seven.startswith("-# Last 7 days")
+        assert len(tautulli.history_calls) == 3
+        assert recorder.last("edit_original_message")["embeds"][0].description.startswith("-# Last 365 days")
+        assert view.children[4].style == nextcord.ButtonStyle.primary  # 1 year
+
+    def test_one_persons_chart_offers_everyone_but_not_users(self, monkeypatch):
+        recorder, tautulli, command = self._open(monkeypatch)
+
+        async def run(bot, cog):
+            await command(cog, interaction(bot), user="alice", days=None)
+            view = recorder.last("followup")["view"]
+            kinds = [o.value for o in view.children[0].options]
+            everyone = view.children[-1]
+            await everyone.callback(interaction(bot))
+            return kinds, everyone.label, view
+
+        kinds, label, view = _run(run, tautulli)
+        assert "users" not in kinds and label == "Everyone"
+        assert "user_id" not in tautulli.history_calls[-1]
+        assert recorder.last("edit_original_message")["embeds"][0].author.name is None
+        assert "users" in [o.value for o in view.children[0].options]
+
+    def test_tautulli_down_on_a_click_is_private(self, monkeypatch):
+        recorder, tautulli, command = self._open(monkeypatch)
+
+        async def run(bot, cog):
+            await command(cog, interaction(bot), user=None, days=None)
+            view = recorder.last("followup")["view"]
+            tautulli.history_reachable = False
+            await view.children[1].callback(interaction(bot))  # 7 days
+            sent = recorder.last("followup")
+            tautulli.history_reachable = True
+            view.children[0]._selected_values = ["days"]
+            await view.children[0].callback(interaction(bot))
+            return sent
+
+        sent = _run(run, tautulli)
+        assert sent["ephemeral"] is True and "Couldn't reach **Tautulli**" in sent["embeds"][0].description
+        # The failed 7-day click didn't stick: the message still showed 30 days.
+        assert recorder.last("edit_original_message")["embeds"][0].description.startswith("-# Last 30 days")
+
+
+def test_stats_activity_page_is_drawn_on_first_click(monkeypatch):
+    from cogs.plex_stats import PlexStats
+    from fakes import build_stats_bot
+
+    recorder = Recorder(monkeypatch)
+    tautulli = FakeTautulli([])
+    tautulli.history = _history(("alice", 2, "episode"), ("mallory", 3, "movie"))
+
+    async def run():
+        bot, stats = build_stats_bot(tautulli)
+        bot.add_cog(Visualizations(bot))
+        await PlexStats.stats.callback(stats, interaction(bot), days=None)
+        view = recorder.last("followup")["view"]
+        fetched_before = len(tautulli.history_calls)
+        button = view.children[-1]
+        await button.callback(interaction(bot))
+        await view.children[0].callback(interaction(bot))  # Overview, already built
+        await button.callback(interaction(bot))  # Activity again: cached
+        return fetched_before, button.label
+
+    fetched_before, label = asyncio.run(run())
+    assert label == "Activity" and fetched_before == 0
+    assert len(tautulli.history_calls) == 1
+    activity = recorder.last("edit_original_message")
+    embed = activity["embeds"][0]
+    assert embed.title == "📈 Activity" and embed.image.url == "attachment://chart-media.png"
+    assert "1 episode" in embed.description and "Busiest hour" in embed.description
+    assert "Mallory" not in embed.description
+    assert recorder.last("edit_message")["embeds"][0].title == "📈 Activity"
+
+
+def test_stats_slow_page_doesnt_cover_a_later_click(monkeypatch):
+    from cogs.plex_stats import StatsView
+    from ui.embeds import card
+
+    recorder = Recorder(monkeypatch)
+
+    async def run():
+        bot, _cog = _build(FakeTautulli([]))
+        pages = {"Overview": (card(title="Overview"), None), "Movies": (card(title="Movies"), None)}
+
+        async def slow_activity():
+            await view.children[1].callback(interaction(bot))  # Movies, clicked while Activity loads
+            return card(title="Activity"), None
+
+        view = StatsView(pages, lazy={"Activity": slow_activity})
+        await view.children[2].callback(interaction(bot))
+        return view
+
+    view = asyncio.run(run())
+    assert recorder.last("edit_message")["embeds"][0].title == "Movies"
+    assert "edit_original_message" not in recorder.kinds()
+    assert "Activity" in view.pages  # cached for the next click
