@@ -73,7 +73,7 @@ class ErrorHandler:
         replacement = slash_equivalent(ctx.invoked_with, self.slash_command_paths())
         if replacement:
             await ctx.send(
-                f"`{ctx.prefix}{ctx.invoked_with}` is now `{replacement}` — type `/plex` to see all commands."
+                f"`{ctx.clean_prefix}{ctx.invoked_with}` is now `{replacement}` — type `/plex` to see all commands."
             )
 
     async def application_error_handler(
