@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# CI only reads the code.
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint & syntax smoke test
