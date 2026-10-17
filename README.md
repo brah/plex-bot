@@ -1,361 +1,164 @@
 # Plex-Bot
 
-A Discord bot that interfaces with your Plex server through Tautulli's API, offering rich features like user statistics, media recommendations, live download tracking from qBittorrent, and more!
+A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautulli/Tautulli) and answers with slash commands: who's watching, what's popular, who watches most, charts, recommendations and library lookups.
 
-## Features
+<table>
+<tr>
+<td><img src="docs/screenshots/stats.webp" alt="/plex stats" width="420"></td>
+<td><img src="docs/screenshots/chart-shows.webp" alt="/plex chart" width="420"></td>
+</tr>
+</table>
 
-- **Top Plex Users**: Track and display the most active viewers with automatic Discord role assignments
-- **Media Recommendations**: Get personalized recommendations based on watch history and genre preferences
-- **Random Media Suggestions**: Discover content from your library with filtering by genre and media type
-- **Live Activity**: See who's currently watching what on your Plex server
-- **Download Tracking**: Monitor qBittorrent downloads in real time (optional)
-- **Media Statistics**: Generate detailed viewing statistics with visual charts
-- **Efficient Media Cache**: Optimized caching system for fast responses even with large libraries
+<details>
+<summary><b>More screenshots</b></summary>
 
-## A note on AI
+<table>
+<tr>
+<td><img src="docs/screenshots/status.webp" alt="/plex status" width="420"></td>
+<td><img src="docs/screenshots/watchers.webp" alt="/plex watchers" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/movie.webp" alt="/plex movie" width="420"></td>
+<td><img src="docs/screenshots/tv.webp" alt="/plex tv" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/random.webp" alt="/plex random" width="420"></td>
+<td><img src="docs/screenshots/recent.webp" alt="/plex recent" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/top.webp" alt="/plex top" width="420"></td>
+<td><img src="docs/screenshots/hot.webp" alt="/plex hot" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/stats-activity.webp" alt="/plex stats, Activity page" width="420"></td>
+<td><img src="docs/screenshots/history.webp" alt="/plex history" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/chart.webp" alt="/plex chart, over time" width="420"></td>
+<td><img src="docs/screenshots/chart-hours.webp" alt="/plex chart, by hour" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/shows.webp" alt="/plex shows" width="420"></td>
+<td><img src="docs/screenshots/help.webp" alt="/plex help" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/admin-users.webp" alt="/plexadmin users" width="420"></td>
+<td><img src="docs/screenshots/admin-cache.webp" alt="/plexadmin cache" width="420"></td>
+</tr>
+</table>
 
-Being a hobby project, don't be surprised by the use of AI models in commits — I encourage and invite you to do the same! Use whatever tools help you build and contribute.
+</details>
 
 ## Setup
 
-### Requirements
+You need Python 3.12+, a working Tautulli and a Discord server you can add bots to. qBittorrent is optional.
 
-- **Python 3.12+** (required by nextcord 3.2.0)
-- A working **Tautulli** setup ([Tautulli GitHub](https://github.com/Tautulli/Tautulli))
-- **Discord Bot Token** ([Discord Developer Portal](https://discord.com/developers/applications))
-- Optional: **qBittorrent** for download tracking
-- Optional: **TMDB API Key**, for richer metadata (work in progress: no command uses it yet)
+**Discord.** In the [Developer Portal](https://discord.com/developers/applications), create an application. Under **Bot**, copy the token, turn on **Server Members Intent**, and turn off **Public Bot**. Then invite it, using your application ID:
 
-### Installation
+```text
+https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot+applications.commands&permissions=268487680
+```
 
-1. Clone the repository:
+For the top-watcher roles, move the bot's role above those roles.
 
-   ```bash
-   git clone https://github.com/brah/plex-bot.git
-   cd plex-bot
-   ```
+**Tautulli.** Copy the API key from **Settings → Web Interface → API**.
 
-2. Install dependencies:
+**Install and run:**
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+git clone https://github.com/brah/plex-bot.git && cd plex-bot
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp config.example.json config.json                   # fill in token, tautulli and server_id
+python plexbot.py
+```
 
-3. Configure the bot:
-   
-   **Option 1: Migrate from an existing configuration**
-   
-   If you have an old PlexBot `config.json` (the flat format, with keys like `tautulli_ip`), convert it with the migration script. `--force` lets it replace the old file; a copy is saved to `config_backups/` first:
-   
-   ```bash
-   python migrate_config.py --force
-   ```
-   
-   **Option 2: Create a new configuration**
+Type `/plex` in Discord. To keep it running, see [Deployment](#deployment).
 
-   Copy the bundled template and fill in your values:
+## Configuration
 
-   ```bash
-   cp config.example.json config.json
-   ```
+Start from [`config.example.json`](config.example.json); anything you leave out uses a default.
 
-   The template mirrors this structure (everything not listed falls back to sensible defaults):
+| Setting | |
+|---------|--|
+| `core.token` | Discord bot token |
+| `tautulli.ip`, `tautulli.apikey` | Tautulli's `host:port` and API key; `use_https` to encrypt |
+| `discord.server_id` | Your server's ID. Commands appear there at once; blank registers them globally, which takes up to an hour |
+| `discord.admin_ids` | Users or roles who are bot admins, besides the server's administrators |
+| `discord.top_role_id`, `second_role_id`, `third_role_id` | Roles for the top three watchers |
+| `discord.stream_manager_ids` | Users or roles who may stop streams |
+| `discord.show_recent_viewers` | Show the last few viewers when nobody's watching (public, so off by default) |
+| `qbittorrent.*` | Web UI address and login, for `/plex downloading` |
+| `core.legacy_text_commands` | Point old `plex ` text commands at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
+| `core.log_level` | `DEBUG` to `ERROR` |
 
-   ```json
-   {
-       "core": {
-           "token": "<Your Discord Bot Token>",
-           "prefix": "plex ",
-           "log_level": "INFO"
-       },
-       "tautulli": {
-           "ip": "localhost:8181",
-           "apikey": "<Your Tautulli API Key>",
-           "use_https": false
-       },
-       "discord": {
-           "server_id": "<Your Discord Server ID>",
-           "admin_ids": [],
-           "top_role_id": 123456789,
-           "second_role_id": 123456789,
-           "third_role_id": 123456789,
-           "stream_manager_ids": [],
-           "show_recent_viewers": false
-       },
-       "qbittorrent": {
-           "ip": "localhost",
-           "port": "8080",
-           "username": "username",
-           "password": "password"
-       },
-       "tmdb": {
-           "apikey": "<Your TMDB API Key>"
-       }
-   }
-   ```
+Appearance lives in `ui` (embed colour), `charts` (size and `dpi`) and `defaults`. The mascot art is in `assets/mascot/`.
 
-   *Note: `top_role_id`, `second_role_id`, and `third_role_id` are role IDs which you've created to highlight the top 3 media watchers on your server.*
+**Keep the bot private.** Leave `server_id` set and **Public Bot** off. Otherwise anyone could add the bot to their own server and browse your Plex activity. Admins are the administrators of `server_id` plus `admin_ids`; with `server_id` blank, only `admin_ids` counts. Discord only shows `/plexadmin` to administrators; let others see it under **Server Settings → Integrations**.
 
-   *`server_id` registers slash commands to your server so they appear instantly; if left blank they register globally, which can take up to an hour.*
-
-   *Set `server_id` unless you mean to share the bot. Commands registered globally work in every server the bot is in, and Discord makes new bots public by default, so anyone can add it from its profile. They could then run `/plex history`, `/plex watchers` and the rest on your Plex server. If you leave `server_id` blank, turn off **Public Bot** under **Bot** in the Discord Developer Portal.*
-
-   *Bot admins can use `/plexadmin` and stop streams. They are the Discord administrators of `server_id`, plus every user or role listed in `admin_ids`. Being an administrator of any other server doesn't count, because anyone can invite a public bot to their own server: with `server_id` blank, only `admin_ids` grants admin, so set one of the two. Discord shows `/plexadmin` only to administrators; to let someone in `admin_ids` who isn't one see it, allow it for them under **Server Settings → Integrations**.*
-
-   *`stream_manager_ids` lists Discord user or role IDs (besides bot admins) allowed to stop streams from `/plex watchers`. Set `show_recent_viewers` to `true` to have `/plex watchers` list the last three viewers and what they watched when nobody's streaming; it's off by default because that card is public. If slash commands never appear, re-invite the bot with the `applications.commands` scope.*
-
-4. Run the bot:
-
-   ```bash
-   python plexbot.py
-   ```
-
-### Configuration System
-
-PlexBot now uses a unified configuration system that organizes settings into logical sections:
-
-- **core**: Basic bot settings (token, prefix, log level)
-- **tautulli**: Tautulli API connection settings
-- **discord**: Discord server and role settings
-- **qbittorrent**: qBittorrent connection settings
-- **tmdb**: TMDB API settings
-- **ui**: User interface customization
-- **cache**: Media cache settings
-- **defaults**: Default values for commands
-- **charts**: Chart visualization settings
-- **commands**: Command-specific settings
-- **colors**: Chart colors
-
-#### Migrating to the New Configuration System
-
-Only needed if your `config.json` is still in the old flat format (keys like `tautulli_ip`). A config that already has a `core` section is left alone.
-
-1. **Backup your existing configuration**:
-   The migration script will automatically create backups, but it's always good practice to make your own.
-
-2. **Run the migration script**:
-   ```bash
-   python migrate_config.py --force
-   ```
-
-3. **Review the new configuration**:
-   Check the generated `config.json` file to ensure all settings were correctly transferred.
-
-4. **Additional options**:
-   - `--force`: Override existing config.json
-   - `--no-backup`: Skip creating backups
-   - `--output FILE`: Specify output location
-   - `--backup-dir DIR`: Specify backup directory
-
-### Deployment
-
-For 24/7 operation, pick one of the two supported options below. The bot is a
-single long-running process with **no inbound ports**, and a Discord token allows
-**one connection** — run exactly one instance. Because it talks to Tautulli (and
-optionally qBittorrent) over your local network, it normally runs on the same
-host/network as Tautulli.
-
-#### Option A — Docker
-
-Best if you already run a Dockerized media stack. Requires Docker with the
-Compose plugin. A `Dockerfile` and `docker-compose.yml` are included.
-
-1. Create your config and an empty mappings file in the repo directory:
-
-   ```bash
-   cp config.example.json config.json   # then edit it
-   echo "[]" > map.json
-   ```
-
-2. Make Tautulli reachable from the container — set `tautulli.ip` in `config.json`
-   accordingly (see the networking notes in `docker-compose.yml`). **Do not use
-   `localhost`**; inside a container that points at the container itself. Use your
-   host's LAN IP, a `host.docker.internal:8181` mapping, or the Tautulli service
-   name if it shares this Docker network.
-
-3. Build and start:
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-4. Manage it:
-
-   ```bash
-   docker compose logs -f                 # follow logs
-   git pull && docker compose up -d --build   # update
-   ```
-
-`config.json` and `map.json` stay on the host (mounted in); the media cache lives
-in a named Docker volume. The container runs as UID:GID `1000:1000` — if your host
-user differs, set `user:` in `docker-compose.yml` (or `chown 1000:1000 config.json
-map.json`) so it can read/write them.
-
-#### Option B — systemd
-
-Best for a bare-metal or VM host. A ready-to-edit unit lives at
-[`deploy/plexbot.service`](deploy/plexbot.service).
-
-1. Install the bot (e.g. into `/opt/plex-bot`) with a virtualenv and deps, and
-   create `config.json` (see [Installation](#installation)). Using a venv is
-   important — the unit runs the bot via `venv/bin/python`, not the system
-   `python3`, which won't have the pinned Python 3.12+ dependencies.
-
-2. Install and enable the service (edit `User=` and the paths inside the unit
-   first):
-
-   ```bash
-   sudo cp deploy/plexbot.service /etc/systemd/system/plexbot.service
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now plexbot
-   ```
-
-3. Logs: `journalctl -u plexbot -f`
-
-#### Temporary (screen / tmux)
-
-For quick testing only — these do **not** restart on reboot. Run `python
-plexbot.py` inside a `screen -S plexbot` or `tmux new -s plexbot` session and
-detach (`Ctrl+A D` / `Ctrl+B D`).
+Upgrading from the old flat `config.json` (keys like `tautulli_ip`)? Run `python migrate_config.py --force`, which backs up the old one first.
 
 ## Commands
 
-Every command is a slash command: type `/plex` in Discord to see them all. Admin-only commands live under `/plexadmin`, for bot admins (see `admin_ids` above). Typing an old `plex ` command replies with its new name.
+Everything is under `/plex`, plus `/plexadmin` for admins.
 
-| Command | Description |
-|---------|-------------|
-| `/plex help` | Shows what the bot can do, by category (private) |
-| `/plex status` | Server health: version and update status, library totals and sizes, activity, and plex.tv service status (the **Plex services** button lists every service privately) |
-| `/plex watchers [stop] [message]` | Shows every current stream with a poster strip; pick one for private details (current frame, quality, device). Stream managers can stop streams from the details card or with `stop:` |
-| `/plex movie <title>` | Looks up a movie: poster, details, cast and who's watched it most. Titles are suggested as you type |
-| `/plex tv <title>` | The same for a TV show |
-| `/plex random [type] [genre]` | A random movie or show, optionally of one genre (suggested as you type); **Roll again** for another |
-| `/plex recent [count] [type]` | What was added recently, with a poster strip; pick one for its details (private) |
-| `/plex downloading` | What qBittorrent is downloading, with progress and time left |
-| `/plex recommend [member]` | Three unwatched picks in someone's favourite genres (default: you); the numbered buttons open each pick |
-| `/plex top [days]` | Top watchers by watch time, with medals. Defaults to the last 7 days; that default ranking also updates the top-three roles |
-| `/plex stats [days]` | Server stats in five pages (Overview, Movies, TV, Users, Activity) behind buttons: plays and watch time per type, the most popular titles with posters, top platforms, peak concurrent streams, per-library breakdowns, library totals, the top viewers of all time, and a day-by-day movies and TV chart with the busiest hour, day and viewer |
+| Command | |
+|---------|--|
+| `/plex status` | Server health, library size and plex.tv status |
+| `/plex watchers` | Current streams; stream managers can stop them |
+| `/plex movie`, `/plex tv` | Look up a title: details, cast, who's watched it |
+| `/plex random` | A random pick, optionally by type and genre |
+| `/plex recent` | Recently added |
+| `/plex recommend` | Unwatched picks from someone's favourite genres |
+| `/plex top` | Top watchers; also hands out the top-three roles |
+| `/plex stats` | Server stats across five pages |
+| `/plex hot` | Trending titles, binges and new hits |
+| `/plex history` | Recent plays, everyone's or one person's |
 | `/plex shows` | Top TV watchers of all time |
-| `/plex history [user]` | Recent plays on the server, or one person's (names are suggested as you type) |
-| `/plex hot [days]` | What's been popular lately: trending titles, new hits, most active, binges |
-| `/plex chart [user] [days]` | Charts of what people watch (default: the last 30 days). Opens on plays over time, movies vs TV, per day (per week past 90 days); a dropdown switches to by hour of day, by day of week, per viewer, per month, the top shows and top movies with their posters, or library growth (movies and shows added, counted per title, so a new season of an existing show doesn't count). Another dropdown picks one viewer, and buttons change the window and switch between plays and watch time. Hours and weekdays are in the Tautulli server's timezone |
-| `/plexadmin logs [level] [search]` | Shows you (privately) recent log records plus the full log file (admin only) |
-| `/plexadmin cache` | Shows the media cache behind `/plex random` and title suggestions, with a **Refresh now** button (admin only) |
-| `/plexadmin users` | Every Plex user with their Discord link and whether they're ignored (admin only) |
-| `/plexadmin link <plex_user> <member>` | Links a Plex user to a Discord member, so the bot shows their Discord name and avatar, gives top-watcher roles and can recommend for them; replaces either side's old link (admin only) |
-| `/plexadmin unlink <plex_user>` | Removes a Plex user's link (admin only) |
-| `/plexadmin ignore <plex_user>` | Leaves a Plex user out of stats, charts and lists, or brings them back (admin only) |
+| `/plex chart` | Charts by day, hour, weekday, viewer, show or movie |
+| `/plex downloading` | qBittorrent progress |
+| `/plex help` | What the bot can do |
+| `/plexadmin users`, `link`, `unlink`, `ignore` | Link Plex users to Discord members, or hide them from stats |
+| `/plexadmin cache`, `logs` | The media cache and recent logs |
 
-Anyone in the channel can use the controls under a `/plex chart`.
+Linking matters: names, avatars, roles and `/plex recommend` need it.
 
-Library sizes on `/plex status` come from Tautulli. Movie sizes appear on their own; for TV and music, run **Calculate Total File Sizes** on the library's Media Info tab in Tautulli once.
+## Deployment
 
-The redesigned commands use posters, avatars and a mascot instead of a fixed logo; mascot art lives in `assets/mascot/` (see `PROMPTS.md` to swap in your own).
+Run exactly one instance, near Tautulli. It needs no open ports.
+
+**Docker:**
+
+```bash
+cp config.example.json config.json && echo "[]" > map.json
+docker compose up -d --build
+```
+
+Inside a container, `localhost` means the container, so point `tautulli.ip` at your host's LAN address or the Tautulli service name. The container runs as `1000:1000`, so that user needs to be able to read and write `config.json` and `map.json`.
+
+**systemd:** install into a venv, edit and copy [`deploy/plexbot.service`](deploy/plexbot.service) to `/etc/systemd/system/`, then `sudo systemctl enable --now plexbot`.
+
+**Upgrading:** `git pull`, `pip install -r requirements.txt`, restart. The bot no longer asks for Message Content Intent, so you can turn it off in the portal unless you enable `core.legacy_text_commands`.
 
 ## Troubleshooting
 
-### Common Issues
+- **`PrivilegedIntentsRequired`**: turn on **Server Members Intent**.
+- **No slash commands**: set `server_id`, and check the invite included `applications.commands`.
+- **"Couldn't reach Tautulli"**: check `tautulli.ip` and the key.
+- **No roles handed out**: set all three role IDs, raise the bot's role, and link the winners.
+- **No TV sizes on `/plex status`**: run **Calculate Total File Sizes** on the library in Tautulli.
 
-- **Bot not responding to commands**: Ensure the bot token is correct and the bot has proper permissions in your Discord server.
-- **No data from Tautulli**: Double-check your Tautulli API key and IP address settings.
-- **qBittorrent integration issues**: Verify qBittorrent WebUI is enabled and credentials are correct.
-- **Missing roles**: Make sure the bot has permission to manage roles and the role IDs are correctly configured.
-- **Chart generation errors**: Ensure matplotlib is correctly installed (`pip install -r requirements.txt`).
+Logs go to `plexbot.log`; admins can also fetch them with `/plexadmin logs`, with secrets redacted.
 
-### Logs
+## Development
 
-The bot logs information to both the console and `plexbot.log`. If you're experiencing issues, check these logs for details. `plexbot.log` rotates at 4 MB, keeping three older files (`plexbot.log.1`–`.3`).
-
-Admins can also run `/plexadmin logs` in Discord: the bot replies privately with the most recent records plus the full log file, with tokens, API keys and passwords redacted. Optionally pick a minimum `level` and/or a `search` text.
-
-## Technical Details
-
-### Code Structure
-
-- **plexbot.py**: Main entry point
-- **config/**: Configuration system
-- **errors/**: Error handling system
-- **cogs/**: Command modules
-  - **media_commands.py**: Media-related commands
-  - **plex_stats.py**: Statistics commands
-  - **recommendations.py**: Recommendation system
-  - **server_commands.py**: Server management
-  - **user_management.py**: User mapping
-  - **utility_commands.py**: Utility commands
-  - **visualizations.py**: Chart commands
-- **ui/**: Shared presentation layer (embeds, images, theme, formatting) used by the redesigned commands
-- **assets/mascot/**: Mascot art, with SVG sources and AI prompts
-- **scripts/**: Dev-only tools (not shipped in the Docker image)
-- **tautulli_wrapper.py**: Tautulli API wrapper
-- **media_cache.py**: Media caching system
-- **utilities.py**: Utility functions
-- **tests/**: Unit tests for the helper functions
-
-### Error Handling
-
-The bot includes a robust error handling system that provides:
-- Consistent error messages to users
-- Detailed logging for troubleshooting
-
-If you experience issues, check the console output or log file for detailed error information.
-
-## Customization
-
-### UI Customization
-
-You can customize the appearance of bot messages by modifying the UI settings in your configuration:
-
-```json
-"ui": {
-    "plex_embed_color": "#E5A00D"
-}
+```bash
+pip install -r requirements.txt pytest "ruff==0.17.0"
+pytest -q && ruff check .
 ```
 
-The colour can be hex text (`"#E5A00D"`) or the same value as a plain number (`15040013`).
+Tests need neither Discord nor Tautulli.
 
-### Chart Customization
+## A note on AI
 
-Control the appearance of generated charts. Discord shows chart images about 430 pixels wide, so a wider canvas makes the text smaller; raise `dpi` for a sharper image instead:
-
-```json
-"charts": {
-    "width": 7,
-    "height": 3.5,
-    "dpi": 200
-}
-```
-
-### Default Values
-
-Adjust default command behaviors:
-
-```json
-"defaults": {
-    "recent_count": 10,
-    "time_range": 30
-}
-```
-
-## Upgrading
-
-### From Earlier Versions
-
-1. Pull the latest code:
-   ```bash
-   git pull origin main
-   ```
-
-2. Only if your `config.json` is still in the old flat format, convert it (see [Migrating](#migrating-to-the-new-configuration-system)):
-   ```bash
-   python migrate_config.py --force
-   ```
-
-3. Install any new dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Restart the bot:
-   ```bash
-   python plexbot.py
-   ```
+This is a hobby project, so don't be surprised to find AI in the commits. Use whatever tools help you build and contribute.
