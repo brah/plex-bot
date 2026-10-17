@@ -29,14 +29,18 @@ jobs:
           config errors cogs ui
 
   test:
-    name: Unit tests
+    name: Unit tests (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # The oldest supported version, and the one the Docker image runs.
+        python: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
 
       - name: Install dependencies
         # Installing the pinned requirements also verifies they resolve together
