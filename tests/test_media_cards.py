@@ -24,7 +24,7 @@ EPISODE = {
     "rating_key": "202", "media_type": "episode", "title": "Hello, Ms. Cobel", "grandparent_title": "Severance",
     "parent_media_index": "1", "media_index": "2", "duration": "3000000", "originally_available_at": "2022-02-18",
 }
-SHOW = {"rating_key": "200", "media_type": "show", "title": "Severance", "year": "2022", "children_count": "2",
+SHOW = {"rating_key": "200", "media_type": "show", "title": "Severance", "year": "2022", "children_count": "19",
         "duration": "3000000", "rating": "0"}
 SEASON = {"rating_key": "201", "media_type": "season", "title": "Season 2", "parent_title": "Severance"}
 
@@ -57,7 +57,7 @@ class TestMediaCard:
         episode = media_card(EPISODE)
         assert episode.title == "Severance · S01E02 · Hello, Ms. Cobel"
         assert media_facts(EPISODE) == "50m · aired <t:1645142400:D>"
-        assert media_facts(SHOW) == "2 seasons"  # no per-episode runtime, no zero rating
+        assert media_facts(SHOW) == "19 episodes"  # no per-episode runtime, no zero rating
         assert session_title(SEASON) == "Severance · Season 2"
 
     def test_stats_follow_a_blank_line_and_minimal_items_render(self):

@@ -275,12 +275,12 @@ def genre_label(name) -> str:
 def media_facts(item: dict) -> str:
     """One line of facts: "R · 2h 16m · Action, Science Fiction · ⭐ 8.7"."""
     media_type = item.get("media_type")
-    seasons = to_int(item.get("children_count"))
+    episodes = to_int(item.get("children_count"))  # Tautulli fills a show's children_count from Plex's leafCount
     aired = _air_date(item.get("originally_available_at")) if media_type == "episode" else None
     return join([
         item.get("content_rating"),
         runtime(item.get("duration")) if media_type in ("movie", "episode") else None,
-        plural(seasons, "season") if media_type == "show" and seasons else None,
+        plural(episodes, "episode") if media_type == "show" and episodes else None,
         f"aired {aired}" if aired else None,
         ", ".join(genre_label(g) for g in (item.get("genres") or [])[:3]),
         _star_rating(item),
