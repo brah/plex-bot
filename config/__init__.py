@@ -1,9 +1,10 @@
 # config/__init__.py
 
-"""config.json, read once at startup, with a default for every setting the bot reads."""
+"""config.json and PLEXBOT_* environment variables, read once at startup, with a default for every setting."""
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -57,10 +58,12 @@ class Config:
                 self._user_config = {}
                 return False
         else:
-            logger.warning(f"Configuration file {config_file} not found, using defaults")
+            logger.info(f"No {config_file}; using environment variables and defaults")
+
+        self._apply_environment(os.environ)
 
         missing_required = [
-            f"{section_name}.{key}"
+            f"{section_name}.{key} ({env_name(section_name, key)})"
             for section_name, section in self._sections.items()
             for key in section.get_required_keys()
             if key not in self._user_config.get(section_name, {})
@@ -72,11 +75,61 @@ class Config:
         self._initialized = True
         return True
 
+    def _apply_environment(self, environ) -> None:
+        """PLEXBOT_<SECTION>_<KEY> variables override config.json. Empty ones count as unset."""
+        known = set()
+        used = []
+        for section_name, section in self._sections.items():
+            for key, (default, _description, _required) in section._values.items():
+                name = env_name(section_name, key)
+                known.add(name)
+                raw = environ.get(name, "").strip()
+                if not raw:
+                    continue
+                try:
+                    value = parse_env_value(raw, default)
+                except ValueError:
+                    logger.error(f"Ignoring {name}: {raw!r} isn't a valid {type(default).__name__}")
+                    continue
+                self._user_config.setdefault(section_name, {})[key] = value
+                used.append(name)
+        if used:
+            logger.info(f"Settings from the environment: {', '.join(used)}")  # names only: values hold secrets
+        for name in sorted(n for n in environ if n.upper().startswith("PLEXBOT_") and n.upper() not in known):
+            logger.warning(f"Unknown setting {name} ignored; check the spelling")
+
     def get(self, section: str, key: str, default: Optional[Any] = None) -> Any:
         """The user's value, else `default`, else the section's registered default."""
         if default is None and section in self._sections and key in self._sections[section]._values:
             default = self._sections[section]._values[key][0]
         return self._user_config.get(section, {}).get(key, default)
+
+
+def env_name(section: str, key: str) -> str:
+    return f"PLEXBOT_{section}_{key}".upper()
+
+
+def parse_env_value(raw: str, default: Any) -> Any:
+    """Read an environment string as the type of the setting's default. Raises ValueError."""
+    if isinstance(default, bool):
+        lowered = raw.lower()
+        if lowered in ("1", "true", "yes", "on"):
+            return True
+        if lowered in ("0", "false", "no", "off"):
+            return False
+        raise ValueError(raw)
+    if isinstance(default, int):
+        try:
+            return int(raw)
+        except ValueError:
+            if raw.startswith("#") or raw.lower().startswith("0x"):
+                return int(raw.lstrip("#"), 16)  # hex colours such as "#E5A00D"
+            raise
+    if isinstance(default, float):
+        return float(raw)
+    if isinstance(default, list):
+        return [item.strip() for item in raw.split(",") if item.strip()]  # IDs; read as digit strings
+    return raw
 
 
 # Create a singleton instance

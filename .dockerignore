@@ -2,6 +2,8 @@
 config.json
 map.json
 cache/
+.env
+.env.*
 *.log
 **/config.json
 **/*.log
@@ -31,6 +33,7 @@ docker-compose.yml
 .claude/
 .superpowers/
 docs/
+img/
 config.example.json
 repomix-output.*
 .idea/

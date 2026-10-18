@@ -20,7 +20,8 @@ CI (`.github/workflows/ci.yml`) runs ruff, a compileall smoke test over a hard-c
 - `cogs/`: one module per area (server, media, stats, charts, recommendations, user management, help).
 - `ui/`: presentation. Commands build a `ui.embeds.Reply` (embeds + `Attachment`s + view) and call `.send(interaction)`. Use `error_state`, `service_down`, `empty_state`, `success` for standard frames. Views subclass `errors.LoggedView`.
 - Intents: Server Members always. Message Content only when `core.legacy_text_commands` is on; it serves nothing but the old prefix commands' redirect in `errors/`. Mentions always work as a prefix (`when_mentioned`, which avoids nextcord's warning when the intent is off); `plex ` only when on.
-- `config/`: every setting with its default; `config.get(section, key)`. Required keys (`core.token`, `tautulli.ip`, `tautulli.apikey`) only need to exist, so an empty token still passes.
+- `config/`: every setting with its default; `config.get(section, key)`. `PLEXBOT_<SECTION>_<KEY>` env vars override `config.json`, typed from the default (blank = unset). Required keys (`core.token`, `tautulli.ip`, `tautulli.apikey`) only need to exist, so an empty token still passes.
+- Docker: code in `/app` (root-owned), working dir and only writable path `/data` (`map.json`, `cache/`, `plexbot.log`). State paths resolve against the working dir, code paths against `__file__`.
 - `utilities.py`: `UserMappings` (Plex user to Discord member, stored in `map.json`), viewer names/avatars, log redaction.
 - `tautulli_wrapper.py`: every Tautulli call goes through `Tautulli.api_call`; check results with `Tautulli.check_response` / `get_response_data`.
 

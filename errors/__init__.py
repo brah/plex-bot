@@ -89,7 +89,7 @@ class ErrorHandler:
             logger.warning(f"{interaction.user} ({interaction.user.id}) was refused {path}")
             reply = error_state(
                 ErrorKind.PERMISSION, f"Only bot admins can use `{path}`.",
-                hint="An admin can add your Discord ID to discord.admin_ids in config.json.",
+                hint="An admin can add your Discord ID to discord.admin_ids (PLEXBOT_DISCORD_ADMIN_IDS).",
             )
         elif isinstance(error, _SERVICE_ERRORS):
             logger.error(f"{path} couldn't reach a service: {error}", exc_info=error)

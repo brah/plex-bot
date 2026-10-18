@@ -88,22 +88,29 @@ Type `/plex` in Discord. To keep it running, see [Deployment](#deployment).
 
 ## Configuration
 
-Start from [`config.example.json`](config.example.json); anything you leave out uses a default.
+You can set each option in `config.json` (start from [`config.example.json`](config.example.json)), as an environment variable, or both. Environment variables are the easy way with Docker: put them in `.env` (see [`.env.example`](.env.example)). If an option is set in both places, the environment variable wins. Anything you leave out uses a default.
 
-| Setting | |
-|---------|--|
-| `core.token` | Discord bot token |
-| `tautulli.ip`, `tautulli.apikey` | Tautulli's `host:port` and API key; `use_https` to encrypt |
-| `discord.server_id` | Your server's ID. Commands appear there at once; blank registers them globally, which takes up to an hour |
-| `discord.admin_ids` | Users or roles who are bot admins, besides the server's administrators |
-| `discord.top_role_id`, `second_role_id`, `third_role_id` | Roles for the top three watchers |
-| `discord.stream_manager_ids` | Users or roles who may stop streams |
-| `discord.show_recent_viewers` | Show the last few viewers when nobody's watching (public, so off by default) |
-| `qbittorrent.*` | Web UI address and login, for `/plex downloading` |
-| `core.legacy_text_commands` | Point old `plex ` text commands at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
-| `core.log_level` | `DEBUG` to `ERROR` |
+| `config.json` | Environment variable | What it does |
+|---------------|----------------------|--------------|
+| `core.token` | `PLEXBOT_CORE_TOKEN` | Discord bot token |
+| `tautulli.ip` | `PLEXBOT_TAUTULLI_IP` | Tautulli's address, as `host:port` |
+| `tautulli.apikey` | `PLEXBOT_TAUTULLI_APIKEY` | Tautulli's API key |
+| `tautulli.use_https` | `PLEXBOT_TAUTULLI_USE_HTTPS` | `true` to connect to Tautulli over HTTPS |
+| `discord.server_id` | `PLEXBOT_DISCORD_SERVER_ID` | Your server's ID. Commands appear there at once; blank registers them globally, which takes up to an hour |
+| `discord.admin_ids` | `PLEXBOT_DISCORD_ADMIN_IDS` | Users or roles who are bot admins, besides the server's administrators |
+| `discord.top_role_id` | `PLEXBOT_DISCORD_TOP_ROLE_ID` | Role for the top watcher |
+| `discord.second_role_id` | `PLEXBOT_DISCORD_SECOND_ROLE_ID` | Role for the second |
+| `discord.third_role_id` | `PLEXBOT_DISCORD_THIRD_ROLE_ID` | Role for the third |
+| `discord.stream_manager_ids` | `PLEXBOT_DISCORD_STREAM_MANAGER_IDS` | Users or roles who may stop streams |
+| `discord.show_recent_viewers` | `PLEXBOT_DISCORD_SHOW_RECENT_VIEWERS` | Show the last few viewers when nobody's watching (public, so off by default) |
+| `qbittorrent.ip`, `port` | `PLEXBOT_QBITTORRENT_IP`, `PLEXBOT_QBITTORRENT_PORT` | qBittorrent Web UI address, for `/plex downloading` |
+| `qbittorrent.username`, `password` | `PLEXBOT_QBITTORRENT_USERNAME`, `PLEXBOT_QBITTORRENT_PASSWORD` | qBittorrent Web UI login |
+| `core.legacy_text_commands` | `PLEXBOT_CORE_LEGACY_TEXT_COMMANDS` | Point old `plex ` text commands at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
+| `core.log_level` | `PLEXBOT_CORE_LOG_LEVEL` | `DEBUG` to `ERROR` |
 
-Appearance lives in `ui` (embed colour), `charts` (size and `dpi`) and `defaults`. The mascot art is in `assets/mascot/`.
+In an environment variable, write a list of IDs with commas (`PLEXBOT_DISCORD_ADMIN_IDS=123,456`) and an on/off option as `true` or `false`.
+
+Appearance lives in `ui` (embed colour), `charts` (size and `dpi`) and `defaults`. These have environment variables too, named the same way: `charts.dpi` is `PLEXBOT_CHARTS_DPI`. The mascot art is in `assets/mascot/`.
 
 **Keep the bot private.** Leave `server_id` set and **Public Bot** off. Otherwise anyone could add the bot to their own server and browse your Plex activity. Admins are the administrators of `server_id` plus `admin_ids`; with `server_id` blank, only `admin_ids` counts. Discord only shows `/plexadmin` to administrators; let others see it under **Server Settings → Integrations**.
 
@@ -138,18 +145,44 @@ Linking matters: names, avatars, roles and `/plex recommend` need it.
 
 Run exactly one instance, near Tautulli. It needs no open ports.
 
-**Docker:**
+### Docker Compose
 
-```bash
-cp config.example.json config.json && echo "[]" > map.json
-docker compose up -d --build
-```
+You need Docker with Compose 2.24 or newer, plus the Discord and Tautulli steps from [Setup](#setup).
 
-Inside a container, `localhost` means the container, so point `tautulli.ip` at your host's LAN address or the Tautulli service name. The container runs as `1000:1000`, so that user needs to be able to read and write `config.json` and `map.json`.
+1. Get the code and make your settings file:
 
-**systemd:** install into a venv, edit and copy [`deploy/plexbot.service`](deploy/plexbot.service) to `/etc/systemd/system/`, then `sudo systemctl enable --now plexbot`.
+   ```bash
+   git clone https://github.com/brah/plex-bot.git && cd plex-bot
+   cp .env.example .env
+   ```
 
-**Upgrading:** `git pull`, `pip install -r requirements.txt`, restart. The bot no longer asks for Message Content Intent, so you can turn it off in the portal unless you enable `core.legacy_text_commands`.
+2. Open `.env` and fill in `PLEXBOT_CORE_TOKEN`, `PLEXBOT_TAUTULLI_IP`, `PLEXBOT_TAUTULLI_APIKEY` and `PLEXBOT_DISCORD_SERVER_ID`. Inside a container, `localhost` means the container itself, so use your host's LAN address (`192.168.1.10:8181`) or, if Tautulli runs in the same Compose project, its service name (`tautulli:8181`).
+
+3. Start it:
+
+   ```bash
+   docker compose up -d --build
+   docker compose logs -f        # "Logged in as ..." means it's working; Ctrl+C stops following
+   ```
+
+The bot keeps its user links (`map.json`), media cache and `plexbot.log` in the `plexbot-data` volume, so they survive rebuilds.
+
+| To | Run |
+|----|-----|
+| Update | `git pull && docker compose up -d --build` |
+| Apply a changed `.env` | `docker compose up -d` |
+| Stop | `docker compose down` (keeps the volume) |
+| Back up user links | `docker compose cp plexbot:/data/map.json map.json` |
+
+**Prefer `config.json`?** Copy `config.example.json` to `config.json` and uncomment its line under `volumes:` in `docker-compose.yml`. Settings in `.env` still win.
+
+**Upgrading from the old layout** (with `config.json` and `map.json` beside `docker-compose.yml`): after `git pull`, uncomment the `config.json` line, then run `docker compose up -d --build`. Copy your links into the volume with `docker compose cp map.json plexbot:/data/map.json && docker compose restart`. The media cache rebuilds by itself.
+
+### systemd
+
+Install into a venv, edit and copy [`deploy/plexbot.service`](deploy/plexbot.service) to `/etc/systemd/system/`, then `sudo systemctl enable --now plexbot`.
+
+To upgrade: `git pull`, `pip install -r requirements.txt`, restart. The bot no longer asks for Message Content Intent, so you can turn it off in the portal unless you enable `core.legacy_text_commands`.
 
 ## Troubleshooting
 

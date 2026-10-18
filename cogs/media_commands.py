@@ -513,7 +513,7 @@ class MediaCommands(commands.Cog):
         client = self._qbit_client()
         if client is None:
             return error_state(ErrorKind.INPUT, "qBittorrent isn't set up.",
-                               hint="An admin can add it under qbittorrent in config.json."), False
+                               hint="An admin can add it under qbittorrent in config.json or .env."), False
         try:
             await asyncio.to_thread(client.auth_log_in)
             torrents = await asyncio.to_thread(client.torrents.info.downloading)

@@ -92,7 +92,8 @@ async def initialize_resources():
 
 async def load_cogs(bot):
     """Load every cog in the cogs directory."""
-    for cog_file in sorted(Path("cogs").glob("*.py")):
+    # Beside this file, not the working directory: in Docker the bot runs from its /data volume.
+    for cog_file in sorted((Path(__file__).parent / "cogs").glob("*.py")):
         if cog_file.name.startswith("_"):
             continue
         cog_name = f"cogs.{cog_file.stem}"
