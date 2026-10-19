@@ -1,11 +1,7 @@
 # Mascot prompts
 
-The bot's mascot is **Kernel**, a striped popcorn bucket. Each slot below is a PNG the bot sends as
-a small embed thumbnail (Discord shows it at about 80 px), drawn from the matching `<slot>.svg`
-source. Re-render the PNGs after editing an SVG with `python scripts/render_mascots.py`.
-
-**Swapping in your own art:** any slot can be replaced, with no code changes, by saving a square,
-transparent PNG (at most 1024 px, under 250 KB) over `<slot>.png` in this directory.
+Text-to-image prompts for **Kernel**, one per slot. See the [README](README.md) for where each slot
+appears and how to swap in new art.
 
 Every prompt below is complete on its own: it repeats the shared style and character description,
 then adds the pose.

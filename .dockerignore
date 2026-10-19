@@ -33,7 +33,6 @@ docker-compose.yml
 .claude/
 .superpowers/
 docs/
-img/
 config.example.json
 repomix-output.*
 .idea/

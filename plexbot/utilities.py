@@ -1,3 +1,5 @@
+"""Plex user to Discord member links (map.json), viewer names and avatars, and log redaction."""
+
 import json
 import logging
 import os

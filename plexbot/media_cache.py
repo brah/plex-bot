@@ -1,3 +1,6 @@
+"""A local copy of the Plex library's metadata, refreshed from Tautulli in the background and saved
+under cache/. Title autocomplete, /plex random and /plex recommend read from it."""
+
 import asyncio
 import json
 import logging

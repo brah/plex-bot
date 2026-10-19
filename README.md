@@ -20,6 +20,8 @@ A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautu
 </tr>
 </table>
 
+<sub>Screenshots are for reference only and may not match the current version exactly.</sub>
+
 <details>
 <summary><b>More screenshots</b></summary>
 
@@ -110,7 +112,7 @@ You can set each option in `config.json` (start from [`config.example.json`](con
 
 In an environment variable, write a list of IDs with commas (`PLEXBOT_DISCORD_ADMIN_IDS=123,456`) and an on/off option as `true` or `false`.
 
-Appearance lives in `ui` (embed colour), `charts` (size and `dpi`) and `defaults`. These have environment variables too, named the same way: `charts.dpi` is `PLEXBOT_CHARTS_DPI`. The mascot art is in `assets/mascot/`.
+Appearance lives in `ui` (embed colour), `charts` (size and `dpi`) and `defaults`. These have environment variables too, named the same way: `charts.dpi` is `PLEXBOT_CHARTS_DPI`. To swap in your own mascot art, see [`assets/mascot/`](assets/mascot/README.md).
 
 **Keep the bot private.** Leave `server_id` set and **Public Bot** off. Otherwise anyone could add the bot to their own server and browse your Plex activity. Admins are the administrators of `server_id` plus `admin_ids`; with `server_id` blank, only `admin_ids` counts. Discord only shows `/plexadmin` to administrators; let others see it under **Server Settings → Integrations**.
 
@@ -174,13 +176,11 @@ The bot keeps its user links (`map.json`), media cache and `plexbot.log` in the 
 
 **Prefer `config.json`?** Copy `config.example.json` to `config.json` and uncomment its line under `volumes:` in `docker-compose.yml`. Settings in `.env` still win.
 
-**Upgrading from the old layout** (with `config.json` and `map.json` beside `docker-compose.yml`): after `git pull`, uncomment the `config.json` line, then run `docker compose up -d --build`. Copy your links into the volume with `docker compose cp map.json plexbot:/data/map.json && docker compose restart`. The media cache rebuilds by itself.
-
 ### systemd
 
 Install into a venv, edit and copy [`deploy/plexbot.service`](deploy/plexbot.service) to `/etc/systemd/system/`, then `sudo systemctl enable --now plexbot`.
 
-To upgrade: `git pull`, `pip install -r requirements.txt`, restart. The bot no longer asks for Message Content Intent, so you can turn it off in the portal unless you enable `core.legacy_text_commands`.
+To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl restart plexbot`.
 
 ## Troubleshooting
 
@@ -199,7 +199,7 @@ pip install -r requirements.txt pytest "ruff==0.17.0"
 pytest -q && ruff check .
 ```
 
-Tests need neither Discord nor Tautulli.
+Tests need neither Discord nor Tautulli. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the code is laid out and the rules for changes.
 
 ## A note on AI
 

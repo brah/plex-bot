@@ -1,3 +1,5 @@
+"""/plex help: what the bot can do, by category."""
+
 import logging
 import os
 from dataclasses import dataclass

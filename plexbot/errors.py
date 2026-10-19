@@ -1,3 +1,6 @@
+"""Error handling: failed slash commands, the old prefix commands' redirect, and views and modals
+that log their errors."""
+
 import logging
 from typing import Dict, Iterable, Optional
 

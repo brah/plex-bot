@@ -1,3 +1,5 @@
+"""Server commands: /plex status, /plex watchers and /plexadmin logs."""
+
 import asyncio
 import io
 import logging

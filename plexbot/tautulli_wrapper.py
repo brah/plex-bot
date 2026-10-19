@@ -1,3 +1,5 @@
+"""Async client for Tautulli's API (every call goes through Tautulli.api_call), plus an unused TMDB client."""
+
 import asyncio
 import json
 import logging
