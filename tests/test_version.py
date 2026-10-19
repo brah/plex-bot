@@ -29,6 +29,11 @@ def test_checkout_version_comes_from_git_describe_without_the_v(monkeypatch):
     assert version.bot_version() == "1.1.0-3-gabc1234"
 
 
+def test_a_non_ascii_tag_doesnt_stop_the_bot_starting(monkeypatch):
+    monkeypatch.setattr(subprocess, "check_output", lambda *a, **k: "v1.0.0-é\n".encode("utf-8"))
+    assert version.bot_version() == "1.0.0-é"
+
+
 def test_no_git_means_unknown(monkeypatch):
     def no_git(*a, **k):
         raise FileNotFoundError("git")

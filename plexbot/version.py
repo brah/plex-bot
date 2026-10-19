@@ -28,7 +28,7 @@ def bot_version() -> str:
     except Exception as e:
         logger.debug(f"Couldn't read the version from git: {e}")
         return "unknown"
-    return described.decode("ascii").strip().removeprefix("v")
+    return described.decode("utf-8", errors="replace").strip().removeprefix("v")
 
 
 def _release(text: Optional[str]) -> Optional[tuple]:
@@ -45,12 +45,14 @@ def is_newer(latest: Optional[str], current: str) -> bool:
 async def latest_release() -> Optional[str]:
     """The newest release on GitHub, or None if GitHub can't say right now."""
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.get(RELEASES_URL, headers={"Accept": "application/vnd.github+json"}) as response:
-                if response.status != 200:
-                    logger.debug(f"GitHub answered {response.status} for the latest release")
-                    return None
-                return (await response.json())["tag_name"].removeprefix("v")
+        async with (
+            aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session,
+            session.get(RELEASES_URL, headers={"Accept": "application/vnd.github+json"}) as response,
+        ):
+            if response.status != 200:
+                logger.debug(f"GitHub answered {response.status} for the latest release")
+                return None
+            return (await response.json())["tag_name"].removeprefix("v")
     except Exception as e:
         logger.debug(f"Couldn't check GitHub for a newer release: {e}")
         return None

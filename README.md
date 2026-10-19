@@ -182,7 +182,7 @@ The bot keeps its user links (`map.json`), media cache and `plexbot.log` in the 
 
 Install into a venv, edit and copy [`deploy/plexbot.service`](deploy/plexbot.service) to `/etc/systemd/system/`, then `sudo systemctl enable --now plexbot`.
 
-To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl restart plexbot`. `git pull` follows `main`, which can be ahead of the latest release; to stay on releases, run `git fetch --tags && git checkout v1.0.0` with the version you want. [CHANGELOG.md](CHANGELOG.md) says what changed in each one.
+To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl restart plexbot`. `git pull` follows `main`, which can be ahead of the latest release. To stay on releases instead, update with `git fetch --tags && git checkout v1.0.0` (the version you want) in place of `git pull`; `git checkout main` goes back. [CHANGELOG.md](CHANGELOG.md) says what changed in each release.
 
 ## Troubleshooting
 
