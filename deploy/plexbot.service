@@ -20,7 +20,7 @@ User=plexbot
 WorkingDirectory=/opt/plex-bot
 # Use the project's virtualenv interpreter, NOT the system python3 — the pinned
 # dependencies require Python 3.12+ and are installed into this venv.
-ExecStart=/opt/plex-bot/venv/bin/python -m plexbot
+ExecStart=/opt/plex-bot/.venv/bin/python -m plexbot
 Restart=on-failure
 RestartSec=5
 

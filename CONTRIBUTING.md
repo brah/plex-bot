@@ -13,7 +13,7 @@ pytest -q        # needs neither Discord nor Tautulli
 ruff check .
 ```
 
-To run the bot itself you need a Discord token and Tautulli; see [Setup](README.md#setup). CI runs
+To run the bot itself you need a Discord token and Tautulli; see [Install](README.md#install). CI runs
 ruff and pytest on Python 3.12 and 3.14, and builds the Docker image and checks it starts.
 
 ## Where things live
@@ -37,7 +37,7 @@ The bot is the `plexbot` package; `python -m plexbot` runs it.
 | `assets/mascot/` | Kernel, the mascot. See its [README](assets/mascot/README.md). |
 | `docs/` | README screenshots and banner. See its [README](docs/README.md). |
 | `scripts/` | Developer tools, not used by the bot. |
-| `deploy/`, `Dockerfile`, `docker-compose.yml` | Ways to run it. See [Deployment](README.md#deployment). |
+| `deploy/`, `Dockerfile`, `docker-compose.yml` | Ways to run it. See [Install](README.md#install). |
 
 ## How the code fits together
 
