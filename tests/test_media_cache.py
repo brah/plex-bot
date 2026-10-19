@@ -129,12 +129,12 @@ def test_disk_round_trip_keeps_items_and_freshness(tmp_path):
     assert loaded.last_updated == datetime(2026, 10, 1, 12, 0)
 
 
-def test_legacy_list_file_loads_with_its_modified_time(tmp_path):
+def test_unreadable_file_starts_empty_and_stale_so_it_rebuilds(tmp_path):
     path = tmp_path / "cache.json"
-    path.write_text(json.dumps([_item("7", "Legacy")]), encoding="utf-8")
+    path.write_text(json.dumps([_item("7", "Old bare-list format")]), encoding="utf-8")
     cache = MediaCache(LibraryTautulli({}), cache_file_path=str(path))
     asyncio.run(cache.load_cache_from_disk())
-    assert list(cache.media_items) == ["7"] and cache.last_updated is not None
+    assert cache.media_items == {} and cache.last_updated is None
 
 
 def test_close_stops_a_background_refresh(tmp_path):

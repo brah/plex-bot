@@ -114,8 +114,6 @@ Appearance lives in `ui` (embed colour), `charts` (size and `dpi`) and `defaults
 
 **Keep the bot private.** Leave `server_id` set and **Public Bot** off. Otherwise anyone could add the bot to their own server and browse your Plex activity. Admins are the administrators of `server_id` plus `admin_ids`; with `server_id` blank, only `admin_ids` counts. Discord only shows `/plexadmin` to administrators; let others see it under **Server Settings → Integrations**.
 
-Upgrading from the old flat `config.json` (keys like `tautulli_ip`)? Run `python migrate_config.py --force`, which backs up the old one first.
-
 ## Commands
 
 Everything is under `/plex`, plus `/plexadmin` for admins.

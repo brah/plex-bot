@@ -183,16 +183,9 @@ class MediaCache:
 
         try:
             data = json.loads(await asyncio.to_thread(self.cache_file_path.read_text, encoding="utf-8"))
-            # Support both the current wrapped format ({"updated_at", "items"})
-            # and the legacy bare-list format. Restoring the real timestamp is
-            # what lets cache freshness (update_interval) survive a restart.
-            if isinstance(data, dict):
-                items = data.get("items", [])
-                self.last_updated = self._parse_timestamp(data.get("updated_at"))
-            else:
-                items = data
-                # Legacy file with no embedded timestamp: fall back to its mtime.
-                self.last_updated = datetime.fromtimestamp(self.cache_file_path.stat().st_mtime)
+            # Restoring the real timestamp is what lets cache freshness (update_interval) survive a restart.
+            items = data["items"]
+            self.last_updated = self._parse_timestamp(data.get("updated_at"))
             self.media_items = {str(item["rating_key"]): item for item in items}
             logger.info(f"Media cache loaded from {self.cache_file_path} with {len(self.media_items)} items")
         except Exception as e:

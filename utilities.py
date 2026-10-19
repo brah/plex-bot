@@ -55,10 +55,6 @@ class RedactSecrets(logging.Filter):
         return True
 
 
-# Bot configuration lives in the `config` package (config/__init__.py).
-# The old utilities.Config JSON reader was removed as dead code.
-
-
 class MappingsUnavailable(Exception):
     """map.json exists but couldn't be read, so saving over it would lose every mapping."""
 

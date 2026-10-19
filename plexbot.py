@@ -174,7 +174,7 @@ def main():
 
     # Initialize configuration system
     if not config.initialize():
-        logger.error("Failed to initialize configuration system. Run migrate_config.py first if needed.")
+        logger.error("Failed to load the configuration; see the errors above.")
         return
 
     log_level = str(config.get("core", "log_level", "INFO")).upper()
