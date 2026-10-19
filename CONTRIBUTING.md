@@ -75,10 +75,22 @@ its default.
 - Screenshots are for reference only and can fall behind the bot, so a change doesn't have to
   update them. Any image you add must never show real Plex or Discord user names.
 - When a command changes, update the commands table in the README.
-- Until the project has versioned releases, docs describe how things work now: no changelogs,
-  upgrade steps or migration notes.
+- A change people would notice adds a line to **Unreleased** in [CHANGELOG.md](CHANGELOG.md), under
+  **New features**, **Bug fixes** or **Changes**. Anything people must do themselves after updating goes
+  under **Changes**.
 - Cosmetic changes keep every user-visible feature.
 - README text is plain English for people running the bot, not developers.
+
+## Cutting a release
+
+1. On a `main` whose CI passed, rename `## Unreleased` in CHANGELOG.md to `## X.Y.Z - YYYY-MM-DD`,
+   add an empty `## Unreleased` above it, and commit.
+2. `git tag vX.Y.Z && git push origin main vX.Y.Z`.
+3. The Release workflow publishes the Docker image and the GitHub Release. If it fails, fix the
+   problem, delete the tag (`git push origin :refs/tags/vX.Y.Z` and `git tag -d vX.Y.Z`) and tag again.
+
+Version numbers: the last goes up for fixes, the middle for new features, and the first for changes
+people must act on, like a renamed setting or a different start command.
 
 ## Tautulli quirks
 

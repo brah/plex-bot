@@ -1,6 +1,8 @@
 services:
   plexbot:
-    build: .
+    # Pin a version with :1 or :1.0.0 instead of :latest. To build from a clone of the repo,
+    # replace image: with build: .
+    image: ghcr.io/brah/plex-bot:latest
     container_name: plexbot
     restart: unless-stopped
     # Settings: PLEXBOT_<SECTION>_<KEY> variables, copied from .env.example.

@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/github/license/brah/plex-bot)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](#deployment)
 
-**[Setup](#setup)** · **[Configuration](#configuration)** · **[Commands](#commands)** · **[Deployment](#deployment)** · **[Troubleshooting](#troubleshooting)**
+**[Setup](#setup)** · **[Configuration](#configuration)** · **[Commands](#commands)** · **[Deployment](#deployment)** · **[Troubleshooting](#troubleshooting)** · **[Changelog](CHANGELOG.md)**
 
 </div>
 
@@ -149,11 +149,11 @@ Run exactly one instance, near Tautulli. It needs no open ports.
 
 You need Docker with Compose 2.24 or newer, plus the Discord and Tautulli steps from [Setup](#setup).
 
-1. Get the code and make your settings file:
+1. In an empty folder, download the Compose file and your settings file:
 
    ```bash
-   git clone https://github.com/brah/plex-bot.git && cd plex-bot
-   cp .env.example .env
+   curl -O https://raw.githubusercontent.com/brah/plex-bot/main/docker-compose.yml
+   curl -o .env https://raw.githubusercontent.com/brah/plex-bot/main/.env.example
    ```
 
 2. Open `.env` and fill in `PLEXBOT_CORE_TOKEN`, `PLEXBOT_TAUTULLI_IP`, `PLEXBOT_TAUTULLI_APIKEY` and `PLEXBOT_DISCORD_SERVER_ID`. Inside a container, `localhost` means the container itself, so use your host's LAN address (`192.168.1.10:8181`) or, if Tautulli runs in the same Compose project, its service name (`tautulli:8181`).
@@ -161,26 +161,28 @@ You need Docker with Compose 2.24 or newer, plus the Discord and Tautulli steps 
 3. Start it:
 
    ```bash
-   docker compose up -d --build
+   docker compose up -d
    docker compose logs -f        # "Logged in as ..." means it's working; Ctrl+C stops following
    ```
 
-The bot keeps its user links (`map.json`), media cache and `plexbot.log` in the `plexbot-data` volume, so they survive rebuilds.
+The bot keeps its user links (`map.json`), media cache and `plexbot.log` in the `plexbot-data` volume, so they survive updates.
 
 | To | Run |
 | --- | --- |
-| Update | `git pull && docker compose up -d --build` |
+| Update | `docker compose pull && docker compose up -d` |
 | Apply a changed `.env` | `docker compose up -d` |
 | Stop | `docker compose down` (keeps the volume) |
 | Back up user links | `docker compose cp plexbot:/data/map.json map.json` |
 
-**Prefer `config.json`?** Copy `config.example.json` to `config.json` and uncomment its line under `volumes:` in `docker-compose.yml`. Settings in `.env` still win.
+**Prefer `config.json`?** Download it with `curl -o config.json https://raw.githubusercontent.com/brah/plex-bot/main/config.example.json`, fill it in, and uncomment its line under `volumes:` in `docker-compose.yml`. Settings in `.env` still win.
+
+**Building from source?** Clone the repo, replace `image:` with `build: .` in `docker-compose.yml`, then run `docker compose up -d --build`.
 
 ### systemd
 
 Install into a venv, edit and copy [`deploy/plexbot.service`](deploy/plexbot.service) to `/etc/systemd/system/`, then `sudo systemctl enable --now plexbot`.
 
-To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl restart plexbot`.
+To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl restart plexbot`. `git pull` follows `main`, which can be ahead of the latest release; to stay on releases, run `git fetch --tags && git checkout v1.0.0` with the version you want. [CHANGELOG.md](CHANGELOG.md) says what changed in each one.
 
 ## Troubleshooting
 
