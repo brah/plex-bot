@@ -113,7 +113,7 @@ Type `/plex` in Discord. To keep it running, see [systemd](#systemd).
 
 ## Configuration
 
-You can set each option in `config.json` (start from [`config.example.json`](config.example.json)), as an environment variable, or both. Environment variables are the easy way with Docker: put them in `.env` (see [`.env.example`](.env.example)). If an option is set in both places, the environment variable wins. Anything you leave out uses a default.
+Set options as environment variables or in `config.json`, starting from [`.env.example`](.env.example) or [`config.example.json`](config.example.json). Environment variables win over `config.json`, and anything you leave out uses its default.
 
 | `config.json` | Environment variable | What it does |
 | --- | --- | --- |
