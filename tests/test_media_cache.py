@@ -49,7 +49,8 @@ def test_stale_cache_answers_at_once_and_refreshes_in_the_background(tmp_path):
     async def run():
         served = await cache.get_items()
         refresh = cache._refresh
-        assert refresh is not None and not refresh.done()  # the caller didn't wait for it
+        assert refresh is not None
+        assert not refresh.done()  # the caller didn't wait for it
         await refresh
         return served
 
@@ -111,7 +112,8 @@ def test_an_empty_cache_fills_in_the_background_at_startup(tmp_path):
 
     async def run():
         await cache.initialize()
-        assert cache._refresh is not None and not cache._refresh.done()  # startup didn't wait
+        assert cache._refresh is not None
+        assert not cache._refresh.done()  # startup didn't wait
         await cache._refresh
 
     asyncio.run(run())
@@ -134,7 +136,8 @@ def test_unreadable_file_starts_empty_and_stale_so_it_rebuilds(tmp_path):
     path.write_text(json.dumps([_item("7", "Old bare-list format")]), encoding="utf-8")
     cache = MediaCache(LibraryTautulli({}), cache_file_path=str(path))
     asyncio.run(cache.load_cache_from_disk())
-    assert cache.media_items == {} and cache.last_updated is None
+    assert cache.media_items == {}
+    assert cache.last_updated is None
 
 
 def test_close_stops_a_background_refresh(tmp_path):

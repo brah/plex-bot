@@ -64,7 +64,9 @@ class TestMediaCard:
         embed = media_card(MATRIX, stats="▶ **3 plays**")
         assert embed.description.endswith("\n\n▶ **3 plays**")
         bare = media_card({"title": "Mystery"})
-        assert bare.title == "Mystery" and bare.description is None and bare.author.name == "▶ Media"
+        assert bare.title == "Mystery"
+        assert bare.description is None
+        assert bare.author.name == "▶ Media"
 
     def test_runtime(self):
         assert runtime("8160000") == "2h 16m"
@@ -110,7 +112,8 @@ class TestRecent:
     def test_repeated_long_titles_stay_distinct_and_within_limits(self):
         long = dict(MATRIX, title="X" * 120, year=None)
         choices = _recent_choices([dict(long, rating_key=str(i)) for i in range(4)])
-        assert len(choices) == 4 and all(len(label) <= 100 for label in choices)
+        assert len(choices) == 4
+        assert all(len(label) <= 100 for label in choices)
 
     def test_title_choices_carry_rating_keys(self):
         assert title_choices([MATRIX, SHOW]) == {"The Matrix (1999)": "key:101", "Severance (2022)": "key:200"}

@@ -93,7 +93,7 @@ Type `/plex` in Discord. To keep it running, see [Deployment](#deployment).
 You can set each option in `config.json` (start from [`config.example.json`](config.example.json)), as an environment variable, or both. Environment variables are the easy way with Docker: put them in `.env` (see [`.env.example`](.env.example)). If an option is set in both places, the environment variable wins. Anything you leave out uses a default.
 
 | `config.json` | Environment variable | What it does |
-|---------------|----------------------|--------------|
+| --- | --- | --- |
 | `core.token` | `PLEXBOT_CORE_TOKEN` | Discord bot token |
 | `tautulli.ip` | `PLEXBOT_TAUTULLI_IP` | Tautulli's address, as `host:port` |
 | `tautulli.apikey` | `PLEXBOT_TAUTULLI_APIKEY` | Tautulli's API key |
@@ -107,7 +107,7 @@ You can set each option in `config.json` (start from [`config.example.json`](con
 | `discord.show_recent_viewers` | `PLEXBOT_DISCORD_SHOW_RECENT_VIEWERS` | Show the last few viewers when nobody's watching (public, so off by default) |
 | `qbittorrent.ip`, `port` | `PLEXBOT_QBITTORRENT_IP`, `PLEXBOT_QBITTORRENT_PORT` | qBittorrent Web UI address, for `/plex downloading` |
 | `qbittorrent.username`, `password` | `PLEXBOT_QBITTORRENT_USERNAME`, `PLEXBOT_QBITTORRENT_PASSWORD` | qBittorrent Web UI login |
-| `core.legacy_text_commands` | `PLEXBOT_CORE_LEGACY_TEXT_COMMANDS` | Point old `plex ` text commands at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
+| `core.legacy_text_commands` | `PLEXBOT_CORE_LEGACY_TEXT_COMMANDS` | Point old text commands like `plex status` at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
 | `core.log_level` | `PLEXBOT_CORE_LOG_LEVEL` | `DEBUG` to `ERROR` |
 
 In an environment variable, write a list of IDs with commas (`PLEXBOT_DISCORD_ADMIN_IDS=123,456`) and an on/off option as `true` or `false`.
@@ -121,7 +121,7 @@ Appearance lives in `ui` (embed colour), `charts` (size and `dpi`) and `defaults
 Everything is under `/plex`, plus `/plexadmin` for admins.
 
 | Command | |
-|---------|--|
+| --- | --- |
 | `/plex status` | Server health, library size and plex.tv status |
 | `/plex watchers` | Current streams; stream managers can stop them |
 | `/plex movie`, `/plex tv` | Look up a title: details, cast, who's watched it |
@@ -168,7 +168,7 @@ You need Docker with Compose 2.24 or newer, plus the Discord and Tautulli steps 
 The bot keeps its user links (`map.json`), media cache and `plexbot.log` in the `plexbot-data` volume, so they survive rebuilds.
 
 | To | Run |
-|----|-----|
+| --- | --- |
 | Update | `git pull && docker compose up -d --build` |
 | Apply a changed `.env` | `docker compose up -d` |
 | Stop | `docker compose down` (keeps the volume) |

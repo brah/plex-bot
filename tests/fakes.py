@@ -5,6 +5,7 @@ import io
 from types import SimpleNamespace
 
 import nextcord
+from nextcord.ext import commands
 from PIL import Image
 
 from plexbot.tautulli_wrapper import Tautulli
@@ -254,7 +255,7 @@ def build_bot(tautulli):
     from plexbot.cogs.server_commands import ServerCommands
     from plexbot.bot import PlexBot, install_slash_groups
 
-    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+    bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
     bot.shared_resources = {"tautulli": tautulli}
     bot._connection.application_id = 999
@@ -276,7 +277,7 @@ def build_media_bot(tautulli, items=()):
     cache = MediaCache(tautulli)
     cache.media_items = {str(item["rating_key"]): item for item in items}
     cache.last_updated = datetime.now()
-    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+    bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
     bot.shared_resources = {"tautulli": tautulli, "media_cache": cache}
     bot._connection.application_id = 999
@@ -291,7 +292,7 @@ def build_stats_bot(tautulli):
     from plexbot.cogs.plex_stats import PlexStats
     from plexbot.bot import PlexBot, install_slash_groups
 
-    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+    bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
     bot.shared_resources = {"tautulli": tautulli}
     bot._connection.application_id = 999

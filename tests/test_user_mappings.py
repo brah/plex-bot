@@ -52,7 +52,8 @@ class TestStorage:
 
     def test_unreadable_file_is_never_overwritten(self, map_file):
         map_file.write_text('[{"plex_username": "alice", "discord_id": "11"', encoding="utf-8")  # cut short
-        assert UserMappings.load_user_mappings() == [] and UserMappings.is_unreadable()
+        assert UserMappings.load_user_mappings() == []
+        assert UserMappings.is_unreadable()
         with pytest.raises(MappingsUnavailable):
             UserMappings.link("bob", 22)
         assert map_file.read_text(encoding="utf-8").startswith('[{"plex_username": "alice"')
@@ -99,7 +100,8 @@ class TestOperations:
     def test_relinking_the_same_pair_reports_nothing(self, map_file):
         UserMappings.link("alice", 11)
         again = UserMappings.link("alice", "11")
-        assert again.moved_from_plex is None and again.replaced_discord_id is None
+        assert again.moved_from_plex is None
+        assert again.replaced_discord_id is None
 
     def test_unlink_keeps_an_ignore(self, map_file):
         UserMappings.link("mallory", 33)

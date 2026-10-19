@@ -112,7 +112,8 @@ def test_picking_a_stream_opens_private_detail(monkeypatch):
     asyncio.run(run())
     assert recorder.kinds() == ["defer", "followup", "clicked_message.edit"]
     sent = recorder.last("followup")
-    assert sent["ephemeral"] is True and sent["embeds"][0].title == "The Matrix (1999)"
+    assert sent["ephemeral"] is True
+    assert sent["embeds"][0].title == "The Matrix (1999)"
     assert sorted(f.filename for f in sent["files"]) == ["frame.jpg", "poster.jpg"]
     detail_view = sent["view"]
     assert isinstance(detail_view, StreamDetailView)
@@ -134,7 +135,8 @@ def test_picking_a_stream_resets_the_public_dropdown(monkeypatch):
 
     asyncio.run(run())
     reset = recorder.last("clicked_message.edit")
-    assert reset["view"] is holder["view"] and reset["message"].id == MESSAGE_ID
+    assert reset["view"] is holder["view"]
+    assert reset["message"].id == MESSAGE_ID
     assert set(reset) == {"view", "message"}  # only the components change
 
 
@@ -176,7 +178,8 @@ def test_overview_message_handle_is_the_clicked_message_after_refresh(monkeypatc
     asyncio.run(run())
     message = holder["view"].message
     assert message is not original
-    assert isinstance(message, nextcord.Message) and message.id == MESSAGE_ID
+    assert isinstance(message, nextcord.Message)
+    assert message.id == MESSAGE_ID
 
 
 def test_overview_message_handle_is_the_clicked_message_after_a_pick(monkeypatch):
@@ -197,7 +200,8 @@ def test_overview_message_handle_is_the_clicked_message_after_a_pick(monkeypatch
     asyncio.run(run())
     message = holder["view"].message
     assert message is not original
-    assert isinstance(message, nextcord.Message) and message.id == MESSAGE_ID
+    assert isinstance(message, nextcord.Message)
+    assert message.id == MESSAGE_ID
 
 
 def test_initial_overview_handle_is_a_bot_token_partial_message():
@@ -285,7 +289,8 @@ def test_stop_from_detail_replaces_card_with_confirmation(monkeypatch):
     assert tautulli.terminated == [("abc", "Server maintenance")]
     assert recorder.kinds()[:2] == ["defer", "edit_original_message"]
     edited = recorder.last("edit_original_message")
-    assert "Stopped **Alice**" in edited["embeds"][0].description and edited["view"] is None
+    assert "Stopped **Alice**" in edited["embeds"][0].description
+    assert edited["view"] is None
 
 
 def test_stop_confirmation_mentions_a_linked_viewer(monkeypatch):
@@ -299,7 +304,8 @@ def test_stop_confirmation_mentions_a_linked_viewer(monkeypatch):
         return await cog.stop_stream("admin", "abc", None)
 
     ok, text = asyncio.run(run())
-    assert ok is True and text.startswith("Stopped **<@42>**'s stream")
+    assert ok is True
+    assert text.startswith("Stopped **<@42>**'s stream")
 
 
 def test_stop_option_reports_ended_stream(monkeypatch):
@@ -308,4 +314,5 @@ def test_stop_option_reports_ended_stream(monkeypatch):
         return await cog.stop_stream("admin", "gone", None)
 
     ok, text = asyncio.run(run())
-    assert ok is False and "isn't running anymore" in text
+    assert ok is False
+    assert "isn't running anymore" in text

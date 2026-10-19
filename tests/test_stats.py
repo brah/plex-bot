@@ -282,7 +282,9 @@ class TestCommands:
         # This week: alice first, bob second, cara third but not linked to Discord; eve dropped out.
         rows = [{"user": "alice"}, {"user": "bob"}, {"user": "cara"}]
         asyncio.run(PlexStats._assign_top_roles(None, guild, rows))
-        assert alice.roles == [first] and bob.roles == [second] and eve.roles == []
+        assert alice.roles == [first]
+        assert bob.roles == [second]
+        assert eve.roles == []
         assert third.members == []
 
     def test_top_tautulli_down(self, monkeypatch):
@@ -389,7 +391,8 @@ class TestCommands:
         tautulli.users = [{"user_id": 9, "username": "mallory", "friendly_name": "Mallory"}]
         _run(lambda bot, cog: PlexStats.history.callback(cog, interaction(bot), user="mallory"), tautulli)
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "No Plex user called **mallory**" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "No Plex user called **mallory**" in sent["embeds"][0].description
 
     def test_history_autocomplete(self, monkeypatch):
         tautulli = FakeTautulli([])

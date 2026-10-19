@@ -50,13 +50,15 @@ def test_healthy_status(monkeypatch):
     activity = {"stream_count": "2", "total_bandwidth": "20000"}
     reply = build_status_reply(SERVER, LIBRARIES, activity, UP_TO_DATE, HEALTHY, now=NOW, pick=first)
     embed = reply.embeds[0]
-    assert embed.title == "Home" and embed.colour.value == Colour.PLAYING
+    assert embed.title == "Home"
+    assert embed.colour.value == Colour.PLAYING
     assert embed.description == (
         "Plex Media Server 1.41.0.1234 on Linux · 🎟️ Plex Pass\n"
         f"✅ Up to date · released <t:{RELEASED}:D>"
     )
     fields = _fields(reply)
-    assert "1,244 movies" in fields["Library"] and "3,745 episodes" in fields["Library"]
+    assert "1,244 movies" in fields["Library"]
+    assert "3,745 episodes" in fields["Library"]
     assert "4,500 tracks" in fields["Library"]
     assert fields["Activity"] == "2 streams · 20.0 Mbps"
     assert fields["Plex services"] == "🟢 All 4 services operational"
@@ -76,9 +78,11 @@ def test_incident_update_and_missing_parts(monkeypatch):
     reply = build_status_reply(dict(SERVER, pms_plexpass=0), [], None, update, incident, now=NOW, pick=first)
     embed = reply.embeds[0]
     fields = _fields(reply)
-    assert embed.colour.value == Colour.WARNING and "Plex Pass" not in embed.description
+    assert embed.colour.value == Colour.WARNING
+    assert "Plex Pass" not in embed.description
     assert embed.description.endswith(f"⬆️ Update available: 1.42.0.2000 · released <t:{RELEASED}:R>")
-    assert "Library" not in fields and fields["Activity"] == "Unavailable"
+    assert "Library" not in fields
+    assert fields["Activity"] == "Unavailable"
     services = fields["Plex services"].split("\n")
     assert services[0] == "⚠️ 1 of 2 services operational"
     assert services[1] == "🟠 Plex Web · partial outage"
@@ -117,7 +121,8 @@ def test_library_sizes_and_size_line(monkeypatch):
     reply = build_status_reply(SERVER, LIBRARIES, None, None, None, now=NOW, sizes=sizes, pick=first)
     library = _fields(reply)["Library"].split("\n")
     assert library[0] == "\U0001F3AC 1,244 movies · 8.0 TB"
-    assert "TB" not in library[1] and "GB" not in library[1]  # TV size unknown: not shown
+    assert "TB" not in library[1]
+    assert "GB" not in library[1]  # TV size unknown: not shown
     assert library[2].endswith("4,500 tracks · 100 GB")
     assert reply.embeds[0].footer.text.startswith("8.1 TB of media: about 5.5 million floppy disks")
 
@@ -148,7 +153,8 @@ def test_size_comparison_is_picked_at_random_and_scales_down():
 
 def test_size_comparisons_scale_with_the_library():
     small = size_comparisons(5_000_000_000)
-    assert "about 7 CDs" in small and "7 minutes of non-stop downloading at 100 Mbps" in small
+    assert "about 7 CDs" in small
+    assert "7 minutes of non-stop downloading at 100 Mbps" in small
     # Fewer than two discs or phones reads badly ("about 1 Blu-rays"), so those lines are dropped.
     assert not any("DVD" in line or "Blu-ray" in line or "phones" in line for line in small)
     huge = size_comparisons(45 * TB)

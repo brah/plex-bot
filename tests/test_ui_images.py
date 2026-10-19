@@ -42,7 +42,8 @@ class TestAttachment:
         attachment = Attachment("poster-1.jpg", b"data")
         assert attachment.url == "attachment://poster-1.jpg"
         first, second = attachment.to_file(), attachment.to_file()
-        assert first.filename == "poster-1.jpg" and first.fp.read() == b"data"
+        assert first.filename == "poster-1.jpg"
+        assert first.fp.read() == b"data"
         assert second.fp.read() == b"data"  # each send needs its own unread stream
 
 
@@ -57,7 +58,8 @@ class TestMascot:
         monkeypatch.setattr(images, "MASCOT_DIR", tmp_path)
         images._mascot_bytes.cache_clear()
         attachment = mascot("mascot-wave")
-        assert attachment.filename == "mascot-wave.png" and attachment.data == png()
+        assert attachment.filename == "mascot-wave.png"
+        assert attachment.data == png()
         images._mascot_bytes.cache_clear()
 
 
@@ -209,6 +211,7 @@ def test_get_image_fallback_param(kwargs, expected):
     tautulli.session = FakeImageSession()  # the client's own session, reused for every image
     assert asyncio.run(tautulli.get_image("/library/x", **kwargs)) == b"jpeg"
     (params,) = tautulli.session.requests
-    assert params["img"] == "/library/x" and params["cmd"] == "pms_image_proxy"
+    assert params["img"] == "/library/x"
+    assert params["cmd"] == "pms_image_proxy"
     assert params.get("fallback") == expected
     assert ("fallback" in params) is (expected is not None)

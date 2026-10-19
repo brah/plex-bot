@@ -29,13 +29,17 @@ class TestTitles:
 class TestSessionLines:
     def test_two_lines_with_progress_quality_device(self):
         first, second = session_lines(MOVIE_PLAYING).split("\n")
-        assert first.startswith("▶") and "**Alice**" in first and "The Matrix (1999)" in first
+        assert first.startswith("▶")
+        assert "**Alice**" in first
+        assert "The Matrix (1999)" in first
         assert "10:00 / 2:16:00" in second
-        assert "1080p Direct Play" in second and "Living Room" in second
+        assert "1080p Direct Play" in second
+        assert "Living Room" in second
 
     def test_markdown_is_escaped(self):
         line = session_lines(MARKDOWN_TITLE)
-        assert "\\_eve\\_" in line and "\\*\\*Bold\\*\\*" in line
+        assert "\\_eve\\_" in line
+        assert "\\*\\*Bold\\*\\*" in line
 
     def test_live_tv_without_duration_does_not_crash(self):
         assert "News at Ten" in session_lines(LIVE_TV)
@@ -51,7 +55,8 @@ class TestOverview:
 
     def test_all_paused_is_amber(self):
         embed = stream_overview([EPISODE_PAUSED], bandwidth_kbps=0, strip=None, updated=NOW)
-        assert embed.colour.value == Colour.WARNING and not embed.image.url
+        assert embed.colour.value == Colour.WARNING
+        assert not embed.image.url
 
     def test_names_can_be_discord_mentions(self):
         embed = stream_overview([MOVIE_PLAYING], bandwidth_kbps=0, strip=None, updated=NOW,
@@ -69,31 +74,37 @@ class TestDetail:
         frame, poster = Attachment("frame.jpg", b"f"), Attachment("poster.jpg", b"p")
         embed = stream_detail(MOVIE_PLAYING, avatar_url="https://a/1.png", link="https://app.plex.tv/x",
                               frame=frame, poster=poster, now=NOW)
-        assert embed.title == "The Matrix (1999)" and embed.url == "https://app.plex.tv/x"
-        assert embed.author.name == "Alice" and embed.author.icon_url == "https://a/1.png"
+        assert embed.title == "The Matrix (1999)"
+        assert embed.url == "https://app.plex.tv/x"
+        assert embed.author.name == "Alice"
+        assert embed.author.icon_url == "https://a/1.png"
         assert embed.image.url == "attachment://frame.jpg"
         assert embed.thumbnail.url == "attachment://poster.jpg"
         fields = {field.name: field.value for field in embed.fields}
         assert "Ends <t:" in fields["Progress"]
         assert "**Video** 1080p H264 · Direct Play" in fields["Stream"]
         assert "**Audio** EAC3 5.1(side) · Direct Play" in fields["Stream"]
-        assert "Local" in fields["Player"] and "12.0 Mbps" in fields["Player"]
+        assert "Local" in fields["Player"]
+        assert "12.0 Mbps" in fields["Player"]
 
     def test_transcoded_paused_episode(self):
         embed = stream_detail(EPISODE_PAUSED, avatar_url=None, link=None, frame=None, poster=None, now=NOW)
         fields = {field.name: field.value for field in embed.fields}
-        assert "Paused" in fields["Progress"] and "Ends" not in fields["Progress"]
+        assert "Paused" in fields["Progress"]
+        assert "Ends" not in fields["Progress"]
         assert "4k → 1080p HEVC · Transcode" in fields["Stream"]
         assert "**Subtitles** English (SRT) · Burned in" in fields["Stream"]
         assert "Remote" in fields["Player"]
-        assert embed.colour.value == Colour.WARNING and embed.author.icon_url is None
+        assert embed.colour.value == Colour.WARNING
+        assert embed.author.icon_url is None
 
     def test_never_shows_ip_or_location(self):
         session = dict(MOVIE_PLAYING, ip_address="203.0.113.7", ip_address_public="203.0.113.7",
                        location="wan", city="Springfield")
         embed = stream_detail(session, avatar_url=None, link=None, frame=None, poster=None, now=NOW)
         text = str(embed.to_dict())
-        assert "203.0.113.7" not in text and "Springfield" not in text
+        assert "203.0.113.7" not in text
+        assert "Springfield" not in text
 
     def test_sparse_session_does_not_crash(self):
         stream_detail(LIVE_TV, avatar_url=None, link=None, frame=None, poster=None, now=NOW)
@@ -104,4 +115,5 @@ class TestLink:
         assert plex_web_link("abc123", "101") == (
             "https://app.plex.tv/desktop/#!/server/abc123/details?key=%2Flibrary%2Fmetadata%2F101"
         )
-        assert plex_web_link(None, "101") is None and plex_web_link("abc", None) is None
+        assert plex_web_link(None, "101") is None
+        assert plex_web_link("abc", None) is None

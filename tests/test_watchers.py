@@ -108,7 +108,8 @@ class TestAdminCheck:
         )
         error = nextcord.ApplicationCheckFailure("nope")
         asyncio.run(ErrorHandler(None).application_error_handler(interaction, error))
-        assert sent == [(sent[0][0], True)] and "`/plexadmin logs`" in sent[0][0]
+        assert sent == [(sent[0][0], True)]
+        assert "`/plexadmin logs`" in sent[0][0]
 
 
 SESSION_A = {"session_id": "abc", "friendly_name": "Alice", "full_title": "The Matrix", "username": "alice"}

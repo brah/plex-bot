@@ -1,0 +1,9 @@
+# markdownlint settings (the VS Code extension and markdownlint-cli2 both read this file).
+
+# Prose isn't wrapped to a fixed width.
+MD013: false
+
+# The README lays out its banner and screenshot grid in HTML, which GitHub renders.
+MD033:
+  allowed_elements: [b, details, div, img, p, sub, summary, table, td, tr]
+MD041: false

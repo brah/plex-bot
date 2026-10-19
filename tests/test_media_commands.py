@@ -65,7 +65,8 @@ class TestLookup:
         assert embed.title == "The Matrix (1999)"
         assert embed.url.startswith("https://app.plex.tv/desktop/#!/server/srv1/details")
         assert "▶ **11 plays** · 2h watched" in embed.description
-        assert "**Alice** (3)" in embed.description and "Mallory" not in embed.description  # ignored user
+        assert "**Alice** (3)" in embed.description
+        assert "Mallory" not in embed.description  # ignored user
         assert [f.filename for f in sent["files"]] == ["poster.jpg", "art.jpg"]
 
     def test_typed_key_outside_the_cache_is_refused(self, monkeypatch):
@@ -75,7 +76,8 @@ class TestLookup:
         tautulli.metadata = {**tautulli.metadata, "999": {"title": "Holiday photos"}}
         _run(lambda bot, cog: MediaCommands.movie.callback(cog, interaction(bot), title="key:999"), tautulli)
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "isn't in the library" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "isn't in the library" in sent["embeds"][0].description
 
     def test_typed_title_found_in_its_library_only(self, monkeypatch):
         recorder = Recorder(monkeypatch)
@@ -96,7 +98,8 @@ class TestLookup:
         _run(lambda bot, cog: MediaCommands.movie.callback(cog, interaction(bot), title="Heat"),
              tautulli=_tautulli(reachable=False))
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "Couldn't reach **Tautulli**" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "Couldn't reach **Tautulli**" in sent["embeds"][0].description
 
     def test_title_suggestions_prefix_first_and_by_kind(self):
         async def suggest(bot, cog):
@@ -115,7 +118,8 @@ class TestRandom:
         sent = recorder.last("followup")
         assert sent["embeds"][0].title == "The Matrix (1999)"
         assert sent["embeds"][0].footer.text == "🎲 Random pick from 1 match"
-        assert isinstance(sent["view"], RandomView) and sent["view"].author_id == 42
+        assert isinstance(sent["view"], RandomView)
+        assert sent["view"].author_id == 42
 
     def test_no_match_is_private(self, monkeypatch):
         recorder = Recorder(monkeypatch)
@@ -137,7 +141,8 @@ class TestRandom:
             await settle()
 
         _run(run)
-        assert recorder.calls[0][0] == "send_message" and recorder.calls[0][1]["ephemeral"] is True
+        assert recorder.calls[0][0] == "send_message"
+        assert recorder.calls[0][1]["ephemeral"] is True
         assert "Only <@42> can re-roll" in recorder.calls[0][1]["embeds"][0].description
         assert [k for k, _ in recorder.calls[1:]] == ["defer", "edit_original_message"]
         assert recorder.last("edit_original_message")["embeds"][0].footer.text.startswith("🎲 Random pick")
@@ -189,7 +194,8 @@ class TestRecent:
         recorder = Recorder(monkeypatch)
         _run(lambda bot, cog: MediaCommands.recent.callback(cog, interaction(bot), count=None, kind=None))
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is False and "Nothing's been added recently." in sent["embeds"][0].description
+        assert sent["ephemeral"] is False
+        assert "Nothing's been added recently." in sent["embeds"][0].description
 
     def test_picking_an_item_sends_its_card_privately(self, monkeypatch):
         recorder = Recorder(monkeypatch)
@@ -205,7 +211,8 @@ class TestRecent:
         _run(run)
         assert recorder.calls[0] == ("defer", {"ephemeral": True, "with_message": True})
         detail = recorder.last("followup")
-        assert detail["ephemeral"] is True and detail["embeds"][0].title == "Severance (2022)"
+        assert detail["ephemeral"] is True
+        assert detail["embeds"][0].title == "Severance (2022)"
         assert recorder.kinds()[-1] == "clicked_message.edit"  # dropdown reset for the next pick
 
 
@@ -215,7 +222,8 @@ class TestDownloading:
         monkeypatch.setattr(MediaCommands, "_qbit_client", staticmethod(lambda: None))
         _run(lambda bot, cog: MediaCommands.downloading.callback(cog, interaction(bot)))
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "qBittorrent isn't set up." in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "qBittorrent isn't set up." in sent["embeds"][0].description
 
     def _client(self, torrents=(), fail=None):
         def downloading():
@@ -270,7 +278,8 @@ class TestCacheAdmin:
 
         view = _run(run)
         status = recorder.last("send_message")
-        assert status["ephemeral"] is True and isinstance(view, CacheView)
+        assert status["ephemeral"] is True
+        assert isinstance(view, CacheView)
         assert status["embeds"][0].description.startswith("**4 items** · 3 movies · 1 show")
         assert "new titles every 1h" in status["embeds"][0].description
         assert refreshed == [True]

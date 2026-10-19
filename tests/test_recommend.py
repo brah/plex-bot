@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 
 import nextcord
+from nextcord.ext import commands
 import pytest
 
 from plexbot import utilities
@@ -69,7 +70,7 @@ def _build(tautulli):
     cache = MediaCache(tautulli)
     cache.media_items = dict(CACHE)
     cache.last_updated = datetime.now()
-    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+    bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
     bot.shared_resources = {"tautulli": tautulli, "media_cache": cache}
     bot._connection.application_id = 999
@@ -103,12 +104,16 @@ class TestCommand:
         assert tautulli.history_calls[-1]["user"] == "alice"
         sent = recorder.last("followup")
         embed = sent["embeds"][0]
-        assert embed.title == "🍿 Recommendations" and sent["ephemeral"] is False
-        assert "Arrival" in embed.description and "Collateral" in embed.description
-        assert "Bluey" not in embed.description and "Heat" not in embed.description  # off-genre / watched
+        assert embed.title == "🍿 Recommendations"
+        assert sent["ephemeral"] is False
+        assert "Arrival" in embed.description
+        assert "Collateral" in embed.description
+        assert "Bluey" not in embed.description
+        assert "Heat" not in embed.description  # off-genre / watched
         assert [f.filename for f in sent["files"]] == ["posters.png"]
         view = sent["view"]
-        assert isinstance(view, RecommendationView) and view.author_id == 42
+        assert isinstance(view, RecommendationView)
+        assert view.author_id == 42
         assert [c.label for c in view.children] == ["1", "2", "Back to list"]
 
     def test_unlinked_member_is_private(self, monkeypatch):
@@ -116,7 +121,8 @@ class TestCommand:
         monkeypatch.setattr(utilities.UserMappings, "load_user_mappings", staticmethod(lambda: []))
         _run(lambda bot, cog: Recommendations.recommend.callback(cog, interaction(bot), member=None), _tautulli())
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "isn't linked to a Plex account" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "isn't linked to a Plex account" in sent["embeds"][0].description
 
     def test_no_history(self, monkeypatch):
         recorder = Recorder(monkeypatch)
@@ -157,7 +163,8 @@ class TestButtons:
         edits = [kwargs for kind, kwargs in recorder.calls if kind == "edit_original_message"]
         assert edits[0]["embeds"][0].title == "Arrival (2016)"
         assert edits[0]["embeds"][0].footer.text == "Recommendation 1 of 2"
-        assert edits[1]["embeds"][0].title == "🍿 Recommendations" and view.back_button.disabled is True
+        assert edits[1]["embeds"][0].title == "🍿 Recommendations"
+        assert view.back_button.disabled is True
 
     def test_others_get_a_private_hint(self, monkeypatch):
         recorder = Recorder(monkeypatch)
@@ -170,7 +177,8 @@ class TestButtons:
 
         _run(run, _tautulli())
         kind, sent = recorder.calls[0]
-        assert kind == "send_message" and sent["ephemeral"] is True
+        assert kind == "send_message"
+        assert sent["ephemeral"] is True
         assert "Only <@42> can browse these picks." in sent["embeds"][0].description
         assert "edit_original_message" not in recorder.kinds()
 

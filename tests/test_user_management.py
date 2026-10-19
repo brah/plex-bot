@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 
 import nextcord
+from nextcord.ext import commands
 import pytest
 
 from plexbot.cogs.user_management import UserManagement, users_card
@@ -41,7 +42,7 @@ def _run(fn, tautulli=None):
         tautulli.users = USERS
 
     async def run():
-        bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+        bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                       default_guild_ids=[GUILD_ID])
         bot.shared_resources = {"tautulli": tautulli}
         bot._connection.application_id = 999

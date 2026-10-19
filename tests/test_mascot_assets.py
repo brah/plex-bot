@@ -15,9 +15,11 @@ PROMPTS = (
 @pytest.mark.parametrize("slot", MASCOT_SLOTS)
 def test_slot_is_complete(slot):
     png = MASCOT_DIR / f"{slot}.png"
-    assert png.exists() and (MASCOT_DIR / f"{slot}.svg").exists()
+    assert png.exists()
+    assert (MASCOT_DIR / f"{slot}.svg").exists()
     assert f"## {slot}" in PROMPTS
     data = png.read_bytes()
     assert len(data) < 250_000  # sent with every response that uses it
     with Image.open(io.BytesIO(data)) as image:
-        assert image.mode == "RGBA" and image.size[0] == image.size[1] <= 1024
+        assert image.mode == "RGBA"
+        assert image.size[0] == image.size[1] <= 1024

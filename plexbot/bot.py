@@ -35,9 +35,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("plexbot")
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 
 async def initialize_resources():
     """Initialize shared resources that require async initialization."""
@@ -89,7 +86,7 @@ def cog_names() -> list[str]:
     return [f"plexbot.cogs.{path.stem}" for path in cog_files if not path.name.startswith("_")]
 
 
-async def load_cogs(bot):
+def load_cogs(bot):
     """Load every cog in the cogs directory."""
     for cog_name in cog_names():
         try:
@@ -125,7 +122,7 @@ class PlexBot(commands.Bot):
         self.shared_resources = await initialize_resources()
         logger.info("Shared resources initialized")
         install_slash_groups(self)
-        await load_cogs(self)
+        load_cogs(self)
 
     async def start(self, *args, **kwargs) -> None:
         # nextcord (unlike discord.py) never invokes setup_hook(); call it
@@ -160,7 +157,7 @@ class PlexBot(commands.Bot):
                 try:
                     await client.close()
                 except Exception as e:
-                    logger.error(f"Error closing {name} client during shutdown: {e}")
+                    logger.exception(f"Error closing {name} client during shutdown: {e}")
 
 
 def main():
@@ -212,6 +209,8 @@ def main():
         intents=intents,
         help_command=None,
         default_guild_ids=guild_ids,
+        # On Windows, keep the selector loop the bot has always run on (asyncio's default there is Proactor).
+        loop=asyncio.SelectorEventLoop() if sys.platform == "win32" else None,
     )
 
     # Create and register the error handler (only adds a listener; no gateway needed).

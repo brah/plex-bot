@@ -43,9 +43,12 @@ def test_admin_hidden_from_non_admins():
 def test_overview_lists_categories_with_counts(monkeypatch):
     monkeypatch.setattr(help_module, "mascot", lambda slot: None)
     embed = help_overview(visible_entries(ENTRIES, is_admin=False)).embeds[0]
-    assert "**Watching**" in embed.description and "2 commands" in embed.description
-    assert "**Library**" in embed.description and "1 command" in embed.description
-    assert "Admin" not in embed.description and "Charts" not in embed.description
+    assert "**Watching**" in embed.description
+    assert "2 commands" in embed.description
+    assert "**Library**" in embed.description
+    assert "1 command" in embed.description
+    assert "Admin" not in embed.description
+    assert "Charts" not in embed.description
 
 
 def test_category_page(monkeypatch):

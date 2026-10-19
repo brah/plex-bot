@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 import nextcord
+from nextcord.ext import commands
 import pytest
 
 from plexbot.errors import LoggedModal, LoggedView
@@ -38,7 +39,7 @@ class FakeInteraction:
 
 def test_event_handler_errors_are_logged(caplog):
     async def run():
-        bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None)
+        bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None)
         try:
             raise RuntimeError("sync blew up")
         except RuntimeError:
@@ -47,7 +48,8 @@ def test_event_handler_errors_are_logged(caplog):
     with caplog.at_level(logging.ERROR):
         asyncio.run(run())
     record = next(r for r in caplog.records if "on_guild_available" in r.getMessage())
-    assert record.exc_info and "sync blew up" in str(record.exc_info[1])
+    assert record.exc_info
+    assert "sync blew up" in str(record.exc_info[1])
 
 
 def test_view_errors_are_logged_and_answered_privately(caplog):
@@ -60,8 +62,10 @@ def test_view_errors_are_logged_and_answered_privately(caplog):
     with caplog.at_level(logging.ERROR):
         interaction = asyncio.run(run())
     record = next(r for r in caplog.records if "LoggedView" in r.getMessage())
-    assert record.exc_info and "button broke" in str(record.exc_info[1])
-    assert len(interaction.response.sent) == 1 and interaction.response.sent[0][1] is True
+    assert record.exc_info
+    assert "button broke" in str(record.exc_info[1])
+    assert len(interaction.response.sent) == 1
+    assert interaction.response.sent[0][1] is True
 
 
 def test_view_error_after_response_uses_followup():
@@ -72,7 +76,8 @@ def test_view_error_after_response_uses_followup():
 
     interaction = asyncio.run(run())
     assert interaction.response.sent == []
-    assert len(interaction.followup.sent) == 1 and interaction.followup.sent[0][1] is True
+    assert len(interaction.followup.sent) == 1
+    assert interaction.followup.sent[0][1] is True
 
 
 def test_modal_errors_are_logged_and_answered_privately(caplog):
@@ -85,7 +90,8 @@ def test_modal_errors_are_logged_and_answered_privately(caplog):
     with caplog.at_level(logging.ERROR):
         interaction = asyncio.run(run())
     record = next(r for r in caplog.records if "LoggedModal" in r.getMessage())
-    assert record.exc_info and "form broke" in str(record.exc_info[1])
+    assert record.exc_info
+    assert "form broke" in str(record.exc_info[1])
     assert interaction.response.sent[0][1] is True
 
 
@@ -104,6 +110,7 @@ def test_crash_exits_non_zero_so_supervisors_restart(monkeypatch):
     bot = _patch_main_config(monkeypatch)
 
     def crash(self, token):
+        self.loop.close()  # as the real run() does on its way out
         raise TypeError("gateway handler blew up")
 
     monkeypatch.setattr(bot.PlexBot, "run", crash)
@@ -116,6 +123,7 @@ def test_ctrl_c_still_exits_cleanly(monkeypatch):
     bot = _patch_main_config(monkeypatch)
 
     def interrupt(self, token):
+        self.loop.close()
         raise KeyboardInterrupt
 
     monkeypatch.setattr(bot.PlexBot, "run", interrupt)
@@ -134,7 +142,9 @@ def test_message_content_intent_only_for_legacy_text_commands(monkeypatch, legac
     monkeypatch.setattr(bot.PlexBot, "run", lambda self, token: seen.update(bot=self))
     bot.main()
     instance = seen["bot"]
-    assert instance.intents.members and instance.intents.message_content is bool(legacy)
+    instance.loop.close()
+    assert instance.intents.members
+    assert instance.intents.message_content is bool(legacy)
     prefixes = instance.command_prefix(SimpleNamespace(user=SimpleNamespace(id=1)), None)
     assert "<@1> " in prefixes  # "@PlexBot top" is answered either way
     assert ("plex " in prefixes) is bool(legacy)
@@ -172,7 +182,7 @@ def test_slash_error_names_the_command(monkeypatch):
             sent.update(kwargs, ephemeral=ephemeral)
 
     async def run():
-        bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None)
+        bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None)
         interaction = FakeInteraction()
         interaction.response = Response()
         interaction.data = {"name": "plex", "options": [{"type": 1, "name": "status"}]}
@@ -180,7 +190,8 @@ def test_slash_error_names_the_command(monkeypatch):
         await ErrorHandler(bot).application_error_handler(interaction, error)
 
     asyncio.run(run())
-    assert sent["ephemeral"] is True and "`/plex status`" in sent["embeds"][0].description
+    assert sent["ephemeral"] is True
+    assert "`/plex status`" in sent["embeds"][0].description
 
 
 def test_slash_error_after_public_defer_replaces_the_placeholder(monkeypatch):
@@ -194,7 +205,7 @@ def test_slash_error_after_public_defer_replaces_the_placeholder(monkeypatch):
         deleted.append(True)
 
     async def run():
-        bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None)
+        bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None)
         interaction = FakeInteraction(responded=True)
         interaction.delete_original_message = delete_original_message
         interaction.data = {"name": "plex", "options": [{"type": 1, "name": "status"}]}
@@ -204,4 +215,5 @@ def test_slash_error_after_public_defer_replaces_the_placeholder(monkeypatch):
 
     interaction = asyncio.run(run())
     assert deleted == [True]
-    assert len(interaction.followup.sent) == 1 and interaction.followup.sent[0][1] is True
+    assert len(interaction.followup.sent) == 1
+    assert interaction.followup.sent[0][1] is True

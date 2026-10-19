@@ -12,6 +12,7 @@ import inspect
 import pkgutil
 
 import nextcord
+from nextcord.ext import commands
 import pytest
 
 from plexbot import cogs
@@ -78,7 +79,8 @@ def test_selects_send_a_custom_id():
         return _custom_ids(help_view) + _custom_ids(watchers_view) + _custom_ids(recent_view)
 
     ids = asyncio.run(run())
-    assert ids and all(ids), ids
+    assert ids, ids
+    assert all(ids), ids
     assert len(set(ids)) == len(ids)
 
 
@@ -86,7 +88,7 @@ def test_editing_a_watchers_message_does_not_crash():
     """The crash path: nextcord re-syncs a tracked view when its message is edited."""
 
     async def run():
-        bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None)
+        bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None)
         view = WatchersView(object.__new__(ServerCommands), [])
         bot._connection.store_view(view, 5555)
         assert bot._connection._view_store.is_message_tracked(5555)

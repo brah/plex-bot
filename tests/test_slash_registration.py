@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import nextcord
+from nextcord.ext import commands
 
 from plexbot.bot import PlexBot, cog_names, install_slash_groups
 from plexbot.cogs.server_commands import ServerCommands
@@ -22,7 +23,7 @@ def _local_command_names(bot):
 
 def _build_bot():
     bot = PlexBot(
-        command_prefix="plex ",
+        command_prefix=commands.when_mentioned,
         intents=nextcord.Intents.default(),
         help_command=None,
         default_guild_ids=[123],
@@ -60,6 +61,7 @@ def test_groups_survive_ready_clear_and_reconnect():
         assert type(plex.children["status"].parent_cog) is ServerCommands
 
     asyncio.run(run())
+
 
 
 def test_cog_names_import_as_extensions():

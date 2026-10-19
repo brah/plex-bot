@@ -41,7 +41,9 @@ def test_services_keep_page_order():
         "Authentication and API server (plex.tv)", "Plex website (www.plex.tv)", "Subtitles search",
         "Relay service",
     ]
-    assert status.problems == [] and status.incidents == [] and not status.degraded
+    assert status.problems == []
+    assert status.incidents == []
+    assert not status.degraded
 
 
 def test_widget_feed_marks_affected_services_and_lists_incidents():
@@ -63,7 +65,8 @@ def test_missing_or_broken_feeds():
     assert parse_status(None, QUIET_WIDGET) is None
     assert parse_status({"status": {}}, None) is None  # no services at all
     status = parse_status(SUMMARY, None)  # the widget feed is optional
-    assert len(status.services) == 4 and status.incidents == []
+    assert len(status.services) == 4
+    assert status.incidents == []
     odd = dict(SUMMARY, status={"indicator": "minor", "description": "Minor Service Outage"})
     assert parse_status(odd, {"ongoing_incidents": [{"name": "x", "last_update_at": "garbage"}]}).degraded
 
@@ -72,7 +75,8 @@ def test_services_card_lists_every_service_in_order():
     reply = services_card(parse_status(SUMMARY, INCIDENT_WIDGET), now=NOW)
     embed = reply.embeds[0]
     lines = embed.description.split("\n")
-    assert lines[0].startswith("🟢") and lines[0].endswith("Authentication and API server (plex.tv)")
+    assert lines[0].startswith("🟢")
+    assert lines[0].endswith("Authentication and API server (plex.tv)")
     assert lines[2] == "🟡 Subtitles search · degraded"
     assert lines[3] == "🔧 Relay service · maintenance"
     assert embed.colour.value == Colour.WARNING

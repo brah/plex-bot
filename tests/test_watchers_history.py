@@ -73,7 +73,8 @@ def test_nobody_watching_lists_last_viewers_when_enabled(monkeypatch):
     assert description.startswith((
         "Nobody's watching right now.\n\n**Last seen**\n🎬 **Alice** · <t:1760008000:R>\n-# The Matrix (1999) · on Roku"
     ))
-    assert "Bob" in description and "Mallory" not in description
+    assert "Bob" in description
+    assert "Mallory" not in description
     assert description.endswith("-# Hit Refresh to check again.")
     assert tautulli.history_calls == [{"length": 25, "order_column": "date", "order_dir": "desc"}]
 

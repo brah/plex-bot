@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import nextcord
+from nextcord.ext import commands
 import pytest
 from PIL import Image
 
@@ -45,7 +46,9 @@ class TestAggregation:
     def test_hours(self):
         takeaway, render = hours_chart(PLAYS)
         assert takeaway == "Busiest hour: **9pm** · 3 plays"
-        assert render.args[1][21] == 3 and render.args[1][9] == 1 and len(render.args[1]) == 24
+        assert render.args[1][21] == 3
+        assert render.args[1][9] == 1
+        assert len(render.args[1]) == 24
         assert [hour_label(h) for h in (0, 9, 12, 23)] == ["12am", "9am", "12pm", "11pm"]
 
     def test_days(self):
@@ -63,16 +66,22 @@ class TestAggregation:
     def test_media_fills_every_day(self):
         takeaway, render = media_chart(PLAYS, today=date(2026, 10, 15), days=7)
         dates, series = render.args[0], render.args[1]
-        assert dates[0] == date(2026, 10, 9) and dates[-1] == date(2026, 10, 15) and len(dates) == 7
-        assert series["TV"] == [0, 1, 0, 1, 0, 0, 0] and series["Movie"] == [0, 1, 0, 0, 0, 0, 0]
+        assert dates[0] == date(2026, 10, 9)
+        assert dates[-1] == date(2026, 10, 15)
+        assert len(dates) == 7
+        assert series["TV"] == [0, 1, 0, 1, 0, 0, 0]
+        assert series["Movie"] == [0, 1, 0, 0, 0, 0, 0]
         assert takeaway == "2 episodes · 1 movie · 0.4 plays a day"  # the September track is outside the window
         assert render.keywords["width"] == pytest.approx(0.8)
 
     def test_media_counts_whole_weeks_past_ninety_days(self):
         takeaway, render = media_chart(PLAYS, today=date(2026, 10, 15), days=120)
         dates, series = render.args[0], render.args[1]
-        assert len(dates) == 17 and dates[-1] == date(2026, 10, 9)  # the last week ends today
-        assert series["TV"][-1] == 2 and series["Movie"][-1] == 1 and sum(series["Other"]) == 1
+        assert len(dates) == 17
+        assert dates[-1] == date(2026, 10, 9)  # the last week ends today
+        assert series["TV"][-1] == 2
+        assert series["Movie"][-1] == 1
+        assert sum(series["Other"]) == 1
         assert render.keywords["width"] == pytest.approx(5.6)
         assert takeaway == "2 episodes · 1 movie · 1 other · 0.2 plays a week"
 
@@ -100,7 +109,8 @@ class TestAggregation:
         assert [(row["grandparent_title"], n) for row, n in by_time] == [("Shogun", 7200), ("Andor", 1200)]
         ranking, render = titles_chart(by_time, [None, None], filename="chart-shows.png", measure=WATCH_TIME)
         assert ranking == "`1.` **Shogun** · 2h\n`2.` **Andor** · 20m"
-        assert render.args[0] == [2.0, 1200 / 3600] and render.args[3] == ["2h", "20m"]
+        assert render.args[0] == [2.0, 1200 / 3600]
+        assert render.args[3] == ["2h", "20m"]
         movies = top_titles(plays, "movie")
         assert titles_chart(movies, [None], filename="x.png")[0] == "`1.` **Heat (1995)** · 1 play"
 
@@ -120,7 +130,8 @@ class TestAggregation:
                  (_at(2026, 10, 11), {"media_type": "movie", "play_duration": 7200})]
         takeaway, render = media_chart(plays, today=date(2026, 10, 15), days=7, measure=WATCH_TIME)
         assert takeaway == "1h 30m of TV · 2h of movies · 30m a day"
-        assert render.keywords["unit"] == "Hours" and sum(render.args[1]["TV"]) == 1.5
+        assert render.keywords["unit"] == "Hours"
+        assert sum(render.args[1]["TV"]) == 1.5
 
     def test_utc_offset(self):
         winter = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -137,7 +148,8 @@ class TestRendering:
             months_chart(PLAYS, today=date(2026, 10, 15), days=365),
         ):
             attachment = render()
-            assert attachment.filename.startswith("chart-") and attachment.data[:8] == b"\x89PNG\r\n\x1a\n"
+            assert attachment.filename.startswith("chart-")
+            assert attachment.data[:8] == b"\x89PNG\r\n\x1a\n"
             width, height = _png_size(attachment)
             assert width > height > 200
 
@@ -168,7 +180,7 @@ class TestRendering:
 def _build(tautulli):
     from plexbot.bot import PlexBot, install_slash_groups
 
-    bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
+    bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
     bot.shared_resources = {"tautulli": tautulli}
     bot._connection.application_id = 999
@@ -213,7 +225,8 @@ class TestCommands:
         tautulli.history = _history(("alice", 2, "episode"), ("mallory", 3, "movie"), ("bob", 24 * 40, "movie"))
         _run(_open, tautulli)
         params = tautulli.history_calls[-1]
-        assert "user_id" not in params and params["after"]
+        assert "user_id" not in params
+        assert params["after"]
         sent = recorder.last("followup")
         embed = sent["embeds"][0]
         assert embed.title == "🎞️ Plays per day"
@@ -243,7 +256,8 @@ class TestCommands:
         assert "user_id" not in tautulli.history_calls[-1]  # everyone's, so the viewer dropdown is free
         sent = recorder.last("followup")
         embed = sent["embeds"][0]
-        assert embed.author.name == "Alice" and embed.description.startswith("-# Last 30 days · 1 play\n")
+        assert embed.author.name == "Alice"
+        assert embed.description.startswith("-# Last 30 days · 1 play\n")
         assert _defaults(sent["view"].children[1]) == ["alice"]
 
     def test_quiet_user_keeps_their_name(self, monkeypatch):
@@ -260,20 +274,23 @@ class TestCommands:
         recorder = Recorder(monkeypatch)
         _run(lambda bot, cog: _open(bot, cog, user="nobody", days=7), FakeTautulli([]))
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "No Plex user called **nobody**" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "No Plex user called **nobody**" in sent["embeds"][0].description
 
     def test_nothing_watched_keeps_the_controls(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         _run(lambda bot, cog: _open(bot, cog, days=7), FakeTautulli([]))
         sent = recorder.last("followup")
         assert "Nobody has watched anything in the last 7 days." in sent["embeds"][0].description
-        assert sent["embeds"][0].title == "🎞️ Plays per day" and sent["view"].children
+        assert sent["embeds"][0].title == "🎞️ Plays per day"
+        assert sent["view"].children
 
     def test_tautulli_down(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         _run(_open, FakeTautulli([], reachable=False))
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "Couldn't reach **Tautulli**" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "Couldn't reach **Tautulli**" in sent["embeds"][0].description
 
     def test_unknown_tautulli_timezone_falls_back_to_the_host(self):
         tautulli = FakeTautulli([])
@@ -332,7 +349,8 @@ class TestChartView:
         embed = edited["embeds"][0]
         assert embed.title == "🕘 Plays by hour of day"
         assert "times in Australia/Sydney" in embed.description
-        assert edited["view"] is view and _defaults(view.children[0]) == ["hours"]
+        assert edited["view"] is view
+        assert _defaults(view.children[0]) == ["hours"]
 
     def test_viewer_dropdown_filters_without_refetching(self, monkeypatch):
         recorder, tautulli = self._open(monkeypatch)
@@ -348,9 +366,11 @@ class TestChartView:
 
         viewers, alice = _run(run, tautulli)
         assert viewers == [("Bob", "2 plays"), ("Alice", "1 play")]  # most active first, after Everyone
-        assert alice.author.name == "Alice" and alice.description.startswith("-# Last 30 days · 1 play\n")
+        assert alice.author.name == "Alice"
+        assert alice.description.startswith("-# Last 30 days · 1 play\n")
         everyone = recorder.last("edit_original_message")["embeds"][0]
-        assert everyone.author.name is None and "3 plays" in everyone.description
+        assert everyone.author.name is None
+        assert "3 plays" in everyone.description
         assert len(tautulli.history_calls) == 1
 
     def test_plays_per_viewer_is_everyone(self, monkeypatch):
@@ -365,7 +385,8 @@ class TestChartView:
 
         view = _run(run, tautulli)
         embed = recorder.last("edit_original_message")["embeds"][0]
-        assert embed.title == "👥 Plays per viewer" and embed.author.name is None
+        assert embed.title == "👥 Plays per viewer"
+        assert embed.author.name is None
         assert view.viewer is None
         assert not any(isinstance(c, nextcord.ui.StringSelect) for c in view.children[1:])  # no viewer dropdown
 
@@ -383,7 +404,8 @@ class TestChartView:
         seven, view = _run(run, tautulli)
         assert seven.description.startswith("-# Last 7 days")
         year = recorder.last("edit_original_message")["embeds"][0]
-        assert year.title == "🎞️ Plays per week" and year.description.startswith("-# Last 365 days")
+        assert year.title == "🎞️ Plays per week"
+        assert year.description.startswith("-# Last 365 days")
         assert len(tautulli.history_calls) == 3
         assert view.children[5].style == nextcord.ButtonStyle.primary
 
@@ -543,7 +565,8 @@ class TestChartView:
 
         view = _run(run, tautulli)
         sent = recorder.last("followup")
-        assert sent["ephemeral"] is True and "Couldn't reach **Tautulli**" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "Couldn't reach **Tautulli**" in sent["embeds"][0].description
         assert view.kind == "media"  # still on the chart the message shows
 
     def test_tautulli_down_on_a_click_is_private(self, monkeypatch):
@@ -560,7 +583,8 @@ class TestChartView:
             return sent
 
         sent = _run(run, tautulli)
-        assert sent["ephemeral"] is True and "Couldn't reach **Tautulli**" in sent["embeds"][0].description
+        assert sent["ephemeral"] is True
+        assert "Couldn't reach **Tautulli**" in sent["embeds"][0].description
         # The failed 7-day click didn't stick: the message still showed 30 days.
         assert recorder.last("edit_original_message")["embeds"][0].description.startswith("-# Last 30 days")
 
@@ -586,12 +610,15 @@ def test_stats_activity_page_is_drawn_on_first_click(monkeypatch):
         return fetched_before, button.label
 
     fetched_before, label = asyncio.run(run())
-    assert label == "Activity" and fetched_before == 0
+    assert label == "Activity"
+    assert fetched_before == 0
     assert len(tautulli.history_calls) == 1
     activity = recorder.last("edit_original_message")
     embed = activity["embeds"][0]
-    assert embed.title == "📈 Activity" and embed.image.url == "attachment://chart-media.png"
-    assert "1 episode" in embed.description and "Busiest hour" in embed.description
+    assert embed.title == "📈 Activity"
+    assert embed.image.url == "attachment://chart-media.png"
+    assert "1 episode" in embed.description
+    assert "Busiest hour" in embed.description
     assert "Mallory" not in embed.description
     assert recorder.last("edit_message")["embeds"][0].title == "📈 Activity"
 

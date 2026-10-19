@@ -1,0 +1,2 @@
+# LF line endings everywhere, on every OS: the bot runs on Linux (Docker, systemd).
+* text=auto eol=lf

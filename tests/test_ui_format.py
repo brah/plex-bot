@@ -18,7 +18,8 @@ class TestTruncate:
 
     def test_long_text_cut_with_ellipsis(self):
         result = truncate("x" * 20, 10)
-        assert len(result) == 10 and result.endswith("…")
+        assert len(result) == 10
+        assert result.endswith("…")
 
     def test_none_becomes_empty(self):
         assert truncate(None, 10) == ""
@@ -98,7 +99,8 @@ class TestTheme:
         nextcord.Embed(colour=brand_colour())  # an embed accepts it
 
     def test_limits(self):
-        assert Limits.DESCRIPTION == 4096 and Limits.SELECT_OPTIONS == 25
+        assert Limits.DESCRIPTION == 4096
+        assert Limits.SELECT_OPTIONS == 25
 
 
 def test_file_size_uses_drive_label_units():
