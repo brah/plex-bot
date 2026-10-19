@@ -520,6 +520,7 @@ class ServerCommands(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self._section_sizes: dict[str, tuple[float, int]] = {}  # section_id -> (fetched at, bytes)
         self._display_streams = True  # presence alternates between stream stats and a help hint
+        self._startup_log: Optional[asyncio.Task] = None
         self.status_task.start()  # type: ignore[attr-defined]
 
     async def _log_startup_info(self):
@@ -543,6 +544,8 @@ class ServerCommands(commands.Cog):
         # Stop the background presence loop. The shared Tautulli client is owned by
         # the bot (PlexBot.close()) and must not be closed here.
         self.status_task.cancel()  # type: ignore[attr-defined]
+        if self._startup_log:
+            self._startup_log.cancel()
 
     @tasks.loop(seconds=15)
     async def status_task(self):
@@ -573,9 +576,10 @@ class ServerCommands(commands.Cog):
 
     @status_task.before_loop  # type: ignore[attr-defined]
     async def _before_status_task(self):
-        """Wait for the gateway and log startup info before the first tick."""
+        """Wait for the gateway, then log startup info alongside the first tick."""
         await self.bot.wait_until_ready()
-        await self._log_startup_info()
+        # In the background: a slow Tautulli or GitHub mustn't hold up the first presence update.
+        self._startup_log = asyncio.create_task(self._log_startup_info())
 
     # --- /plex status ------------------------------------------------------
 

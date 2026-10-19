@@ -31,6 +31,7 @@ The bot is the `plexbot` package; `python -m plexbot` runs it.
 | `plexbot/utilities.py` | Links between Plex users and Discord members (`map.json`), viewer names and avatars, log redaction. |
 | `plexbot/config.py` | Every setting with its default. |
 | `plexbot/errors.py` | Error handling for commands, buttons and menus. |
+| `plexbot/version.py` | The bot's version, from its git tag, and the startup check for a newer release on GitHub. |
 | `plexbot/media_details.py`, `plex_status.py`, `plex_users.py` | Smaller helpers; each file's docstring says what it's for. |
 | `tests/` | The test suite; see [Tests](#tests). |
 | `assets/mascot/` | Kernel, the mascot. See its [README](assets/mascot/README.md). |

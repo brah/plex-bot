@@ -45,6 +45,7 @@ def test_no_git_means_unknown(monkeypatch):
 def test_this_checkout_has_a_version():
     # No tags yet, or a shallow CI clone: --always falls back to the commit hash.
     assert version.bot_version()
+    assert version.bot_version() != "unknown"
     assert not version.bot_version().startswith("v")
 
 
@@ -82,3 +83,24 @@ def test_startup_logs_a_newer_release(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger="plexbot"):
         asyncio.run(run())
     assert "PlexBot 1.1.0 is out (running 1.0.0)" in caplog.text
+
+
+def test_a_slow_github_doesnt_hold_up_the_first_presence_update(monkeypatch):
+    async def never():
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(server_commands, "latest_release", never)
+
+    async def run():
+        bot, cog = build_bot(FakeTautulli())
+
+        async def ready():
+            return None
+
+        monkeypatch.setattr(bot, "wait_until_ready", ready)
+        try:
+            await asyncio.wait_for(cog._before_status_task(), timeout=2)
+        finally:
+            cog.cog_unload()
+
+    asyncio.run(run())
