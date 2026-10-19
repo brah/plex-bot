@@ -6,7 +6,9 @@ and none of it goes into the Docker image.
 ## screenshots/
 
 One WebP per command, shown in the README. They aren't screen captures: each one was drawn as a
-vector image that replicates Discord's look, then exported.
+vector image that replicates Discord's look, then exported. The exception is `tautulli-api-key.webp`,
+a real screenshot of Tautulli's settings for the README's Setup section, cropped to the page so it
+shows no browser, address or extensions.
 
 They're for reference only, not a spec. They can fall behind the bot, and a change doesn't have to
 update them. If you do redraw one, keep its file name (the README links to it) and use made-up

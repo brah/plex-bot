@@ -86,7 +86,18 @@ Plex Three
 
 Only the bot has its role, so putting it at the top changes nothing for anyone else. The three roles still sit above all your other roles, so their colours still show on the winners' names. The roles move to the new top three whenever someone runs `/plex top` for the default 7 days.
 
-**Tautulli.** Copy the API key from **Settings → Web Interface → API**.
+**Tautulli.** The bot needs Tautulli's API key and address.
+
+1. In Tautulli, open **Settings** from the menu at the top right, choose **Web Interface**, and scroll down to **API**.
+2. Tick **Enable API** if it isn't already.
+3. Click the eye icon to show the key, and copy it. If the field is empty, press **Generate**.
+4. Press **Save**.
+
+<img src="docs/screenshots/tautulli-api-key.webp" alt="Tautulli's Settings, Web Interface page: Enable API ticked, the hidden API key with an eye icon and a Generate button, and Save" width="560">
+
+Keep the key private: it gives full control of Tautulli. Pressing **Generate** again replaces it, and the bot stops working until you give it the new one.
+
+The address is where Tautulli runs, as `host:port`, such as `192.168.1.10:8181` (8181 is Tautulli's default port). If you reach Tautulli through a reverse proxy over HTTPS, use its hostname, such as `tautulli.example.com`, and set `tautulli.use_https` to `true`. Running the bot in Docker? See [Docker Compose](#docker-compose) for the address to use from inside a container.
 
 **Run it.** With Docker, follow [Docker Compose](#docker-compose). Without Docker:
 
