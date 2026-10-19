@@ -14,7 +14,7 @@ ruff check .
 ```
 
 To run the bot itself you need a Discord token and Tautulli; see [Setup](README.md#setup). CI runs
-ruff and pytest on Python 3.12 and 3.14.
+ruff and pytest on Python 3.12 and 3.14, and builds the Docker image and checks it starts.
 
 ## Where things live
 

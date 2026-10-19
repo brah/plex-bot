@@ -52,3 +52,21 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  docker:
+    name: Docker image starts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the image
+        run: docker build -t plexbot .
+
+      - name: Start it with placeholder settings
+        # It loads every command module, then Discord rejects the token and the bot exits.
+        run: |
+          timeout 120 docker run --rm -e PLEXBOT_CORE_TOKEN=placeholder \
+            -e PLEXBOT_TAUTULLI_IP=127.0.0.1:9 -e PLEXBOT_TAUTULLI_APIKEY=placeholder \
+            plexbot > run.log 2>&1 || true
+          cat run.log
+          test "$(grep -c 'Loaded cog:' run.log)" -eq "$(find plexbot/cogs -name '*.py' | wc -l)"

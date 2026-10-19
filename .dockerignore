@@ -13,6 +13,8 @@ venv/
 .venv/
 .git/
 .gitignore
+.gitattributes
+.markdownlint.yaml
 
 # Python / tooling caches
 **/__pycache__/
