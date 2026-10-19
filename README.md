@@ -81,7 +81,7 @@ git clone https://github.com/brah/plex-bot.git && cd plex-bot
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp config.example.json config.json                   # fill in token, tautulli and server_id
-python plexbot.py
+python -m plexbot
 ```
 
 Type `/plex` in Discord. To keep it running, see [Deployment](#deployment).

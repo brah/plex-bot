@@ -9,7 +9,7 @@ from fakes import (
 )
 import nextcord
 
-from cogs.server_commands import StreamDetailsSelect, StreamDetailView, WatchersView
+from plexbot.cogs.server_commands import StreamDetailsSelect, StreamDetailView, WatchersView
 
 
 def _store(bot, view):
@@ -201,7 +201,7 @@ def test_overview_message_handle_is_the_clicked_message_after_a_pick(monkeypatch
 
 
 def test_initial_overview_handle_is_a_bot_token_partial_message():
-    from ui.embeds import bot_token_handle
+    from plexbot.ui.embeds import bot_token_handle
 
     class Channel:
         def get_partial_message(self, message_id):
@@ -217,7 +217,7 @@ def test_initial_overview_handle_is_a_bot_token_partial_message():
 def test_stream_managers_get_stop_button(monkeypatch):
     # Offline there's no cached guild, so Member.guild_permissions can't resolve admin rights;
     # make user 42 a configured stream manager instead (the same check, via stream_manager_ids).
-    import cogs.server_commands as server_commands
+    import plexbot.cogs.server_commands as server_commands
 
     real_get = server_commands.config.get
     monkeypatch.setattr(
@@ -262,7 +262,7 @@ def test_stream_that_ended_shows_private_notice_and_rerenders(monkeypatch):
 def test_stop_from_detail_replaces_card_with_confirmation(monkeypatch):
     patch_images(monkeypatch)
     recorder = Recorder(monkeypatch)
-    import cogs.server_commands as server_commands
+    import plexbot.cogs.server_commands as server_commands
 
     async def no_wait(_seconds):
         return None
@@ -289,7 +289,7 @@ def test_stop_from_detail_replaces_card_with_confirmation(monkeypatch):
 
 
 def test_stop_confirmation_mentions_a_linked_viewer(monkeypatch):
-    import utilities
+    from plexbot import utilities
 
     monkeypatch.setattr(utilities, "mapped_discord_user",
                         lambda bot, username: SimpleNamespace(mention="<@42>") if username == "alice" else None)

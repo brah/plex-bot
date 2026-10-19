@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import nextcord
 from PIL import Image
 
-from tautulli_wrapper import Tautulli
+from plexbot.tautulli_wrapper import Tautulli
 
 MOVIE_PLAYING = {
     "session_id": "abc", "session_key": "1", "media_type": "movie", "state": "playing",
@@ -251,8 +251,8 @@ class Recorder:
 
 def build_bot(tautulli):
     """A PlexBot with ServerCommands loaded the way setup_hook does, without connecting."""
-    from cogs.server_commands import ServerCommands
-    from plexbot import PlexBot, install_slash_groups
+    from plexbot.cogs.server_commands import ServerCommands
+    from plexbot.bot import PlexBot, install_slash_groups
 
     bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
@@ -269,9 +269,9 @@ def build_media_bot(tautulli, items=()):
     """A PlexBot with MediaCommands loaded and a fresh media cache holding `items`."""
     from datetime import datetime
 
-    from cogs.media_commands import MediaCommands
-    from media_cache import MediaCache
-    from plexbot import PlexBot, install_slash_groups
+    from plexbot.cogs.media_commands import MediaCommands
+    from plexbot.media_cache import MediaCache
+    from plexbot.bot import PlexBot, install_slash_groups
 
     cache = MediaCache(tautulli)
     cache.media_items = {str(item["rating_key"]): item for item in items}
@@ -288,8 +288,8 @@ def build_media_bot(tautulli, items=()):
 
 def build_stats_bot(tautulli):
     """A PlexBot with PlexStats loaded."""
-    from cogs.plex_stats import PlexStats
-    from plexbot import PlexBot, install_slash_groups
+    from plexbot.cogs.plex_stats import PlexStats
+    from plexbot.bot import PlexBot, install_slash_groups
 
     bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])

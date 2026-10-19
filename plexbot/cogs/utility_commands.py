@@ -1,5 +1,3 @@
-# cogs/utility_commands.py
-
 import logging
 import os
 from dataclasses import dataclass
@@ -8,12 +6,12 @@ from typing import Optional
 import nextcord
 from nextcord.ext import commands
 
-from errors import LoggedView
-from slash_commands import command_paths, is_admin, plex
-from ui.embeds import Reply, card, set_thumbnail
-from ui.format import plural, truncate
-from ui.images import mascot
-from ui.theme import Limits, brand_colour
+from plexbot.errors import LoggedView
+from plexbot.slash_commands import command_paths, is_admin, plex
+from plexbot.ui.embeds import Reply, card, set_thumbnail
+from plexbot.ui.format import plural, truncate
+from plexbot.ui.images import mascot
+from plexbot.ui.theme import Limits, brand_colour
 
 logger = logging.getLogger("plexbot.utility_commands")
 

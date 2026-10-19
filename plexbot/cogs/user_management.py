@@ -1,5 +1,3 @@
-# cogs/user_management.py
-
 """/plexadmin users, link, unlink and ignore: who's who between Plex and Discord.
 
 Links let the bot show Plex viewers by their Discord name and avatar, give top-watcher roles and
@@ -13,12 +11,12 @@ import nextcord
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
-from plex_users import PlexUsers
-from slash_commands import is_admin, plexadmin
-from ui.embeds import ErrorKind, Reply, card, error_state, service_down, success
-from ui.format import join, plural, truncate
-from ui.theme import Colour, Limits
-from utilities import MappingsUnavailable, UserMappings
+from plexbot.plex_users import PlexUsers
+from plexbot.slash_commands import is_admin, plexadmin
+from plexbot.ui.embeds import ErrorKind, Reply, card, error_state, service_down, success
+from plexbot.ui.format import join, plural, truncate
+from plexbot.ui.theme import Colour, Limits
+from plexbot.utilities import MappingsUnavailable, UserMappings
 
 logger = logging.getLogger("plexbot.user_management")
 

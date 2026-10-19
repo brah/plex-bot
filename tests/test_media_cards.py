@@ -5,13 +5,13 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from cogs.media_commands import (
+from plexbot.cogs.media_commands import (
     _recent_choices, downloads_card, recent_line, split_torrents, title_choices, torrent_block,
 )
-from media_details import watch_stats
-from ui.cards import media_card, media_facts, runtime, session_title
-from ui.images import Attachment
-from ui.theme import Colour
+from plexbot.media_details import watch_stats
+from plexbot.ui.cards import media_card, media_facts, runtime, session_title
+from plexbot.ui.images import Attachment
+from plexbot.ui.theme import Colour
 
 MATRIX = {
     "rating_key": "101", "media_type": "movie", "title": "The Matrix", "year": "1999",

@@ -2,7 +2,7 @@
 #
 # Install:
 #   sudo cp deploy/plexbot.service /etc/systemd/system/plexbot.service
-#   # then edit User= and the two paths below to match your install
+#   # then edit User=, WorkingDirectory= and the venv path below to match your install
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now plexbot
 #
@@ -20,7 +20,7 @@ User=plexbot
 WorkingDirectory=/opt/plex-bot
 # Use the project's virtualenv interpreter, NOT the system python3 — the pinned
 # dependencies require Python 3.12+ and are installed into this venv.
-ExecStart=/opt/plex-bot/venv/bin/python /opt/plex-bot/plexbot.py
+ExecStart=/opt/plex-bot/venv/bin/python -m plexbot
 Restart=on-failure
 RestartSec=5
 

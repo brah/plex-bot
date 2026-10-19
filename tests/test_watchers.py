@@ -6,10 +6,10 @@ from types import SimpleNamespace
 import nextcord
 import pytest
 
-from cogs.server_commands import _can_manage_streams, _session_choices, _session_label
-from errors import invoked_command_path, slash_equivalent
-from slash_commands import admin_check, command_paths
-from tautulli_wrapper import Tautulli
+from plexbot.cogs.server_commands import _can_manage_streams, _session_choices, _session_label
+from plexbot.errors import invoked_command_path, slash_equivalent
+from plexbot.slash_commands import admin_check, command_paths
+from plexbot.tautulli_wrapper import Tautulli
 
 
 def _member(member_id=1, role_ids=(), admin=False):
@@ -26,7 +26,7 @@ GUILD = 123
 @pytest.fixture
 def configured(monkeypatch):
     """Set discord config values for one test: configured(server_id="123", admin_ids=[5])."""
-    from config import config
+    from plexbot.config import config
 
     def set_discord(**values):
         monkeypatch.setattr(config, "_user_config", {"discord": values})
@@ -89,10 +89,10 @@ class TestAdminCheck:
         assert admin_check(self._interaction("plexadmin")) is False
 
     def test_refusal_is_answered_privately(self, monkeypatch, configured):
-        import ui.embeds
-        from errors import ErrorHandler
+        from plexbot.ui import embeds
+        from plexbot.errors import ErrorHandler
 
-        monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+        monkeypatch.setattr(embeds, "mascot", lambda slot: None)
         sent = []
 
         class Response:

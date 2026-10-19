@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 
 import nextcord
 
-from config import config
-from ui.format import file_size, format_ms, is_truthy, join, plural, progress_bar, timestamp, to_int, truncate
-from ui.theme import Colour, Limits, brand_colour, media_colour
+from plexbot.config import config
+from plexbot.ui.format import file_size, format_ms, is_truthy, join, plural, progress_bar, timestamp, to_int, truncate
+from plexbot.ui.theme import Colour, Limits, brand_colour, media_colour
 
 
 class TestTruncate:

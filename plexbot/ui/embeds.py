@@ -1,5 +1,3 @@
-# ui/embeds.py
-
 """Standard response frames (card, empty, error, success) and Reply, which sends them."""
 
 import logging
@@ -9,9 +7,9 @@ from typing import List, Optional
 
 import nextcord
 
-from ui.format import truncate
-from ui.images import Attachment, mascot
-from ui.theme import Colour, Limits
+from plexbot.ui.format import truncate
+from plexbot.ui.images import Attachment, mascot
+from plexbot.ui.theme import Colour, Limits
 
 logger = logging.getLogger("plexbot.ui.embeds")
 

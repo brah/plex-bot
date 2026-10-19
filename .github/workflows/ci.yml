@@ -27,10 +27,7 @@ jobs:
         run: ruff check .
 
       - name: Compile all sources (syntax smoke test)
-        run: >-
-          python -m compileall -q
-          plexbot.py media_cache.py tautulli_wrapper.py utilities.py slash_commands.py plex_status.py plex_users.py media_details.py
-          config errors cogs ui
+        run: python -m compileall -q .
 
   test:
     name: Unit tests (Python ${{ matrix.python }})

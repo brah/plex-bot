@@ -2,8 +2,8 @@
 
 from datetime import datetime, timezone
 
-from plex_status import parse_status, services_card
-from ui.theme import Colour
+from plexbot.plex_status import parse_status, services_card
+from plexbot.ui.theme import Colour
 
 SUMMARY = {
     "status": {"indicator": "none", "description": "All Systems Operational"},

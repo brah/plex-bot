@@ -2,12 +2,12 @@ import json
 
 import pytest
 
-from config import Config, parse_env_value, setup_default_config
+from plexbot.config import Config, parse_env_value, setup_default_config
 
 
 def fresh_config(monkeypatch):
     """A Config with every real setting registered, so env names match the bot's."""
-    import config as config_module
+    from plexbot import config as config_module
 
     fresh = Config()
     monkeypatch.setattr(config_module, "config", fresh)

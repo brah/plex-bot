@@ -6,8 +6,8 @@ import logging
 import nextcord
 import pytest
 
-from errors import LoggedModal, LoggedView
-from plexbot import PlexBot
+from plexbot.errors import LoggedModal, LoggedView
+from plexbot.bot import PlexBot
 
 
 class FakeResponse:
@@ -90,60 +90,60 @@ def test_modal_errors_are_logged_and_answered_privately(caplog):
 
 
 def _patch_main_config(monkeypatch):
-    import plexbot
+    from plexbot import bot
 
     values = {("core", "token"): "token", ("core", "prefix"): "plex ", ("discord", "server_id"): ""}
-    monkeypatch.setattr(plexbot.config, "initialize", lambda: True)
+    monkeypatch.setattr(bot.config, "initialize", lambda: True)
     monkeypatch.setattr(
-        plexbot.config, "get", lambda section, key, default=None: values.get((section, key), default)
+        bot.config, "get", lambda section, key, default=None: values.get((section, key), default)
     )
-    return plexbot
+    return bot
 
 
 def test_crash_exits_non_zero_so_supervisors_restart(monkeypatch):
-    plexbot = _patch_main_config(monkeypatch)
+    bot = _patch_main_config(monkeypatch)
 
     def crash(self, token):
         raise TypeError("gateway handler blew up")
 
-    monkeypatch.setattr(plexbot.PlexBot, "run", crash)
+    monkeypatch.setattr(bot.PlexBot, "run", crash)
     with pytest.raises(SystemExit) as exc:
-        plexbot.main()
+        bot.main()
     assert exc.value.code == 1
 
 
 def test_ctrl_c_still_exits_cleanly(monkeypatch):
-    plexbot = _patch_main_config(monkeypatch)
+    bot = _patch_main_config(monkeypatch)
 
     def interrupt(self, token):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(plexbot.PlexBot, "run", interrupt)
-    plexbot.main()  # no SystemExit
+    monkeypatch.setattr(bot.PlexBot, "run", interrupt)
+    bot.main()  # no SystemExit
 
 
 @pytest.mark.parametrize("legacy", [None, True])
 def test_message_content_intent_only_for_legacy_text_commands(monkeypatch, legacy):
     from types import SimpleNamespace
 
-    plexbot = _patch_main_config(monkeypatch)
-    get = plexbot.config.get
-    monkeypatch.setattr(plexbot.config, "get", lambda section, key, default=None: (
+    bot = _patch_main_config(monkeypatch)
+    get = bot.config.get
+    monkeypatch.setattr(bot.config, "get", lambda section, key, default=None: (
         legacy if (section, key) == ("core", "legacy_text_commands") else get(section, key, default)))
     seen = {}
-    monkeypatch.setattr(plexbot.PlexBot, "run", lambda self, token: seen.update(bot=self))
-    plexbot.main()
-    bot = seen["bot"]
-    assert bot.intents.members and bot.intents.message_content is bool(legacy)
-    prefixes = bot.command_prefix(SimpleNamespace(user=SimpleNamespace(id=1)), None)
+    monkeypatch.setattr(bot.PlexBot, "run", lambda self, token: seen.update(bot=self))
+    bot.main()
+    instance = seen["bot"]
+    assert instance.intents.members and instance.intents.message_content is bool(legacy)
+    prefixes = instance.command_prefix(SimpleNamespace(user=SimpleNamespace(id=1)), None)
     assert "<@1> " in prefixes  # "@PlexBot top" is answered either way
     assert ("plex " in prefixes) is bool(legacy)
 
 
 def test_view_error_card_is_the_oops_state(monkeypatch):
-    import ui.embeds
+    from plexbot.ui import embeds
 
-    monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+    monkeypatch.setattr(embeds, "mascot", lambda slot: None)
     sent = {}
 
     class Response(FakeResponse):
@@ -161,10 +161,10 @@ def test_view_error_card_is_the_oops_state(monkeypatch):
 
 
 def test_slash_error_names_the_command(monkeypatch):
-    import ui.embeds
-    from errors import ErrorHandler
+    from plexbot.ui import embeds
+    from plexbot.errors import ErrorHandler
 
-    monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+    monkeypatch.setattr(embeds, "mascot", lambda slot: None)
     sent = {}
 
     class Response(FakeResponse):
@@ -184,10 +184,10 @@ def test_slash_error_names_the_command(monkeypatch):
 
 
 def test_slash_error_after_public_defer_replaces_the_placeholder(monkeypatch):
-    import ui.embeds
-    from errors import ErrorHandler
+    from plexbot.ui import embeds
+    from plexbot.errors import ErrorHandler
 
-    monkeypatch.setattr(ui.embeds, "mascot", lambda slot: None)
+    monkeypatch.setattr(embeds, "mascot", lambda slot: None)
     deleted = []
 
     async def delete_original_message():

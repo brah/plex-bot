@@ -8,10 +8,10 @@ Discord bot (nextcord) that reads a Plex server through Tautulli's API. Public r
 python -m venv .venv && .venv/Scripts/python -m pip install -r requirements.txt pytest "ruff==0.17.0"
 .venv/Scripts/python -m pytest -q                 # all tests; no network
 .venv/Scripts/python -m ruff check .              # CI lint (E9 + F only)
-.venv/Scripts/python plexbot.py                   # run the bot (needs config.json)
+.venv/Scripts/python -m plexbot                   # run the bot (needs config.json)
 ```
 
-CI (`.github/workflows/ci.yml`) runs ruff, a compileall smoke test over a hard-coded module list (add new top-level modules there), and pytest on Python 3.12. Python 3.14 also works locally.
+CI (`.github/workflows/ci.yml`) runs ruff, a compileall smoke test of every file, and pytest on Python 3.12. Python 3.14 also works locally.
 
 ## Layout
 

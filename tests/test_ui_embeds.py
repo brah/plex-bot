@@ -4,8 +4,8 @@ import asyncio
 
 import nextcord
 
-import ui.embeds as embeds
-from ui.embeds import (
+import plexbot.ui.embeds as embeds
+from plexbot.ui.embeds import (
     ErrorKind,
     Reply,
     card,
@@ -15,8 +15,8 @@ from ui.embeds import (
     success,
     unexpected_error,
 )
-from ui.images import Attachment
-from ui.theme import Colour, Limits
+from plexbot.ui.images import Attachment
+from plexbot.ui.theme import Colour, Limits
 
 ART = Attachment("mascot-oops.png", b"png")
 

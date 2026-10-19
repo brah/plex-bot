@@ -30,6 +30,6 @@ target-version = "py312"
 select = ["E9", "F"]
 
 [tool.pytest.ini_options]
-# Put the repo root on sys.path so tests can import top-level modules and cogs.
+# Put the repo root on sys.path so tests can import the plexbot package.
 pythonpath = ["."]
 testpaths = ["tests"]

@@ -6,12 +6,14 @@ any other way is dropped locally and then deleted from Discord by the next sync.
 """
 
 import asyncio
+import importlib
+from pathlib import Path
 from types import SimpleNamespace
 
 import nextcord
 
-from cogs.server_commands import ServerCommands
-from plexbot import PlexBot, install_slash_groups
+from plexbot.bot import PlexBot, cog_names, install_slash_groups
+from plexbot.cogs.server_commands import ServerCommands
 
 
 def _local_command_names(bot):
@@ -58,3 +60,12 @@ def test_groups_survive_ready_clear_and_reconnect():
         assert type(plex.children["status"].parent_cog) is ServerCommands
 
     asyncio.run(run())
+
+
+def test_cog_names_import_as_extensions():
+    """load_cogs logs a cog that fails to load instead of raising, so a wrong name would go unnoticed."""
+    names = cog_names()
+    cogs_dir = Path(__file__).resolve().parent.parent / "plexbot" / "cogs"
+    assert len(names) == len(list(cogs_dir.glob("*.py")))
+    for name in names:
+        assert callable(importlib.import_module(name).setup), name

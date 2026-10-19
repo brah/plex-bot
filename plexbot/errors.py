@@ -1,5 +1,3 @@
-# errors/__init__.py
-
 import logging
 from typing import Dict, Iterable, Optional
 
@@ -7,7 +5,7 @@ import aiohttp
 import nextcord
 from nextcord.ext import commands
 
-from slash_commands import command_paths
+from plexbot.slash_commands import command_paths
 
 logger = logging.getLogger("plexbot.errors")
 
@@ -80,7 +78,7 @@ class ErrorHandler:
         self, interaction: nextcord.Interaction, error: nextcord.ApplicationError
     ) -> None:
         """Log a failed slash command and tell the user privately, instead of a silent timeout."""
-        from ui.embeds import ErrorKind, error_state, unexpected_error
+        from plexbot.ui.embeds import ErrorKind, error_state, unexpected_error
 
         if isinstance(error, nextcord.ApplicationInvokeError):
             error = error.original
@@ -155,7 +153,7 @@ class LoggedView(nextcord.ui.View):
                 pass
 
     async def on_error(self, error: Exception, item: nextcord.ui.Item, interaction: nextcord.Interaction):
-        from ui.embeds import unexpected_error
+        from plexbot.ui.embeds import unexpected_error
 
         logger.error(f"Error in {type(self).__name__} ({type(item).__name__}): {error}", exc_info=error)
         await _reply_privately(interaction, unexpected_error())
@@ -165,7 +163,7 @@ class LoggedModal(nextcord.ui.Modal):
     """Modal whose submit errors are logged and answered privately (see LoggedView)."""
 
     async def on_error(self, error: Exception, interaction: nextcord.Interaction):
-        from ui.embeds import unexpected_error
+        from plexbot.ui.embeds import unexpected_error
 
         logger.error(f"Error in {type(self).__name__}: {error}", exc_info=error)
         await _reply_privately(interaction, unexpected_error())

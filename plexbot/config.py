@@ -1,5 +1,3 @@
-# config/__init__.py
-
 """config.json and PLEXBOT_* environment variables, read once at startup, with a default for every setting."""
 
 import json

@@ -1,5 +1,3 @@
-# media_cache.py
-
 import asyncio
 import json
 import logging
@@ -10,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from tautulli_wrapper import Tautulli
+from plexbot.tautulli_wrapper import Tautulli
 
 # Configure logging
 logger = logging.getLogger("plexbot.media_cache")

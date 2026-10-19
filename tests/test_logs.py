@@ -4,8 +4,8 @@ import io
 import logging
 from pathlib import Path
 
-from utilities import RedactSecrets, redact
-from cogs.server_commands import (
+from plexbot.utilities import RedactSecrets, redact
+from plexbot.cogs.server_commands import (
     _build_logs_reply,
     _filter_records,
     _find_log_path,

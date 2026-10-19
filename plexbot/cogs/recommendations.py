@@ -1,5 +1,3 @@
-# cogs/recommendations.py
-
 """/plex recommend: unwatched picks from the library in someone's favourite genres."""
 
 import asyncio
@@ -11,18 +9,18 @@ import nextcord
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
-from config import config
-from errors import LoggedView
-from media_cache import MediaCache
-from media_details import MediaDetails, TautulliUnavailable, item_viewers
-from slash_commands import plex
-from tautulli_wrapper import Tautulli
-from ui.cards import genre_label, media_icon, session_title
-from ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down
-from ui.format import join, plural, to_int, truncate
-from ui.images import fetch_poster_strip, poster_key
-from ui.theme import Limits, brand_colour
-from utilities import UserMappings, ignored_usernames
+from plexbot.config import config
+from plexbot.errors import LoggedView
+from plexbot.media_cache import MediaCache
+from plexbot.media_details import MediaDetails, TautulliUnavailable, item_viewers
+from plexbot.slash_commands import plex
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.cards import genre_label, media_icon, session_title
+from plexbot.ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down
+from plexbot.ui.format import join, plural, to_int, truncate
+from plexbot.ui.images import fetch_poster_strip, poster_key
+from plexbot.ui.theme import Limits, brand_colour
+from plexbot.utilities import UserMappings, ignored_usernames
 
 logger = logging.getLogger("plexbot.recommendations")
 

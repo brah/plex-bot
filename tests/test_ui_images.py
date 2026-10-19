@@ -6,8 +6,8 @@ import io
 import pytest
 from PIL import Image
 
-import ui.images as images
-from ui.images import (
+import plexbot.ui.images as images
+from plexbot.ui.images import (
     Attachment,
     current_frame,
     dominant_colour,
@@ -203,7 +203,7 @@ class FakeImageSession:
 
 @pytest.mark.parametrize("kwargs, expected", [({"fallback": "poster"}, "poster"), ({}, None)])
 def test_get_image_fallback_param(kwargs, expected):
-    from tautulli_wrapper import Tautulli
+    from plexbot.tautulli_wrapper import Tautulli
 
     tautulli = Tautulli(api_key="key", tautulli_ip="host:8181")
     tautulli.session = FakeImageSession()  # the client's own session, reused for every image

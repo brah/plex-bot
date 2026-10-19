@@ -10,8 +10,8 @@ import nextcord
 import pytest
 from PIL import Image
 
-import utilities
-from cogs.visualizations import (
+from plexbot import utilities
+from plexbot.cogs.visualizations import (
     WATCH_TIME, Visualizations, days_chart, hour_label, hours_chart, library_chart, media_chart, months_chart,
     titles_chart, top_titles, users_chart, utc_offset,
 )
@@ -143,14 +143,14 @@ class TestRendering:
 
     def test_poster_chart_renders_with_and_without_posters(self):
         from fakes import _png
-        from ui.charts import poster_chart
+        from plexbot.ui.charts import poster_chart
 
         attachment = poster_chart([3, 1], [_png(), None], ["Andor", "Shogun"], ["3", "1"], filename="chart-shows.png")
         assert attachment.data[:8] == b"\x89PNG\r\n\x1a\n"
         assert poster_chart([0], [None], ["x"], ["0"], filename="x.png") is None
 
     def test_library_line_chart_renders(self):
-        from ui.charts import line_chart
+        from plexbot.ui.charts import line_chart
 
         days = [date(2026, 10, 13), date(2026, 10, 14)]
         attachment = line_chart(days, {"Movies": [0, 2], "TV shows": [0, 0]}, {}, filename="chart-library.png",
@@ -159,14 +159,14 @@ class TestRendering:
         assert line_chart(days, {"Movies": [0, 0]}, {}, filename="x.png", unit="x") is None
 
     def test_nothing_to_draw(self):
-        from ui.charts import bar_chart, stacked_day_chart
+        from plexbot.ui.charts import bar_chart, stacked_day_chart
 
         assert bar_chart(["a"], [0], filename="x.png") is None
         assert stacked_day_chart([date(2026, 1, 1)], {"TV": [0]}, {}, filename="x.png") is None
 
 
 def _build(tautulli):
-    from plexbot import PlexBot, install_slash_groups
+    from plexbot.bot import PlexBot, install_slash_groups
 
     bot = PlexBot(command_prefix="plex ", intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
@@ -297,8 +297,8 @@ class TestCommands:
 
 
 def test_one_chart_command_with_user_suggestions():
-    from cogs.utility_commands import collect_help_entries
-    from slash_commands import command_paths
+    from plexbot.cogs.utility_commands import collect_help_entries
+    from plexbot.slash_commands import command_paths
 
     async def run(bot, cog):
         return dict(command_paths(bot)), collect_help_entries(bot)
@@ -566,7 +566,7 @@ class TestChartView:
 
 
 def test_stats_activity_page_is_drawn_on_first_click(monkeypatch):
-    from cogs.plex_stats import PlexStats
+    from plexbot.cogs.plex_stats import PlexStats
     from fakes import build_stats_bot
 
     recorder = Recorder(monkeypatch)
@@ -597,8 +597,8 @@ def test_stats_activity_page_is_drawn_on_first_click(monkeypatch):
 
 
 def test_stats_slow_page_doesnt_cover_a_later_click(monkeypatch):
-    from cogs.plex_stats import StatsView
-    from ui.embeds import card
+    from plexbot.cogs.plex_stats import StatsView
+    from plexbot.ui.embeds import card
 
     recorder = Recorder(monkeypatch)
 

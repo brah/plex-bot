@@ -2,7 +2,9 @@
 FROM python:3.14-slim
 
 # Unbuffered stdout/stderr so `docker logs` is live; no .pyc clutter in layers.
+# PYTHONPATH finds the plexbot package in /app while the bot runs from /data.
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -29,4 +31,5 @@ USER app
 WORKDIR /data
 
 # No EXPOSE: the bot only makes outbound connections (Discord gateway + Tautulli).
-CMD ["python", "/app/plexbot.py"]
+# -P keeps the writable working directory off sys.path, so nothing in /data can shadow a module.
+CMD ["python", "-P", "-m", "plexbot"]

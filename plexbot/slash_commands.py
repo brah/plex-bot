@@ -1,5 +1,3 @@
-# slash_commands.py
-
 """Top-level slash command groups shared by every cog.
 
 User-facing commands are subcommands of ``/plex`` and admin commands of
@@ -10,7 +8,7 @@ inside ``/plex`` they couldn't be hidden from non-admins.
 Cogs attach subcommands in their class body; nextcord binds each subcommand to
 the cog whose class defines it::
 
-    from slash_commands import plex
+    from plexbot.slash_commands import plex
 
     class MyCog(commands.Cog):
         @plex.subcommand(description="...")
@@ -20,7 +18,7 @@ the cog whose class defines it::
 import nextcord
 from nextcord.ext import commands
 
-from config import config
+from plexbot.config import config
 
 
 def listed(user, ids) -> bool:

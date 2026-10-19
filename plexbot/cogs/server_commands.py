@@ -1,5 +1,3 @@
-# cogs/server_commands.py
-
 import asyncio
 import io
 import logging
@@ -14,9 +12,9 @@ from typing import Optional
 import nextcord
 from nextcord.ext import commands, tasks
 
-from config import config
-from errors import LoggedModal, LoggedView
-from utilities import (
+from plexbot.config import config
+from plexbot.errors import LoggedModal, LoggedView
+from plexbot.utilities import (
     config_secrets,
     library_totals,
     redact,
@@ -26,25 +24,25 @@ from utilities import (
     viewer_avatar,
     viewer_mention,
 )
-from plex_status import PlexStatus, card_summary, fetch_status, services_card
-from slash_commands import is_admin, listed, plex, plexadmin
-from tautulli_wrapper import Tautulli
-from ui.cards import (
+from plexbot.plex_status import PlexStatus, card_summary, fetch_status, services_card
+from plexbot.slash_commands import is_admin, listed, plex, plexadmin
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.cards import (
     plex_web_link, recent_viewer_entry, session_title, session_user, stream_detail, stream_overview,
 )
-from ui.embeds import (
+from plexbot.ui.embeds import (
     ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail, success,
 )
-from ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
-from ui.images import STRIP_POSTERS, current_frame, fetch_poster_strip, mascot, plex_image, poster_key
-from ui.theme import Colour
+from plexbot.ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
+from plexbot.ui.images import STRIP_POSTERS, current_frame, fetch_poster_strip, mascot, plex_image, poster_key
+from plexbot.ui.theme import Colour
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
 
 # --- /plexadmin logs helpers ---------------------------------------------------------
 
-# A record starts with the "YYYY-MM-DD HH:MM:SS LEVEL " prefix from plexbot.py's log
+# A record starts with the "YYYY-MM-DD HH:MM:SS LEVEL " prefix from bot.py's log
 # format; lines without it (traceback lines) belong to the record above.
 _RECORD_START = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (DEBUG|INFO|WARNING|ERROR|CRITICAL) ")
 _LEVELS = {

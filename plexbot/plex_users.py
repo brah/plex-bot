@@ -1,5 +1,3 @@
-# plex_users.py
-
 """The server's Plex users, for commands with a `user` option (/plex history, /plex chart ...)."""
 
 import time
@@ -8,11 +6,11 @@ from typing import Optional
 import nextcord
 from nextcord.utils import escape_markdown
 
-from tautulli_wrapper import Tautulli
-from ui.embeds import ErrorKind, error_state, service_down
-from ui.format import truncate
-from ui.theme import Limits
-from utilities import ignored_usernames, viewer_name
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.embeds import ErrorKind, error_state, service_down
+from plexbot.ui.format import truncate
+from plexbot.ui.theme import Limits
+from plexbot.utilities import ignored_usernames, viewer_name
 
 _TTL = 300  # autocomplete asks on every keystroke; the user list rarely changes
 

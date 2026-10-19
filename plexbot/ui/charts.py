@@ -1,5 +1,3 @@
-# ui/charts.py
-
 """Chart images for /plex chart, drawn with matplotlib's object API (posters with Pillow).
 
 The object API (Figure, not pyplot) keeps no global state, so charts can be drawn in a worker
@@ -18,8 +16,8 @@ from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.ticker import MaxNLocator
 from PIL import Image, UnidentifiedImageError
 
-from config import config
-from ui.images import Attachment
+from plexbot.config import config
+from plexbot.ui.images import Attachment
 
 TEXT = "#DBDEE1"
 MUTED = "#949BA4"

@@ -7,10 +7,10 @@ as an import smoke test for the whole dependency set.
 
 import pytest
 
-from tautulli_wrapper import Tautulli
-from utilities import format_duration
-import cogs.media_commands  # noqa: F401  (import smoke test)
-from ui.format import format_ms as _format_ms
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.utilities import format_duration
+import plexbot.cogs.media_commands  # noqa: F401  (import smoke test)
+from plexbot.ui.format import format_ms as _format_ms
 
 
 class TestCheckResponse:

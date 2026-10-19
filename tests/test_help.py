@@ -5,12 +5,12 @@ from types import SimpleNamespace
 
 import nextcord
 
-import cogs.utility_commands as help_module
-from cogs.utility_commands import (
+import plexbot.cogs.utility_commands as help_module
+from plexbot.cogs.utility_commands import (
     HelpEntry, collect_help_entries, help_category_page, help_overview, visible_entries,
 )
 from fakes import FakeTautulli, build_bot
-from ui.images import Attachment
+from plexbot.ui.images import Attachment
 
 ENTRIES = [
     HelpEntry("/plex watchers [stop] [message]", "See who's watching", "watching", "/plex watchers"),
@@ -144,7 +144,7 @@ def test_choosing_overview_returns_to_the_overview_with_its_mascot(monkeypatch):
 
 
 def test_admins_get_the_admin_category(monkeypatch):
-    from config import config
+    from plexbot.config import config
 
     monkeypatch.setattr(help_module, "mascot", lambda slot: None)
     monkeypatch.setattr(config, "_user_config", {"discord": {"server_id": "123"}})  # admin of this server

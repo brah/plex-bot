@@ -3,11 +3,11 @@
 from datetime import datetime, timezone
 
 from fakes import EPISODE_PAUSED, LIVE_TV, MARKDOWN_TITLE, MOVIE_PLAYING, TRACK_PLAYING, many_sessions
-from ui.cards import (
+from plexbot.ui.cards import (
     plex_web_link, session_lines, session_title, session_user, stream_detail, stream_overview,
 )
-from ui.images import Attachment
-from ui.theme import Colour, Limits
+from plexbot.ui.images import Attachment
+from plexbot.ui.theme import Colour, Limits
 
 NOW = datetime(2026, 10, 14, 20, 0, tzinfo=timezone.utc)
 STRIP = Attachment("posters.png", b"png")

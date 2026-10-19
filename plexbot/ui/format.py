@@ -1,5 +1,3 @@
-# ui/format.py
-
 """Text helpers shared by every response: truncation, durations, progress bars, timestamps."""
 
 from datetime import datetime

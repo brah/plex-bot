@@ -1,5 +1,3 @@
-# cogs/media_commands.py
-
 """Library commands: /plex movie, /plex tv, /plex random, /plex recent, /plex downloading,
 and /plexadmin cache."""
 
@@ -16,18 +14,18 @@ import qbittorrentapi
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
-from config import config
-from errors import LoggedView
-from media_cache import MediaCache
-from media_details import MediaDetails, TautulliUnavailable
-from slash_commands import plex, plexadmin
-from tautulli_wrapper import Tautulli
-from ui.cards import genre_label, media_icon, session_title
-from ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail
-from ui.format import file_size, join, plural, progress_bar, timestamp, to_int, truncate
-from ui.images import STRIP_POSTERS, fetch_poster_strip, mascot, poster_key
-from ui.theme import Colour, Limits, brand_colour
-from utilities import format_duration
+from plexbot.config import config
+from plexbot.errors import LoggedView
+from plexbot.media_cache import MediaCache
+from plexbot.media_details import MediaDetails, TautulliUnavailable
+from plexbot.slash_commands import plex, plexadmin
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.cards import genre_label, media_icon, session_title
+from plexbot.ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail
+from plexbot.ui.format import file_size, join, plural, progress_bar, timestamp, to_int, truncate
+from plexbot.ui.images import STRIP_POSTERS, fetch_poster_strip, mascot, poster_key
+from plexbot.ui.theme import Colour, Limits, brand_colour
+from plexbot.utilities import format_duration
 
 logger = logging.getLogger("plexbot.media_commands")
 

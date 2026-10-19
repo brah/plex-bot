@@ -7,9 +7,9 @@ from types import SimpleNamespace
 import nextcord
 import pytest
 
-from cogs.user_management import UserManagement, users_card
+from plexbot.cogs.user_management import UserManagement, users_card
 from fakes import GUILD_ID, FakeTautulli, Recorder, interaction
-from utilities import UserMappings
+from plexbot.utilities import UserMappings
 
 USERS = [
     {"user_id": 1, "username": "alice", "friendly_name": "Alice"},
@@ -34,7 +34,7 @@ def map_file(tmp_path, monkeypatch):
 
 
 def _run(fn, tautulli=None):
-    from plexbot import PlexBot, install_slash_groups
+    from plexbot.bot import PlexBot, install_slash_groups
 
     if tautulli is None:
         tautulli = FakeTautulli([])
@@ -143,8 +143,8 @@ def test_autocomplete_labels_and_unlink_offers_only_linked_users():
 
 
 def test_admin_commands_registered_and_old_names_redirect():
-    from errors import slash_equivalent
-    from slash_commands import command_paths
+    from plexbot.errors import slash_equivalent
+    from plexbot.slash_commands import command_paths
 
     async def run(bot, cog):
         return [path for path, _command in command_paths(bot)]

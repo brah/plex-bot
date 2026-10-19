@@ -1,5 +1,3 @@
-# ui/cards.py
-
 """Renderers for the /plex watchers stream cards and the media card (lookups, random, recent)."""
 
 from datetime import datetime, timedelta, timezone
@@ -9,10 +7,10 @@ from urllib.parse import quote
 import nextcord
 from nextcord.utils import escape_markdown
 
-from ui.embeds import card, set_image, set_thumbnail
-from ui.format import format_ms, join, plural, progress_bar, timestamp, to_int, truncate
-from ui.images import Attachment, dominant_colour
-from ui.theme import Colour, Emoji, Limits, media_colour
+from plexbot.ui.embeds import card, set_image, set_thumbnail
+from plexbot.ui.format import format_ms, join, plural, progress_bar, timestamp, to_int, truncate
+from plexbot.ui.images import Attachment, dominant_colour
+from plexbot.ui.theme import Colour, Emoji, Limits, media_colour
 
 _DECISIONS = {"direct play": "Direct Play", "copy": "Direct Stream", "transcode": "Transcode"}
 _SUBTITLE_DECISIONS = {"burn": "Burned in", "copy": "Direct Stream", "transcode": "Transcode"}

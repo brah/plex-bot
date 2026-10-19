@@ -1,5 +1,3 @@
-# plex_status.py
-
 """plex.tv's public status page (status.plex.tv, hosted on incident.io).
 
 Two public feeds, fetched together:
@@ -17,9 +15,9 @@ from typing import List, Optional
 
 import aiohttp
 
-from ui.embeds import Reply, card
-from ui.format import join, plural, timestamp, truncate
-from ui.theme import Colour, Limits
+from plexbot.ui.embeds import Reply, card
+from plexbot.ui.format import join, plural, timestamp, truncate
+from plexbot.ui.theme import Colour, Limits
 
 logger = logging.getLogger("plexbot.plex_status")
 

@@ -6,16 +6,16 @@ from datetime import datetime
 import nextcord
 import pytest
 
-import utilities
-from cogs.recommendations import (
+from plexbot import utilities
+from plexbot.cogs.recommendations import (
     RecommendationView, Recommendations, favourite_genres, overview_card, watched_keys,
 )
-from media_details import item_viewers
+from plexbot.media_details import item_viewers
 from fakes import (
     GUILD_ID, MESSAGE_ID, FakeTautulli, Recorder, component_payload, interaction, member_payload, patch_images,
     settle,
 )
-from media_cache import MediaCache
+from plexbot.media_cache import MediaCache
 
 HISTORY = [
     {"rating_key": "11", "parent_rating_key": "10", "grandparent_rating_key": "1"},  # an episode of show 1
@@ -64,7 +64,7 @@ class TestPicking:
 
 
 def _build(tautulli):
-    from plexbot import PlexBot, install_slash_groups
+    from plexbot.bot import PlexBot, install_slash_groups
 
     cache = MediaCache(tautulli)
     cache.media_items = dict(CACHE)
@@ -135,7 +135,7 @@ class TestCommand:
 class TestButtons:
     def _view(self, bot, cog):
         overview = overview_card([CACHE["3"], CACHE["4"]], [1, 0], ["drama"], strip=None)
-        from ui.embeds import Reply
+        from plexbot.ui.embeds import Reply
 
         view = RecommendationView(cog.details, 42, [CACHE["3"], CACHE["4"]], Reply([overview]), timeout=60)
         bot._connection.store_view(view, MESSAGE_ID)
@@ -176,7 +176,7 @@ class TestButtons:
 
 
 def test_registered_in_help():
-    from cogs.utility_commands import collect_help_entries
+    from plexbot.cogs.utility_commands import collect_help_entries
 
     async def run(bot, cog):
         return collect_help_entries(bot)

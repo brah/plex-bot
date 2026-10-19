@@ -8,9 +8,9 @@ import pytest
 from nextcord import ButtonStyle
 from nextcord.utils import escape_markdown
 
-import utilities
-from cogs import plex_stats
-from cogs.plex_stats import (
+from plexbot import utilities
+from plexbot.cogs import plex_stats
+from plexbot.cogs.plex_stats import (
     _ALL_TIME, _STATS, PlexStats, hot_summary, library_line, media_card, overview_card, peak_line, popular_lines,
     tautulli_duration, top_card, tv_watchers, users_card,
 )
@@ -422,7 +422,7 @@ class TestCommands:
 
 
 def test_stats_commands_registered_in_help():
-    from cogs.utility_commands import collect_help_entries
+    from plexbot.cogs.utility_commands import collect_help_entries
 
     async def run(bot, cog):
         return collect_help_entries(bot)

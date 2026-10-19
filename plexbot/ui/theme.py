@@ -1,8 +1,6 @@
-# ui/theme.py
-
 """Colour roles, Discord limits and the small emoji set shared by every response."""
 
-from config import config
+from plexbot.config import config
 
 
 class Colour:

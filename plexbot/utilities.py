@@ -1,5 +1,3 @@
-# utilities.py
-
 import json
 import logging
 import os
@@ -12,8 +10,8 @@ from typing import List, Dict, Any, Optional
 
 from nextcord.utils import escape_markdown
 
-from config import config
-from ui.format import to_int
+from plexbot.config import config
+from plexbot.ui.format import to_int
 
 logger = logging.getLogger("plexbot.utilities")
 

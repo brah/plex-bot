@@ -3,11 +3,11 @@
 import asyncio
 from types import SimpleNamespace
 
-import utilities
+from plexbot import utilities
 
 from fakes import FakeTautulli, build_bot, patch_images
-from cogs.server_commands import WatchersView, last_viewers
-from ui.cards import recent_viewer_entry, recent_viewer_line
+from plexbot.cogs.server_commands import WatchersView, last_viewers
+from plexbot.ui.cards import recent_viewer_entry, recent_viewer_line
 
 MOVIE = {"user": "alice", "friendly_name": "Alice", "media_type": "movie", "title": "The Matrix",
          "full_title": "The Matrix", "year": 1999, "percent_complete": 98, "platform": "Roku",
@@ -49,7 +49,7 @@ def test_last_viewers_keeps_each_viewers_latest_play_and_skips_ignored():
 
 
 def _render(monkeypatch, *, enabled, history=None, reachable=True):
-    import cogs.server_commands as server_commands
+    import plexbot.cogs.server_commands as server_commands
 
     patch_images(monkeypatch)
     monkeypatch.setattr(server_commands.config, "get", lambda section, key, default=None:

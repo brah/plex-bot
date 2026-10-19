@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import cogs.media_commands as media_commands
-import utilities
-from cogs.media_commands import (
+import plexbot.cogs.media_commands as media_commands
+from plexbot import utilities
+from plexbot.cogs.media_commands import (
     CacheView, DownloadsView, MediaCommands, RandomView, RecentDetailsSelect, RecentView,
 )
 from fakes import (
@@ -279,7 +279,7 @@ class TestCacheAdmin:
 
 
 def test_media_commands_registered_and_in_help():
-    from cogs.utility_commands import collect_help_entries
+    from plexbot.cogs.utility_commands import collect_help_entries
 
     async def run(bot, cog):
         plex = next(c for c in bot._connection._application_commands if c.name == "plex")

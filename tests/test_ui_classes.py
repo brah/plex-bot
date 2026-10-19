@@ -14,12 +14,12 @@ import pkgutil
 import nextcord
 import pytest
 
-import cogs
-import errors
-from cogs.media_commands import MediaCommands, RecentView
-from cogs.server_commands import ServerCommands, StreamDetailsSelect, WatchersView
-from cogs.utility_commands import HelpEntry, HelpView
-from plexbot import PlexBot
+from plexbot import cogs
+from plexbot import errors
+from plexbot.cogs.media_commands import MediaCommands, RecentView
+from plexbot.cogs.server_commands import ServerCommands, StreamDetailsSelect, WatchersView
+from plexbot.cogs.utility_commands import HelpEntry, HelpView
+from plexbot.bot import PlexBot
 
 # Methods nextcord documents as meant to be overridden.
 OVERRIDABLE_HOOKS = {"callback", "interaction_check", "on_timeout", "on_error"}
@@ -28,7 +28,7 @@ UI_BASES = (nextcord.ui.View, nextcord.ui.Modal, nextcord.ui.Item)
 
 def _our_ui_classes():
     modules = [errors] + [
-        importlib.import_module(f"cogs.{info.name}") for info in pkgutil.iter_modules(cogs.__path__)
+        importlib.import_module(f"plexbot.cogs.{info.name}") for info in pkgutil.iter_modules(cogs.__path__)
     ]
     found = []
     for module in modules:

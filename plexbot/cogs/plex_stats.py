@@ -1,5 +1,3 @@
-# cogs/plex_stats.py
-
 """Stats commands: /plex top, /plex stats, /plex shows, /plex history and /plex hot."""
 
 import asyncio
@@ -13,17 +11,17 @@ import nextcord
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
-from config import config
-from errors import LoggedView
-from plex_users import PlexUsers
-from slash_commands import plex
-from tautulli_wrapper import Tautulli
-from ui.cards import media_icon, recent_viewer_line, session_title
-from ui.embeds import Reply, bot_token_handle, card, empty_state, service_down
-from ui.format import join, plural, timestamp, to_int, truncate
-from ui.images import fetch_poster_strip, fetch_sectioned_strip, poster_key
-from ui.theme import Colour, Limits, brand_colour
-from utilities import (
+from plexbot.config import config
+from plexbot.errors import LoggedView
+from plexbot.plex_users import PlexUsers
+from plexbot.slash_commands import plex
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.cards import media_icon, recent_viewer_line, session_title
+from plexbot.ui.embeds import Reply, bot_token_handle, card, empty_state, service_down
+from plexbot.ui.format import join, plural, timestamp, to_int, truncate
+from plexbot.ui.images import fetch_poster_strip, fetch_sectioned_strip, poster_key
+from plexbot.ui.theme import Colour, Limits, brand_colour
+from plexbot.utilities import (
     library_totals,
     UserMappings, format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_mention,
     viewer_name,

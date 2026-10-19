@@ -1,5 +1,3 @@
-# ui/images.py
-
 """Every image the bot sends: posters, art, a stream's current frame, poster strips, mascots.
 
 Each helper returns an Attachment (sent as a file, referenced as attachment://name) or
@@ -18,11 +16,11 @@ from typing import List, Optional, Sequence, Tuple
 import nextcord
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
-from ui.format import is_truthy
+from plexbot.ui.format import is_truthy
 
 logger = logging.getLogger("plexbot.ui.images")
 
-MASCOT_DIR = Path(__file__).resolve().parent.parent / "assets" / "mascot"
+MASCOT_DIR = Path(__file__).resolve().parents[2] / "assets" / "mascot"
 MASCOT_SLOTS = (
     "mascot-wave", "mascot-sleepy", "mascot-server", "mascot-unplugged", "mascot-oops", "mascot-downloading",
 )

@@ -5,12 +5,12 @@ from datetime import datetime, timezone
 
 import pytest
 
-import ui.embeds
+from plexbot.ui import embeds
 from fakes import FakeTautulli, Recorder, build_bot, component_payload, settle, MESSAGE_ID
-from cogs.server_commands import build_status_reply, library_totals, size_comparison, size_comparisons, version_line
-from plex_status import PlexStatus, Service, Incident
-from ui.images import Attachment
-from ui.theme import Colour
+from plexbot.cogs.server_commands import build_status_reply, library_totals, size_comparison, size_comparisons, version_line
+from plexbot.plex_status import PlexStatus, Service, Incident
+from plexbot.ui.images import Attachment
+from plexbot.ui.theme import Colour
 
 NOW = datetime(2026, 10, 14, tzinfo=timezone.utc)
 SERVER = {"pms_name": "Home", "pms_version": "1.41.0.1234-abcdef12", "pms_platform": "Linux",
@@ -44,8 +44,8 @@ def test_library_totals():
 
 
 def test_healthy_status(monkeypatch):
-    monkeypatch.setattr(ui.embeds, "mascot", lambda slot: Attachment(f"{slot}.png", b"x"))
-    import cogs.server_commands as server_commands
+    monkeypatch.setattr(embeds, "mascot", lambda slot: Attachment(f"{slot}.png", b"x"))
+    import plexbot.cogs.server_commands as server_commands
     monkeypatch.setattr(server_commands, "mascot", lambda slot: Attachment(f"{slot}.png", b"x"))
     activity = {"stream_count": "2", "total_bandwidth": "20000"}
     reply = build_status_reply(SERVER, LIBRARIES, activity, UP_TO_DATE, HEALTHY, now=NOW, pick=first)
@@ -67,7 +67,7 @@ def test_healthy_status(monkeypatch):
 
 
 def test_incident_update_and_missing_parts(monkeypatch):
-    import cogs.server_commands as server_commands
+    import plexbot.cogs.server_commands as server_commands
     monkeypatch.setattr(server_commands, "mascot", lambda slot: None)
     incident = PlexStatus("minor", "Partial outage",
                           [Service("Plex Web", "partial_outage"), Service("Relay", "operational")],
@@ -88,7 +88,7 @@ def test_incident_update_and_missing_parts(monkeypatch):
 
 
 def test_nobody_watching_and_unknown_service(monkeypatch):
-    import cogs.server_commands as server_commands
+    import plexbot.cogs.server_commands as server_commands
     monkeypatch.setattr(server_commands, "mascot", lambda slot: None)
     reply = build_status_reply(SERVER, LIBRARIES, {"stream_count": 0}, None, None, now=NOW, pick=first)
     fields = _fields(reply)
@@ -111,7 +111,7 @@ def test_version_line(update, expected):
 
 
 def test_library_sizes_and_size_line(monkeypatch):
-    import cogs.server_commands as server_commands
+    import plexbot.cogs.server_commands as server_commands
     monkeypatch.setattr(server_commands, "mascot", lambda slot: None)
     sizes = {"movie": 8 * TB, "artist": TB // 10}
     reply = build_status_reply(SERVER, LIBRARIES, None, None, None, now=NOW, sizes=sizes, pick=first)
@@ -170,8 +170,8 @@ class SizeTautulli:
 
 
 def test_cog_library_sizes_are_cached_and_skip_slow_libraries(monkeypatch):
-    import cogs.server_commands as server_commands
-    from cogs.server_commands import ServerCommands
+    import plexbot.cogs.server_commands as server_commands
+    from plexbot.cogs.server_commands import ServerCommands
 
     monkeypatch.setattr(server_commands, "_SIZE_WAIT", 0.05)
     cog = object.__new__(ServerCommands)
@@ -192,8 +192,8 @@ def test_cog_library_sizes_are_cached_and_skip_slow_libraries(monkeypatch):
 
 
 def _click_services(monkeypatch, latest):
-    import cogs.server_commands as server_commands
-    from cogs.server_commands import StatusView
+    import plexbot.cogs.server_commands as server_commands
+    from plexbot.cogs.server_commands import StatusView
 
     async def fake_fetch():
         return latest

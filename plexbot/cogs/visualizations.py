@@ -1,5 +1,3 @@
-# cogs/visualizations.py
-
 """/plex chart: when and what people watch, as charts.
 
 One command opens on plays over time; dropdowns under the chart switch to another chart (or to the
@@ -23,16 +21,16 @@ import tzlocal
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
-from errors import LoggedView
-from plex_users import PlexUsers
-from slash_commands import plex
-from tautulli_wrapper import Tautulli
-from ui.charts import POSTER_SLOTS, bar_chart, line_chart, poster_chart, stacked_day_chart
-from ui.embeds import Reply, bot_token_handle, card, empty_state, service_down, set_image
-from ui.format import join, plural, to_int, truncate
-from ui.images import Attachment, plex_image, poster_key
-from ui.theme import Colour, Limits, brand_colour
-from utilities import format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_name
+from plexbot.errors import LoggedView
+from plexbot.plex_users import PlexUsers
+from plexbot.slash_commands import plex
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.charts import POSTER_SLOTS, bar_chart, line_chart, poster_chart, stacked_day_chart
+from plexbot.ui.embeds import Reply, bot_token_handle, card, empty_state, service_down, set_image
+from plexbot.ui.format import join, plural, to_int, truncate
+from plexbot.ui.images import Attachment, plex_image, poster_key
+from plexbot.ui.theme import Colour, Limits, brand_colour
+from plexbot.utilities import format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_name
 
 logger = logging.getLogger("plexbot.visualizations")
 

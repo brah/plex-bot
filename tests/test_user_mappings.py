@@ -5,8 +5,8 @@ import os
 
 import pytest
 
-import utilities
-from utilities import MappingsUnavailable, UserMappings, normalise_mappings
+from plexbot import utilities
+from plexbot.utilities import MappingsUnavailable, UserMappings, normalise_mappings
 
 
 @pytest.fixture

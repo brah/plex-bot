@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta
 
 from fakes import FakeTautulli
-from media_cache import MediaCache
+from plexbot.media_cache import MediaCache
 
 
 class LibraryTautulli(FakeTautulli):

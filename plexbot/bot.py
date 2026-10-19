@@ -1,11 +1,4 @@
-# plexbot.py
-
-"""
-Entry point for the PlexBot Discord bot.
-
-Initializes the bot, loads configurations, sets up logging, and starts the bot.
-This version uses the new unified configuration and error handling systems.
-"""
+"""The bot itself: logging, shared resources, cog loading and startup. `python -m plexbot` calls main()."""
 
 import asyncio
 import logging
@@ -16,15 +9,14 @@ from pathlib import Path
 import nextcord
 from nextcord.ext import commands
 
-# Import our new configuration and error handling systems
-from config import config
-from errors import ErrorHandler
-from slash_commands import SlashGroups, admin_check
+from plexbot.config import config
+from plexbot.errors import ErrorHandler
+from plexbot.slash_commands import SlashGroups, admin_check
 
-from tautulli_wrapper import Tautulli, TMDB
-from media_cache import MediaCache
-from ui.format import is_truthy
-from utilities import RedactSecrets
+from plexbot.tautulli_wrapper import Tautulli, TMDB
+from plexbot.media_cache import MediaCache
+from plexbot.ui.format import is_truthy
+from plexbot.utilities import RedactSecrets
 
 # Configure logging
 _log_handlers = [
@@ -90,13 +82,16 @@ async def initialize_resources():
     return resources
 
 
+def cog_names() -> list[str]:
+    """Every module in the cogs directory, as an importable name."""
+    # Beside this file, not the working directory: in Docker the bot runs from its /data volume.
+    cog_files = sorted((Path(__file__).parent / "cogs").glob("*.py"))
+    return [f"plexbot.cogs.{path.stem}" for path in cog_files if not path.name.startswith("_")]
+
+
 async def load_cogs(bot):
     """Load every cog in the cogs directory."""
-    # Beside this file, not the working directory: in Docker the bot runs from its /data volume.
-    for cog_file in sorted((Path(__file__).parent / "cogs").glob("*.py")):
-        if cog_file.name.startswith("_"):
-            continue
-        cog_name = f"cogs.{cog_file.stem}"
+    for cog_name in cog_names():
         try:
             bot.load_extension(cog_name)
             logger.info(f"Loaded cog: {cog_name}")
@@ -240,6 +235,3 @@ def main():
         # Non-zero exit so systemd's Restart=on-failure (and Docker's restart policy) bring it back.
         sys.exit(1)
 
-
-if __name__ == "__main__":
-    main()

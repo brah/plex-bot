@@ -1,5 +1,3 @@
-# media_details.py
-
 """One library item's full card (poster, art, facts, who watched it), shared by the commands that
 show an item: /plex movie, /plex tv, /plex random, /plex recent details and /plex recommend."""
 
@@ -8,12 +6,12 @@ from typing import Optional
 
 from nextcord.utils import escape_markdown
 
-from tautulli_wrapper import Tautulli
-from ui.cards import media_card, plex_web_link
-from ui.embeds import Reply
-from ui.format import join, plural, to_int
-from ui.images import plex_image, poster_key
-from utilities import format_duration, ignored_usernames, viewer_name
+from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.cards import media_card, plex_web_link
+from plexbot.ui.embeds import Reply
+from plexbot.ui.format import join, plural, to_int
+from plexbot.ui.images import plex_image, poster_key
+from plexbot.utilities import format_duration, ignored_usernames, viewer_name
 
 
 class TautulliUnavailable(Exception):

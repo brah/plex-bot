@@ -5,7 +5,7 @@ import io
 import pytest
 from PIL import Image
 
-from ui.images import MASCOT_DIR, MASCOT_SLOTS
+from plexbot.ui.images import MASCOT_DIR, MASCOT_SLOTS
 
 PROMPTS = (
     (MASCOT_DIR / "PROMPTS.md").read_text(encoding="utf-8") if (MASCOT_DIR / "PROMPTS.md").exists() else ""
