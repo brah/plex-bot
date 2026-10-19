@@ -1,3 +1,5 @@
+# Plex-Bot on its own. Already run Docker Compose? Copy the plexbot service into your own
+# file instead; the README's Docker Compose section walks through it.
 services:
   plexbot:
     # Pin a version with :1 or :1.0.0 instead of :latest. To build from a clone of the repo,

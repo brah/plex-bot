@@ -64,7 +64,7 @@ A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautu
 
 ## Setup
 
-You need Python 3.12+, a working Tautulli and a Discord server you can add bots to. qBittorrent is optional.
+You need a working Tautulli, a Discord server you can add bots to, and either Docker or Python 3.12+. qBittorrent is optional.
 
 **Discord.** In the [Developer Portal](https://discord.com/developers/applications), create an application. Under **Bot**, copy the token, turn on **Server Members Intent**, and turn off **Public Bot**. Then invite it, using your application ID:
 
@@ -76,7 +76,7 @@ For the top-watcher roles, move the bot's role above those roles.
 
 **Tautulli.** Copy the API key from **Settings → Web Interface → API**.
 
-**Install and run:**
+**Run it.** With Docker, follow [Docker Compose](#docker-compose). Without Docker:
 
 ```bash
 git clone https://github.com/brah/plex-bot.git && cd plex-bot
@@ -86,7 +86,7 @@ cp config.example.json config.json                   # fill in token, tautulli a
 python -m plexbot
 ```
 
-Type `/plex` in Discord. To keep it running, see [Deployment](#deployment).
+Type `/plex` in Discord. To keep it running, see [systemd](#systemd).
 
 ## Configuration
 
@@ -147,36 +147,72 @@ Run exactly one instance, near Tautulli. It needs no open ports.
 
 ### Docker Compose
 
-You need Docker with Compose 2.24 or newer, plus the Discord and Tautulli steps from [Setup](#setup).
+The image is `ghcr.io/brah/plex-bot`, built for standard PCs and ARM boards such as a Raspberry Pi. Do the Discord and Tautulli steps from [Setup](#setup) first.
 
-1. In an empty folder, download the Compose file and your settings file:
+**1. Add the bot to your Compose file**, the one Tautulli is in if you run it in Docker:
 
-   ```bash
-   curl -O https://raw.githubusercontent.com/brah/plex-bot/main/docker-compose.yml
-   curl -o .env https://raw.githubusercontent.com/brah/plex-bot/main/.env.example
-   ```
+```yaml
+services:
+  plexbot:
+    image: ghcr.io/brah/plex-bot:latest
+    container_name: plexbot
+    restart: unless-stopped
+    environment:
+      PLEXBOT_CORE_TOKEN: "your-discord-bot-token"
+      PLEXBOT_TAUTULLI_IP: "tautulli:8181"
+      PLEXBOT_TAUTULLI_APIKEY: "your-tautulli-api-key"
+      PLEXBOT_DISCORD_SERVER_ID: "your-discord-server-id"
+    volumes:
+      - plexbot-data:/data
 
-2. Open `.env` and fill in `PLEXBOT_CORE_TOKEN`, `PLEXBOT_TAUTULLI_IP`, `PLEXBOT_TAUTULLI_APIKEY` and `PLEXBOT_DISCORD_SERVER_ID`. Inside a container, `localhost` means the container itself, so use your host's LAN address (`192.168.1.10:8181`) or, if Tautulli runs in the same Compose project, its service name (`tautulli:8181`).
+volumes:
+  plexbot-data:
+```
 
-3. Start it:
+If your file already has a top-level `volumes:` section, add `plexbot-data:` to it rather than starting a second one.
 
-   ```bash
-   docker compose up -d
-   docker compose logs -f        # "Logged in as ..." means it's working; Ctrl+C stops following
-   ```
+**2. Point it at Tautulli.** `PLEXBOT_TAUTULLI_IP` is Tautulli's address as the bot's container sees it, where `localhost` means the bot's own container:
 
-The bot keeps its user links (`map.json`), media cache and `plexbot.log` in the `plexbot-data` volume, so they survive updates.
+| Where Tautulli runs | `PLEXBOT_TAUTULLI_IP` |
+| --- | --- |
+| In the same Compose file | Its service name, like `tautulli:8181` |
+| In another Compose file, or on another machine | That machine's LAN address, like `192.168.1.10:8181` |
+| On the same machine, outside Docker | `host.docker.internal:8181`, and add `extra_hosts: ["host.docker.internal:host-gateway"]` to the bot's service |
+
+**3. Start it:**
+
+```bash
+docker compose up -d plexbot
+docker compose logs -f plexbot   # "Logged in as ..." means it's working; Ctrl+C stops following
+```
+
+Then type `/plex` in Discord.
+
+**More settings.** Every option in [Configuration](#configuration) goes under `environment:` as its `PLEXBOT_...` variable. To keep your token out of the Compose file, put the variables in their own file instead, starting from [`.env.example`](.env.example), and load it with `env_file: plexbot.env` under the bot's service.
+
+**Your data.** The bot keeps its user links (`map.json`), media cache and `plexbot.log` in `/data`, and the `plexbot-data` volume keeps them across updates. To use a folder instead, such as `./plexbot:/data`, create it first and hand it to user 1000, which the bot runs as: `mkdir -p plexbot && sudo chown 1000:1000 plexbot`. A folder Docker creates for you belongs to root, and the bot stops with a `PermissionError`.
+
+**Updating.**
 
 | To | Run |
 | --- | --- |
-| Update | `docker compose pull && docker compose up -d` |
-| Apply a changed `.env` | `docker compose up -d` |
-| Stop | `docker compose down` (keeps the volume) |
+| Update | `docker compose pull plexbot && docker compose up -d plexbot` |
+| Apply changed settings | `docker compose up -d plexbot` |
+| Stop | `docker compose stop plexbot` |
 | Back up user links | `docker compose cp plexbot:/data/map.json map.json` |
 
-**Prefer `config.json`?** Download it with `curl -o config.json https://raw.githubusercontent.com/brah/plex-bot/main/config.example.json`, fill it in, and uncomment its line under `volumes:` in `docker-compose.yml`. Settings in `.env` still win.
+`latest` moves with every release. To choose when you upgrade, pin a version instead: `ghcr.io/brah/plex-bot:1` takes new features and fixes but never a change that needs you to edit your setup, and `ghcr.io/brah/plex-bot:1.0.0` never moves. [CHANGELOG.md](CHANGELOG.md) says what each release changed.
 
-**Building from source?** Clone the repo, replace `image:` with `build: .` in `docker-compose.yml`, then run `docker compose up -d --build`.
+**No Compose file yet?** In an empty folder, download the ready-made one and its settings file, fill in `.env`, then run `docker compose up -d`. It needs Compose 2.24 or newer.
+
+```bash
+curl -O https://raw.githubusercontent.com/brah/plex-bot/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/brah/plex-bot/main/.env.example
+```
+
+**Prefer `config.json`?** Download [`config.example.json`](config.example.json) as `config.json`, fill it in, and mount it with `./config.json:/data/config.json:ro` under the bot's `volumes:`. Environment variables still win over it.
+
+**Building from source?** Clone the repo, use `build: .` in place of `image:`, then run `docker compose up -d --build plexbot`.
 
 ### systemd
 
@@ -190,6 +226,7 @@ To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl r
 - **No slash commands**: set `server_id`, and check the invite included `applications.commands`.
 - **"Couldn't reach Tautulli"**: check `tautulli.ip` and the key.
 - **No roles handed out**: set all three role IDs, raise the bot's role, and link the winners.
+- **`PermissionError: [Errno 13] Permission denied: '/data/plexbot.log'`**: the folder mounted at `/data` isn't writable by user 1000, which the bot runs as. Run `sudo chown -R 1000:1000` on that folder.
 - **No TV sizes on `/plex status`**: run **Calculate Total File Sizes** on the library in Tautulli.
 - **`can't open file '.../plexbot.py'`**, or the systemd service won't start: the bot runs with `python -m plexbot` from the repo folder. Match `ExecStart=` and `WorkingDirectory=` to [`deploy/plexbot.service`](deploy/plexbot.service), then `sudo systemctl daemon-reload && sudo systemctl restart plexbot`.
 
