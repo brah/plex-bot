@@ -20,14 +20,13 @@ from plexbot.utilities import (
     config_secrets,
     library_totals,
     redact,
-    get_git_revision_short_hash,
-    get_git_revision_short_hash_latest,
     ignored_usernames,
     viewer_avatar,
     viewer_mention,
 )
 from plexbot.plex_status import PlexStatus, card_summary, fetch_status, services_card
 from plexbot.slash_commands import is_admin, listed, plex, plexadmin
+from plexbot.version import bot_version, is_newer, latest_release
 from plexbot.tautulli_wrapper import Tautulli
 from plexbot.ui.cards import (
     plex_web_link, recent_viewer_entry, session_title, session_user, stream_detail, stream_overview,
@@ -523,34 +522,21 @@ class ServerCommands(commands.Cog):
         self.status_task.start()  # type: ignore[attr-defined]
 
     async def _log_startup_info(self):
-        """Log Tautulli connectivity and the bot's git version, once, at startup."""
+        """Log Tautulli connectivity, and whether a newer release is out, once, at startup."""
         try:
             r = await self.tautulli.get_home_stats()
-
-            # These shell out to git (and the "latest" check hits the network),
-            # so run them in threads — concurrently — to avoid blocking the event loop.
-            local_commit, latest_commit = await asyncio.gather(
-                asyncio.to_thread(get_git_revision_short_hash),
-                asyncio.to_thread(get_git_revision_short_hash_latest),
-            )
-            # The git helpers return the sentinel "unknown" on failure (e.g. offline),
-            # which is truthy — exclude it so a failed fetch isn't read as "outdated".
-            up_to_date = ""
-            known = local_commit not in ("", "unknown") and latest_commit not in ("", "unknown")
-            if known and local_commit != latest_commit:
-                up_to_date = "Version outdated. Consider running git pull"
-
             if Tautulli.check_response(r):
                 logger.info(f"Logged in as {self.bot.user}")
                 logger.info("Connection to Tautulli successful")
-                logger.info(
-                    f"Current PlexBot version ID: {local_commit or 'unknown'}; "
-                    f"latest: {latest_commit or 'unknown'}; {up_to_date}"
-                )
             else:
                 logger.critical("Connection to Tautulli failed")
         except Exception as e:
             logger.error(f"Error during startup info logging: {e}")
+
+        # Never raises: a GitHub that can't answer gives None.
+        latest = await latest_release()
+        if is_newer(latest, bot_version()):
+            logger.info(f"PlexBot {latest} is out (running {bot_version()}): https://github.com/brah/plex-bot/releases")
 
     def cog_unload(self):
         # Stop the background presence loop. The shared Tautulli client is owned by

@@ -17,6 +17,7 @@ from plexbot.tautulli_wrapper import Tautulli, TMDB
 from plexbot.media_cache import MediaCache
 from plexbot.ui.format import is_truthy
 from plexbot.utilities import RedactSecrets
+from plexbot.version import bot_version
 
 # Configure logging
 _log_handlers = [
@@ -162,7 +163,7 @@ class PlexBot(commands.Bot):
 
 def main():
     """Main entry point for the bot."""
-    logger.info("Starting PlexBot...")
+    logger.info(f"Starting PlexBot {bot_version()}...")
 
     # Initialize configuration system
     if not config.initialize():

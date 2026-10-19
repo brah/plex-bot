@@ -5,7 +5,6 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -314,32 +313,3 @@ def format_duration(seconds: int) -> str:
         parts.append(f"{minutes}m")
     return " ".join(parts)
 
-
-# No git checkout is normal (the Docker image has neither git nor .git), so a failure is debug
-# noise, not an error; the startup log already shows the version as "unknown".
-# A hung `git fetch` (unreachable remote) would hold up the presence loop, which waits on this.
-_GIT_TIMEOUT = 30
-
-
-def get_git_revision_short_hash() -> str:
-    """Get the current git commit short hash."""
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL, timeout=_GIT_TIMEOUT
-        ).decode("ascii").strip()
-    except Exception as e:
-        logger.debug(f"Couldn't read the git revision: {e}")
-        return "unknown"
-
-
-def get_git_revision_short_hash_latest() -> str:
-    """Get the latest git commit short hash from origin."""
-    try:
-        subprocess.check_call(["git", "fetch"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                              timeout=_GIT_TIMEOUT)
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "origin/HEAD"], stderr=subprocess.DEVNULL, timeout=_GIT_TIMEOUT
-        ).decode("ascii").strip()
-    except Exception as e:
-        logger.debug(f"Couldn't read the latest git revision: {e}")
-        return "unknown"
