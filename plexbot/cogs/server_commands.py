@@ -445,7 +445,8 @@ def size_comparison(total: int, pick=random.choice) -> Optional[str]:
 
 def build_status_reply(server: dict, libraries, activity: Optional[dict], update: Optional[dict],
                        plex_status: Optional[PlexStatus], *, now: datetime,
-                       sizes: Optional[dict] = None, pick=random.choice) -> Reply:
+                       sizes: Optional[dict] = None, bot_version: Optional[str] = None,
+                       pick=random.choice) -> Reply:
     sizes = sizes or {}
     plex_pass = " · \U0001F39F\ufe0f Plex Pass" if to_int(server.get("pms_plexpass")) else ""
     version = server.get("pms_version")
@@ -486,9 +487,9 @@ def build_status_reply(server: dict, libraries, activity: Optional[dict], update
     embed.add_field(name="Activity", value=watching, inline=True)
     embed.add_field(name="Plex services", value=card_summary(plex_status), inline=False)
 
-    fun = size_comparison(sum(sizes.values()), pick=pick)
-    if fun:
-        embed.set_footer(text=fun)
+    footer = join([size_comparison(sum(sizes.values()), pick=pick), f"PlexBot {bot_version}" if bot_version else None])
+    if footer:
+        embed.set_footer(text=footer)
     embed.timestamp = now
     art = mascot("mascot-server")
     set_thumbnail(embed, art)
@@ -638,7 +639,7 @@ class ServerCommands(commands.Cog):
 
         reply = build_status_reply(
             server, libraries, data(activity_r, None), data(update_r, None), plex_status,
-            now=nextcord.utils.utcnow(), sizes=sizes,
+            now=nextcord.utils.utcnow(), sizes=sizes, bot_version=bot_version(),
         )
         if plex_status is not None:
             reply.view = StatusView(plex_status)

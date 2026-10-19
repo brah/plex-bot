@@ -254,3 +254,20 @@ def test_presence_counts_every_stream_and_their_total_bandwidth(monkeypatch):
 
     asyncio.run(run())
     assert shown == ["2 streams at 20.0 Mbps", "1 stream at 12.0 Mbps"]
+
+
+def test_footer_names_the_bot_version(monkeypatch):
+    import plexbot.cogs.server_commands as server_commands
+    monkeypatch.setattr(server_commands, "mascot", lambda slot: None)
+    reply = build_status_reply(SERVER, LIBRARIES, None, None, None, now=NOW, bot_version="1.2.0", pick=first)
+    assert reply.embeds[0].footer.text == "PlexBot 1.2.0"  # no sizes known, so no size line
+
+
+def test_footer_keeps_the_size_line_first(monkeypatch):
+    import plexbot.cogs.server_commands as server_commands
+    monkeypatch.setattr(server_commands, "mascot", lambda slot: None)
+    sizes = {"movie": 8 * TB, "artist": TB // 10}
+    reply = build_status_reply(SERVER, LIBRARIES, None, None, None, now=NOW, sizes=sizes,
+                               bot_version="1.2.0", pick=first)
+    assert reply.embeds[0].footer.text.startswith("8.1 TB of media: about 5.5 million floppy disks")
+    assert reply.embeds[0].footer.text.endswith(" · PlexBot 1.2.0")
