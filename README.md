@@ -72,7 +72,19 @@ You need a working Tautulli, a Discord server you can add bots to, and either Do
 https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot+applications.commands&permissions=268487680
 ```
 
-For the top-watcher roles, move the bot's role above those roles.
+**Top-watcher roles (optional).** The bot can give your three biggest watchers a role each, such as Plex King, Plex Two and Plex Three. Create the roles, then set their IDs as `discord.top_role_id`, `second_role_id` and `third_role_id` (with Developer Mode on under **User Settings → Advanced**, right-click a role and choose **Copy Role ID**).
+
+Discord only lets a bot give out roles that sit below its own highest role. Usually that's the role named after the bot, which Discord created when you invited it. In **Server Settings → Roles**, drag the bot's role above all three:
+
+```text
+plex-bot      ← the bot's role
+Plex King
+Plex Two
+Plex Three
+...your other roles
+```
+
+Only the bot has its role, so putting it at the top changes nothing for anyone else. The three roles still sit above all your other roles, so their colours still show on the winners' names. The roles move to the new top three whenever someone runs `/plex top` for the default 7 days.
 
 **Tautulli.** Copy the API key from **Settings → Web Interface → API**.
 
@@ -225,7 +237,7 @@ To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl r
 - **`PrivilegedIntentsRequired`**: turn on **Server Members Intent**.
 - **No slash commands**: set `server_id`, and check the invite included `applications.commands`.
 - **"Couldn't reach Tautulli"**: check `tautulli.ip` and the key.
-- **No roles handed out**: set all three role IDs, raise the bot's role, and link the winners.
+- **No roles handed out**: set all three role IDs, link the winners to their Discord accounts with `/plexadmin link`, and check the bot's role sits above all three in **Server Settings → Roles**. When it doesn't, the log says `Bot role hierarchy too low to manage top user roles`.
 - **`PermissionError: [Errno 13] Permission denied: '/data/plexbot.log'`**: the folder mounted at `/data` isn't writable by user 1000, which the bot runs as. Run `sudo chown -R 1000:1000` on that folder.
 - **No TV sizes on `/plex status`**: run **Calculate Total File Sizes** on the library in Tautulli.
 - **`can't open file '.../plexbot.py'`**, or the systemd service won't start: the bot runs with `python -m plexbot` from the repo folder. Match `ExecStart=` and `WorkingDirectory=` to [`deploy/plexbot.service`](deploy/plexbot.service), then `sudo systemctl daemon-reload && sudo systemctl restart plexbot`.
