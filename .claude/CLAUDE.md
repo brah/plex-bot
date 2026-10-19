@@ -2,7 +2,7 @@
 
 Discord bot (nextcord) that reads a Plex server through Tautulli's API. Public repo: github.com/brah/plex-bot.
 
-@CONTRIBUTING.md
+@../CONTRIBUTING.md
 
 ## Local commands (Windows)
 

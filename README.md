@@ -189,6 +189,7 @@ To update: `git pull`, `pip install -r requirements.txt`, then `sudo systemctl r
 - **"Couldn't reach Tautulli"**: check `tautulli.ip` and the key.
 - **No roles handed out**: set all three role IDs, raise the bot's role, and link the winners.
 - **No TV sizes on `/plex status`**: run **Calculate Total File Sizes** on the library in Tautulli.
+- **`can't open file '.../plexbot.py'`**, or the systemd service won't start: the bot runs with `python -m plexbot` from the repo folder. Match `ExecStart=` and `WorkingDirectory=` to [`deploy/plexbot.service`](deploy/plexbot.service), then `sudo systemctl daemon-reload && sudo systemctl restart plexbot`.
 
 Logs go to `plexbot.log`; admins can also fetch them with `/plexadmin logs`, with secrets redacted.
 
