@@ -26,6 +26,10 @@ RUN groupadd --gid 1000 app \
 # cache/, .env) is excluded via .dockerignore and never baked in.
 COPY . .
 
+# The release workflow passes the version from its tag; a local build reports "dev".
+ARG VERSION=dev
+ENV BOT_VERSION=$VERSION
+
 USER app
 # The bot reads config.json and writes its state relative to the working directory.
 WORKDIR /data

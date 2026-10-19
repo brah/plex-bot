@@ -7,3 +7,7 @@ MD013: false
 MD033:
   allowed_elements: [b, details, div, img, p, sub, summary, table, td, tr]
 MD041: false
+
+# Every release in CHANGELOG.md repeats the same section headings.
+MD024:
+  siblings_only: true
