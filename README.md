@@ -88,7 +88,7 @@ Only the bot has its role, so putting it at the top changes nothing for anyone e
 
 **Tautulli.** The bot needs Tautulli's API key and address.
 
-1. In Tautulli, open **Settings** from the menu at the top right, choose **Web Interface**, and scroll down to **API**.
+1. In Tautulli, open **Settings** from the menu at the top right and choose the **Web Interface** tab. **API** is at the bottom of it. The tab's direct link is your Tautulli address followed by `/settings#tabs_tabs-web_interface`.
 2. Tick **Enable API** if it isn't already.
 3. Click the eye icon to show the key, and copy it. If the field is empty, press **Generate**.
 4. Press **Save**.
