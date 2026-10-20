@@ -1,6 +1,7 @@
 """/plex status: library totals, sizes, version line and the status card."""
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 import pytest
@@ -254,6 +255,27 @@ def test_presence_counts_every_stream_and_their_total_bandwidth(monkeypatch):
 
     asyncio.run(run())
     assert shown == ["2 streams at 20.0 Mbps", "1 stream at 12.0 Mbps"]
+
+
+def test_presence_logs_an_activity_outage_once_and_its_end(monkeypatch, caplog):
+    async def run():
+        tautulli = FakeTautulli([])
+        bot, cog = build_bot(tautulli)
+
+        async def change_presence(activity=None, **kwargs):
+            pass
+
+        monkeypatch.setattr(bot, "change_presence", change_presence)
+        tautulli.reachable = False
+        for _ in range(3):  # three ticks, 45 seconds of outage
+            await cog.status_task.coro(cog)
+        tautulli.reachable = True
+        await cog.status_task.coro(cog)
+
+    caplog.set_level(logging.INFO, logger="plexbot.server_commands")
+    asyncio.run(run())
+    levels = [r.levelname for r in caplog.records if r.name == "plexbot.server_commands" and "activity" in r.getMessage()]
+    assert levels == ["ERROR", "INFO"]
 
 
 def test_footer_names_the_bot_version(monkeypatch):

@@ -22,6 +22,7 @@ class Tautulli:
         self.session: Optional[aiohttp.ClientSession] = None
         self.request_timeout = 30
         self._pms_identifier: Optional[str] = None  # cached by server_id()
+        self._unreachable = False  # while True, connection failures are logged at DEBUG
         if not use_https:
             logger.warning("Tautulli connection using HTTP — API key will be sent in plaintext. "
                            "Set 'use_https: true' in tautulli config for encrypted connections.")
@@ -50,16 +51,33 @@ class Tautulli:
         try:
             timeout = aiohttp.ClientTimeout(total=self.request_timeout)
             async with self.session.get(self.tautulli_api_url, params=params, timeout=timeout) as response:
+                if self._unreachable:
+                    self._unreachable = False
+                    logger.info("Tautulli is answering again.")
                 response.raise_for_status()
                 return await response.json()
         except asyncio.TimeoutError:
-            logger.error(f"API call '{cmd}' timed out after {self.request_timeout}s.")
+            self._connection_failed(cmd, f"timed out after {self.request_timeout}s")
+        except aiohttp.ClientConnectionError as exc:
+            self._connection_failed(cmd, exc)
         except aiohttp.ClientError as exc:
             logger.error(f"API call '{cmd}' failed: {exc}")
         except json.JSONDecodeError:
             logger.error(f"API call '{cmd}' returned invalid JSON.")
 
         return None
+
+    def _connection_failed(self, cmd: str, reason) -> None:
+        """Log the first failure of an outage as an error, and the rest at DEBUG until Tautulli answers.
+
+        The presence loop asks every 15 seconds, so a long outage would otherwise bury everything else.
+        """
+        if self._unreachable:
+            logger.debug(f"API call '{cmd}' failed: {reason}")
+            return
+        self._unreachable = True
+        logger.error(f"API call '{cmd}' failed: {reason}. Until Tautulli answers again, "
+                     "further connection failures are only logged at DEBUG.")
 
     @staticmethod
     def check_response(response: Optional[Dict[str, Any]]) -> bool:

@@ -521,6 +521,7 @@ class ServerCommands(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self._section_sizes: dict[str, tuple[float, int]] = {}  # section_id -> (fetched at, bytes)
         self._display_streams = True  # presence alternates between stream stats and a help hint
+        self._activity_failing = False  # so a long outage logs once, not every 15 seconds
         self._startup_log: Optional[asyncio.Task] = None
         self.status_task.start()  # type: ignore[attr-defined]
 
@@ -554,8 +555,14 @@ class ServerCommands(commands.Cog):
         try:
             response = await self.tautulli.get_activity()
             if not Tautulli.check_response(response):
-                logger.error("Failed to retrieve activity from Tautulli.")
+                if not self._activity_failing:
+                    logger.error("Failed to retrieve activity from Tautulli for the bot's status; "
+                                 "not logged again until it answers.")
+                self._activity_failing = True
                 return
+            if self._activity_failing:
+                logger.info("Tautulli's activity is back; the bot's status is updating again.")
+                self._activity_failing = False
             data = Tautulli.get_response_data(response, {})
             # Total, not WAN, bandwidth: the same figure /plex status and /plex watchers show.
             streams = plural(to_int(data.get("stream_count")), "stream")

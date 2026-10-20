@@ -15,6 +15,11 @@ What changed in each release, newest first. Releases are also on
 - `/plex hot`, `/plex chart` and `/plex recommend` no longer count a play twice when it ends while
   the bot is reading the history.
 
+### Changes
+
+- A Tautulli outage logs one error when it starts and one line when it ends, instead of errors
+  every 15 seconds.
+
 ## 1.0.0 - 2026-10-19
 
 The first versioned release.

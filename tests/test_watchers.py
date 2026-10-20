@@ -1,8 +1,10 @@
 """Unit tests for /plex watchers stream management, slash command paths and hints, and terminate_session."""
 
 import asyncio
+import logging
 from types import SimpleNamespace
 
+import aiohttp
 import nextcord
 import pytest
 
@@ -297,3 +299,52 @@ def test_history_rows_is_none_when_tautulli_fails_midway():
 
     client.get_history = get_history
     assert asyncio.run(client.get_history_rows({}, page=2)) is None
+
+
+class _Session:
+    """aiohttp.ClientSession stand-in: each get() raises or answers with the next result."""
+
+    closed = False
+
+    def __init__(self, results):
+        self.results = results
+
+    def get(self, *args, **kwargs):
+        return _Request(self.results.pop(0))
+
+
+class _Request:
+    def __init__(self, result):
+        self.result = result
+
+    async def __aenter__(self):
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _Answer:
+    def raise_for_status(self):
+        pass
+
+    async def json(self):
+        return {"response": {"result": "success", "data": {}}}
+
+
+def test_a_tautulli_outage_logs_one_error_then_its_end(caplog):
+    down = aiohttp.ClientConnectionError("Cannot connect to host")
+    client = Tautulli(api_key="k", tautulli_ip="host:8181", use_https=True)
+    client.session = _Session([down, TimeoutError(), down, _Answer(), down])
+    caplog.set_level(logging.DEBUG, logger="plexbot.tautulli_wrapper")
+    caplog.clear()  # the client's own setup lines
+
+    async def run():
+        return [await client.get_activity() for _ in range(5)]
+
+    answers = asyncio.run(run())
+    assert [answer is not None for answer in answers] == [False, False, False, True, False]
+    # The presence loop asks every 15 seconds: one error per outage, the repeats only at DEBUG.
+    assert [r.levelname for r in caplog.records] == ["ERROR", "DEBUG", "DEBUG", "INFO", "ERROR"]
