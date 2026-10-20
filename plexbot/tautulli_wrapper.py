@@ -1,14 +1,26 @@
 """Async client for Tautulli's API (every call goes through Tautulli.api_call), plus an unused TMDB client."""
 
 import asyncio
+import ipaddress
 import json
 import logging
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 import aiohttp
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.tautulli_wrapper")
+
+
+def on_the_internet(address: str) -> bool:
+    """Whether a "host:port" is reached over the internet, where plain HTTP would expose the API key:
+    not localhost, a private or LAN address, or a one-word name such as a Docker service ("tautulli")."""
+    host = urlsplit(f"//{address}").hostname or ""
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return "." in host and not host.endswith((".local", ".lan", ".internal", ".home.arpa"))
 
 
 class Tautulli:
@@ -23,9 +35,9 @@ class Tautulli:
         self.request_timeout = 30
         self._pms_identifier: Optional[str] = None  # cached by server_id()
         self._unreachable = False  # while True, connection failures are logged at DEBUG
-        if not use_https:
-            logger.warning("Tautulli connection using HTTP — API key will be sent in plaintext. "
-                           "Set 'use_https: true' in tautulli config for encrypted connections.")
+        if not use_https and on_the_internet(tautulli_ip):
+            logger.warning(f"Tautulli at {tautulli_ip} is reached over the internet using HTTP, so the API key "
+                           "is sent in plaintext. Set tautulli.use_https (PLEXBOT_TAUTULLI_USE_HTTPS) to true.")
         logger.info(f"Tautulli API URL set to {self.tautulli_api_url}")
 
     def _ensure_session(self) -> None:

@@ -14,6 +14,7 @@ What changed in each release, newest first. Releases are also on
 - Copies cloned before 18 October 2026 can't `git pull`: run
   `git fetch origin && git reset --hard origin/main` once.
 - The README covers [moving from a Python install to Docker](https://github.com/brah/plex-bot#docker-compose).
+- No PyNaCl warning at startup, and the HTTPS warning only shows for a Tautulli on the internet.
 
 ## 1.1.0 - 2026-10-20
 

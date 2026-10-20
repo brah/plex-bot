@@ -221,6 +221,7 @@ def main():
             logger.warning("Neither discord.server_id nor discord.admin_ids is set, so nobody can use /plexadmin.")
 
     prefix = commands.when_mentioned_or(bot_prefix, bot_prefix.title()) if legacy else commands.when_mentioned
+    nextcord.VoiceClient.warn_nacl = False  # the bot never joins voice, so PyNaCl's absence isn't news
     bot = PlexBot(
         command_prefix=prefix,
         intents=intents,

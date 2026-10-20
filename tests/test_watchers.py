@@ -348,3 +348,29 @@ def test_a_tautulli_outage_logs_one_error_then_its_end(caplog):
     assert [answer is not None for answer in answers] == [False, False, False, True, False]
     # The presence loop asks every 15 seconds: one error per outage, the repeats only at DEBUG.
     assert [r.levelname for r in caplog.records] == ["ERROR", "DEBUG", "DEBUG", "INFO", "ERROR"]
+
+
+@pytest.mark.parametrize("address, public", [
+    ("tautulli:8181", False),  # a Docker service name
+    ("localhost:8181", False),
+    ("127.0.0.1:8181", False),
+    ("192.168.1.10:8181", False),
+    ("100.101.102.103:8181", False),  # carrier-grade NAT, e.g. Tailscale
+    ("[::1]:8181", False),
+    ("host.docker.internal:8181", False),
+    ("nas.local:8181", False),
+    ("8.8.8.8:8181", True),
+    ("tautulli.example.com", True),
+])
+def test_plain_http_is_only_flagged_over_the_internet(address, public):
+    from plexbot.tautulli_wrapper import on_the_internet
+
+    assert on_the_internet(address) is public
+
+
+def test_the_plaintext_warning_skips_a_docker_network(caplog):
+    caplog.set_level(logging.WARNING, logger="plexbot.tautulli_wrapper")
+    Tautulli(api_key="k", tautulli_ip="tautulli:8181")
+    assert caplog.records == []
+    Tautulli(api_key="k", tautulli_ip="tautulli.example.com")
+    assert "plaintext" in caplog.records[0].getMessage()
