@@ -48,6 +48,8 @@ class MediaCache:
         self.cache_lock = asyncio.Lock()
         self.semaphore = asyncio.Semaphore(10)  # Limit concurrent API requests
         self._refresh: Optional[asyncio.Task] = None  # a background update_cache, while it runs
+        self._updating: Optional[asyncio.Task] = None  # whichever task is inside update_cache
+        self._closed = False  # set by close(): no update starts once the bot is shutting down
         # rating key -> when Tautulli last couldn't describe it (usually removed from Plex but still listed)
         self._unreadable: Dict[str, float] = {}
 
@@ -97,13 +99,16 @@ class MediaCache:
             self._refresh = asyncio.create_task(self.update_cache())
 
     async def close(self) -> None:
-        """Stop a background refresh, so it doesn't outlive the Tautulli session it uses."""
-        if self._refresh is not None and not self._refresh.done():
-            self._refresh.cancel()
-            try:
-                await self._refresh
-            except asyncio.CancelledError:
-                pass
+        """Stop any update (in the background, or Refresh now), so it doesn't outlive the Tautulli
+        session it uses: a late call would open a new session that's never closed."""
+        self._closed = True
+        for task in {self._refresh, self._updating}:
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
     async def update_cache(self, full: bool = False) -> None:
         """Update the media cache from Tautulli: the title list, plus metadata for new titles.
@@ -112,11 +117,12 @@ class MediaCache:
         changed in Plex), even when the cache is fresh; that's one call per title, minutes on a big library.
         """
         async with self.cache_lock:
-            if not full and self.is_cache_valid():
-                # Another task updated the cache while this one waited for the lock
+            if self._closed or (not full and self.is_cache_valid()):
+                # Shutting down, or another task updated the cache while this one waited for the lock
                 return
 
             logger.info("Updating media cache...")
+            self._updating = asyncio.current_task()
             try:
                 # Check Tautulli connection first
                 test_response = await self.tautulli.get_server_info()
@@ -139,6 +145,8 @@ class MediaCache:
                     logger.warning("No media items found during update")
             except Exception as e:
                 logger.error(f"Failed to update media cache: {e}")
+            finally:
+                self._updating = None
 
     async def get_items(
         self,

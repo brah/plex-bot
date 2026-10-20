@@ -198,3 +198,35 @@ def test_a_title_tautulli_cant_describe_is_asked_again_daily_or_on_refresh_now(t
     asyncio.run(run())
     assert tautulli.asked == ["2", "2", "1", "2"]
     assert _titles(cache.media_items.values()) == ["Kept"]
+
+
+def test_close_stops_refresh_now_and_any_later_update(tmp_path):
+    tautulli = LibraryTautulli({"1": "Title"})
+    cache = _stale_cache(tautulli, tmp_path, [])
+    asked_server = []
+    server_info = tautulli.get_server_info
+
+    async def counted_server_info():
+        asked_server.append(1)
+        return await server_info()
+
+    tautulli.get_server_info = counted_server_info
+
+    async def run():
+        started, never = asyncio.Event(), asyncio.Event()
+
+        async def stuck(rating_key):  # Tautulli still working through the library
+            started.set()
+            await never.wait()
+
+        tautulli.get_metadata = stuck
+        click = asyncio.create_task(cache.refresh())  # an admin pressed Refresh now
+        await started.wait()
+        await cache.close()  # the bot shuts down
+        asked_server.clear()
+        await asyncio.wait_for(cache.update_cache(full=True), timeout=2)  # a late caller
+        return click
+
+    click = asyncio.run(run())
+    assert click.cancelled()
+    assert asked_server == []  # nothing reopened the Tautulli session after close
