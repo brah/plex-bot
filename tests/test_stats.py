@@ -250,18 +250,22 @@ class TestCommands:
             def __gt__(self, other):
                 return self.position > other.position
 
+        calls = []  # role changes asked of Discord
+
         class Member:
             def __init__(self, member_id, *roles):
                 self.id, self.display_name, self.roles = member_id, f"member {member_id}", []
                 asyncio.run(self.add_roles(*roles))
 
             async def add_roles(self, *roles, reason=None):
+                calls.append(("add", self.id))
                 for role in roles:
                     if role not in self.roles:
                         self.roles.append(role)
                         role.members.append(self)
 
             async def remove_roles(self, *roles, reason=None):
+                calls.append(("remove", self.id))
                 for role in roles:
                     if role in self.roles:
                         self.roles.remove(role)
@@ -286,6 +290,11 @@ class TestCommands:
         assert bob.roles == [second]
         assert eve.roles == []
         assert third.members == []
+
+        # The same ranking again: everyone already holds their role, so Discord isn't asked anything.
+        calls.clear()
+        asyncio.run(PlexStats._assign_top_roles(None, guild, rows))
+        assert calls == []
 
     def test_top_tautulli_down(self, monkeypatch):
         recorder = Recorder(monkeypatch)

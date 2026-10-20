@@ -548,7 +548,8 @@ class PlexStats(commands.Cog):
             if not member:
                 continue
             try:
-                await member.add_roles(role, reason="Top Plex user.")
+                if role not in member.roles:  # most runs change nothing; skip the API call
+                    await member.add_roles(role, reason="Top Plex user.")
                 others = [r for r in roles if r != role and r in member.roles]
                 if others:
                     await member.remove_roles(*others, reason="Clearing other top roles.")

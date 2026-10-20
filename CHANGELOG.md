@@ -26,6 +26,7 @@ What changed in each release, newest first. Releases are also on
 - Titles that Tautulli still lists after they're removed from Plex are asked about once a day
   instead of on every refresh, so they no longer fill the log with errors.
 - The first fill of the media cache, and **Refresh now**, are several times faster.
+- `/plex top` only changes the top-watcher roles of people whose rank changed.
 
 ## 1.0.0 - 2026-10-19
 
