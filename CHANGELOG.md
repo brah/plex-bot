@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-20
+
 ### New features
 
 - `/plex downloading` works even if qBittorrent auth is turned off/bypassed on LAN: leave `qbittorrent.username` and `password` blank.
