@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.2.0 - 2026-10-20
+
 ### New features
 
 - `/plex status` shows the Plex logo before the server version. The bot adds it to its own emojis on first start.
