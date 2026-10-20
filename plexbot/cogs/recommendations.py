@@ -148,8 +148,7 @@ class Recommendations(commands.Cog):
     async def _viewer_counts(self, picks: list) -> list:
         responses = await asyncio.gather(*(self.tautulli.get_item_user_stats(p["rating_key"]) for p in picks))
         ignored = ignored_usernames()
-        return [len(item_viewers(Tautulli.get_response_data(r, []) if Tautulli.check_response(r) else [], ignored))
-                for r in responses]
+        return [len(item_viewers(Tautulli.data(r, []), ignored)) for r in responses]
 
     @plex.subcommand(description="Recommend unwatched movies and shows from someone's favourite genres")
     async def recommend(

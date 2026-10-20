@@ -72,11 +72,8 @@ class MediaDetails:
         if not item.get("title"):
             return None
 
-        def data(response):
-            return Tautulli.get_response_data(response, []) if Tautulli.check_response(response) else []
-
-        stats = watch_stats(data(users_r), data(time_r), lambda row: viewer_name(self.bot, row),
-                            ignored_usernames())
+        stats = watch_stats(Tautulli.data(users_r, []), Tautulli.data(time_r, []),
+                            lambda row: viewer_name(self.bot, row), ignored_usernames())
         poster, art = await asyncio.gather(
             plex_image(self.tautulli, poster_key(item), filename="poster.jpg"),
             plex_image(self.tautulli, item.get("art") or item.get("grandparent_art"), filename="art.jpg",

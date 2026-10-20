@@ -627,13 +627,8 @@ class ServerCommands(commands.Cog):
     async def status(self, interaction: nextcord.Interaction):
         await interaction.response.defer()
 
-        def data(response, default):
-            if Tautulli.check_response(response):
-                return Tautulli.get_response_data(response, default)
-            return default
-
         async def libraries_and_sizes():
-            rows = data(await self.tautulli.get_libraries(), [])
+            rows = Tautulli.data(await self.tautulli.get_libraries(), [])
             return rows, await self._library_sizes(rows)
 
         server_r, (libraries, sizes), activity_r, update_r, plex_status = await asyncio.gather(
@@ -650,7 +645,7 @@ class ServerCommands(commands.Cog):
         server = Tautulli.get_response_data(server_r, {})
 
         reply = build_status_reply(
-            server, libraries, data(activity_r, None), data(update_r, None), plex_status,
+            server, libraries, Tautulli.data(activity_r), Tautulli.data(update_r), plex_status,
             now=nextcord.utils.utcnow(), sizes=sizes, bot_version=bot_version(),
         )
         if plex_status is not None:

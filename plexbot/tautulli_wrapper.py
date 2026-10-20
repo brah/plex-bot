@@ -91,6 +91,11 @@ class Tautulli:
             return default
         return response.get("response", {}).get("data", default)
 
+    @staticmethod
+    def data(response: Optional[Dict[str, Any]], default=None):
+        """The response's data when Tautulli answered "success", else default."""
+        return Tautulli.get_response_data(response, default) if Tautulli.check_response(response) else default
+
     async def get_activity(self, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Get the current activity on the PMS."""
         return await self.api_call("get_activity", params)
