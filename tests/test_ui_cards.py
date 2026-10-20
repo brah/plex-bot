@@ -41,6 +41,12 @@ class TestSessionLines:
         assert "\\_eve\\_" in line
         assert "\\*\\*Bold\\*\\*" in line
 
+    def test_a_device_name_cant_become_a_link(self):
+        # Viewers name their own devices, and this card is public.
+        line = session_lines(dict(MOVIE_PLAYING, player="[Free Plex Pass](https://phish.example)"))
+        # An escaped "[" is enough: Discord then shows the text and address instead of a link.
+        assert "\\[Free Plex Pass](https://phish.example)" in line
+
     def test_live_tv_without_duration_does_not_crash(self):
         assert "News at Ten" in session_lines(LIVE_TV)
 
@@ -97,6 +103,13 @@ class TestDetail:
         assert "Remote" in fields["Player"]
         assert embed.colour.value == Colour.WARNING
         assert embed.author.icon_url is None
+
+    def test_player_names_are_escaped(self):
+        session = dict(MOVIE_PLAYING, player="[Free Plex Pass](https://phish.example)", platform="*Box*")
+        embed = stream_detail(session, avatar_url=None, link=None, frame=None, poster=None, now=NOW)
+        player = next(field.value for field in embed.fields if field.name == "Player")
+        assert "\\[Free Plex Pass](https://phish.example)" in player
+        assert "\\*Box\\*" in player
 
     def test_never_shows_ip_or_location(self):
         session = dict(MOVIE_PLAYING, ip_address="203.0.113.7", ip_address_public="203.0.113.7",

@@ -308,6 +308,16 @@ def test_stop_confirmation_mentions_a_linked_viewer(monkeypatch):
     assert text.startswith("Stopped **<@42>**'s stream")
 
 
+def test_stop_confirmation_escapes_the_title(monkeypatch):
+    async def run():
+        _bot, cog = build_bot(FakeTautulli([dict(MOVIE_PLAYING, title="M*A*S*H")]))
+        return await cog.stop_stream("admin", "abc", None)
+
+    ok, text = asyncio.run(run())
+    assert ok is True
+    assert text.endswith("stream of **M\\*A\\*S\\*H (1999)**.")
+
+
 def test_stop_option_reports_ended_stream(monkeypatch):
     async def run():
         _bot, cog = build_bot(FakeTautulli([]))

@@ -13,6 +13,7 @@ from typing import Optional
 
 import nextcord
 from nextcord.ext import commands, tasks
+from nextcord.utils import escape_markdown
 
 from plexbot.config import config
 from plexbot.errors import LoggedModal, LoggedView
@@ -752,7 +753,8 @@ class ServerCommands(commands.Cog):
         if status == 200:
             note = f" with message: {message}" if message else ""
             logger.info(f"{actor} stopped stream {session_id} ({label}){note}")
-            return True, f"Stopped **{self._mention(session)}**'s stream of **{session_title(session)}**."
+            return True, (f"Stopped **{self._mention(session)}**'s stream of "
+                          f"**{escape_markdown(session_title(session))}**.")
         logger.warning(f"{actor} failed to stop stream {session_id} ({label}): Tautulli returned an error")
         return False, (
             "Tautulli couldn't stop that stream. An admin can check `/plexadmin logs` for details."

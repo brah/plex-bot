@@ -124,7 +124,8 @@ def session_lines(session: dict, *, name: Callable[[dict], str] = _plex_name) ->
         session.get("stream_video_full_resolution"),
         _decision(session.get("transcode_decision")),
     ], " ")
-    device = session.get("player") or session.get("product") or session.get("platform")
+    # Viewers name their own devices, so a name could carry Discord formatting or a link.
+    device = escape_markdown(session.get("player") or session.get("product") or session.get("platform") or "")
     details = join([_progress(session), quality, device])
     return f"{icon} **{user}** · {title}" + (f"\n{details}" if details else "")
 
@@ -213,8 +214,8 @@ def stream_detail(session: dict, *, avatar_url: Optional[str], link: Optional[st
 
     bandwidth = to_int(session.get("bandwidth"))
     player = join([
-        join([session.get("player"), session.get("product")]),
-        session.get("platform"),
+        escape_markdown(join([session.get("player"), session.get("product")])),
+        escape_markdown(session.get("platform") or ""),
         _LOCATIONS.get(str(session.get("location") or "").lower()),
         f"{bandwidth / 1000:.1f} Mbps" if bandwidth else None,
     ], "\n")

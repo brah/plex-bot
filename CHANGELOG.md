@@ -5,6 +5,11 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### Bug fixes
+
+- Device names and titles show as written on `/plex watchers`, even with characters Discord reads
+  as formatting, and a device name can no longer turn into a link.
+
 ## 1.0.0 - 2026-10-19
 
 The first versioned release.
