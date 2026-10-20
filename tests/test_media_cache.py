@@ -177,3 +177,24 @@ def test_refresh_now_rereads_every_title_even_during_a_background_refresh(tmp_pa
 
     asyncio.run(run())
     assert _titles(cache.media_items.values()) == ["Added", "Renamed in Plex"]
+
+
+def test_a_title_tautulli_cant_describe_is_asked_again_daily_or_on_refresh_now(tmp_path):
+    tautulli = LibraryTautulli({"1": "Kept", "2": "Removed from Plex"})
+    tautulli.failing = {"2"}
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Kept")])
+
+    def stale_refresh():
+        cache.last_updated = None
+        return cache.update_cache()
+
+    async def run():
+        await stale_refresh()  # asks about it
+        await stale_refresh()  # an hour later: skipped
+        cache._unreadable["2"] -= 25 * 3600
+        await stale_refresh()  # a day later: asked again
+        await cache.refresh()  # Refresh now asks about every title
+
+    asyncio.run(run())
+    assert tautulli.asked == ["2", "2", "1", "2"]
+    assert _titles(cache.media_items.values()) == ["Kept"]

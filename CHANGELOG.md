@@ -23,6 +23,9 @@ What changed in each release, newest first. Releases are also on
 
 - A Tautulli outage logs one error when it starts and one line when it ends, instead of errors
   every 15 seconds.
+- Titles that Tautulli still lists after they're removed from Plex are asked about once a day
+  instead of on every refresh, so they no longer fill the log with errors.
+- The first fill of the media cache, and **Refresh now**, are several times faster.
 
 ## 1.0.0 - 2026-10-19
 

@@ -6,15 +6,19 @@ import json
 import logging
 import os
 import random
+import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from plexbot.tautulli_wrapper import Tautulli
+from plexbot.ui.format import plural
 
 # Configure logging
 logger = logging.getLogger("plexbot.media_cache")
+
+_RETRY_UNREADABLE = 24 * 3600  # seconds before a title Tautulli couldn't describe is asked about again
 
 
 class MediaCache:
@@ -44,6 +48,8 @@ class MediaCache:
         self.cache_lock = asyncio.Lock()
         self.semaphore = asyncio.Semaphore(10)  # Limit concurrent API requests
         self._refresh: Optional[asyncio.Task] = None  # a background update_cache, while it runs
+        # rating key -> when Tautulli last couldn't describe it (usually removed from Plex but still listed)
+        self._unreadable: Dict[str, float] = {}
 
     async def initialize(self) -> None:
         """Initialize the cache by loading from disk and updating if needed."""
@@ -327,36 +333,31 @@ class MediaCache:
 
             # Titles already cached keep their metadata; only new ones (or all, when full) are fetched.
             rating_keys = []
+            now = time.monotonic()
             for row in media_items:
-                cached = None if full else self.media_items.get(str(row["rating_key"]))
+                key = str(row["rating_key"])
+                cached = None if full else self.media_items.get(key)
                 if cached:
                     library_items.append({**cached, "section_id": section_id})
+                elif full or now - self._unreadable.get(key, float("-inf")) > _RETRY_UNREADABLE:
+                    rating_keys.append(key)
+            skipped = len(media_items) - len(library_items) - len(rating_keys)
+            if skipped:
+                logger.info(f"Skipped {plural(skipped, 'title')} in '{library['section_name']}' that Tautulli "
+                            "couldn't describe in the last day; Refresh now asks again at once")
+
+            # self.semaphore keeps this to 10 calls at a time, across every library.
+            results = await asyncio.gather(*(self._fetch_item_metadata(key) for key in rating_keys))
+            for key, result in zip(rating_keys, results):
+                if result is None and key not in self.media_items:
+                    self._unreadable[key] = now
                 else:
-                    rating_keys.append(row["rating_key"])
-
-            # Process rating keys in smaller batches to improve reliability
-            batch_size = 10  # Reduced from 20 to 10 for better reliability
-            for i in range(0, len(rating_keys), batch_size):
-                batch_keys = rating_keys[i : i + batch_size]
-                
-                # Log batch progress
-                logger.debug(f"Processing batch {(i//batch_size)+1}/{(len(rating_keys)+batch_size-1)//batch_size} in {library['section_name']}")
-                
-                batch_tasks = [self._fetch_item_metadata(key) for key in batch_keys]
-                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-
-                for key, result in zip(batch_keys, batch_results):
-                    if isinstance(result, Exception):
-                        logger.error(f"Exception while fetching metadata: {result}")
-                        result = None
-                    # A failed fetch keeps the title we already had rather than dropping it.
-                    item = result or self.media_items.get(str(key))
-                    if item:
-                        # section_id lets a later refresh keep this library's titles if it can't be read.
-                        library_items.append({**item, "section_id": section_id})
-
-                # Longer pause between batches to avoid API rate limits
-                await asyncio.sleep(0.5)
+                    self._unreadable.pop(key, None)
+                # A failed fetch keeps the title we already had rather than dropping it.
+                item = result or self.media_items.get(key)
+                if item:
+                    # section_id lets a later refresh keep this library's titles if it can't be read.
+                    library_items.append({**item, "section_id": section_id})
 
             logger.info(
                 f"Completed processing library '{library['section_name']}' with {len(library_items)} items"
