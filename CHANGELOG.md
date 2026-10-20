@@ -5,6 +5,10 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### Bug fixes
+
+- Stopping the bot, for example with `docker stop`, no longer logs "Unclosed client session" errors.
+
 ## 1.1.0 - 2026-10-20
 
 ### New features

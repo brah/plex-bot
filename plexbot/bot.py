@@ -1,6 +1,7 @@
 """The bot itself: logging, shared resources, cog loading and startup. `python -m plexbot` calls main()."""
 
 import asyncio
+import contextlib
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
@@ -125,11 +126,23 @@ class PlexBot(commands.Bot):
         install_slash_groups(self)
         load_cogs(self)
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._shut_down = asyncio.Event()  # set once close() has closed everything
+
     async def start(self, *args, **kwargs) -> None:
         # nextcord (unlike discord.py) never invokes setup_hook(); call it
         # ourselves so shared resources + cogs initialize once before connecting.
         await self.setup_hook()
-        await super().start(*args, **kwargs)
+        try:
+            await super().start(*args, **kwargs)
+        finally:
+            if self.is_closed():
+                # On SIGTERM (docker stop) nextcord runs close() as a task, and run() cancels every task
+                # 0.1 s after this returns: let close() finish closing the HTTP sessions first. Bounded,
+                # so a hung close can't outlast Docker's 10 s grace period.
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(self._shut_down.wait(), timeout=5)
 
     async def on_error(self, event_method: str, *args, **kwargs) -> None:
         """Log exceptions from event handlers, such as the command sync on connect.
@@ -148,17 +161,20 @@ class PlexBot(commands.Bot):
         down while a task is still mid-request — which would otherwise error or
         silently re-open a new, never-closed session via Tautulli._ensure_session().
         """
-        await super().close()
+        try:
+            await super().close()
 
-        logger.info("Closing shared resources...")
-        resources = getattr(self, "shared_resources", None) or {}
-        for name in ("media_cache", "tautulli", "tmdb"):
-            client = resources.get(name)
-            if client is not None:
-                try:
-                    await client.close()
-                except Exception as e:
-                    logger.exception(f"Error closing {name} client during shutdown: {e}")
+            logger.info("Closing shared resources...")
+            resources = getattr(self, "shared_resources", None) or {}
+            for name in ("media_cache", "tautulli", "tmdb"):
+                client = resources.get(name)
+                if client is not None:
+                    try:
+                        await client.close()
+                    except Exception as e:
+                        logger.exception(f"Error closing {name} client during shutdown: {e}")
+        finally:
+            self._shut_down.set()
 
 
 def main():

@@ -217,3 +217,38 @@ def test_slash_error_after_public_defer_replaces_the_placeholder(monkeypatch):
     assert deleted == [True]
     assert len(interaction.followup.sent) == 1
     assert interaction.followup.sent[0][1] is True
+
+
+def test_a_sigterm_shutdown_closes_the_sessions_before_run_cleans_up(monkeypatch):
+    """docker stop: nextcord's SIGTERM handler runs close() as a task, and run() cancels every task 0.1 s
+    after start() returns. close() must finish first, or the HTTP sessions log "Unclosed client session"."""
+    closed = []
+
+    class Session:
+        async def close(self):
+            closed.append("tautulli")
+
+    async def setup_hook(self):
+        self.shared_resources = {"tautulli": Session()}
+
+    async def gateway(self, *args, **kwargs):
+        while not self.is_closed():  # the gateway loop ends as soon as close() starts
+            await asyncio.sleep(0)
+
+    async def disconnect(self):
+        self._closed = True
+        await asyncio.sleep(0.05)  # closing the websocket and Discord's HTTP session takes a moment
+
+    monkeypatch.setattr(PlexBot, "setup_hook", setup_hook)
+    monkeypatch.setattr(commands.Bot, "start", gateway)
+    monkeypatch.setattr(commands.Bot, "close", disconnect)
+
+    async def run():
+        bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None)
+        running = asyncio.ensure_future(bot.start("token"))
+        await asyncio.sleep(0)
+        asyncio.get_running_loop().create_task(bot.close())  # what nextcord's SIGTERM handler does
+        await running
+        return list(closed)  # what's closed by the time run() starts cancelling tasks
+
+    assert asyncio.run(run()) == ["tautulli"]
