@@ -272,6 +272,22 @@ def test_history_rows_pages_until_a_short_page():
     assert calls == [(0, 2), (2, 2), (4, 2)]
 
 
+def test_history_rows_drop_a_play_pushed_onto_the_next_page():
+    """History is newest first, so a play that ends between two pages shifts every row down one."""
+    client = Tautulli(api_key="k", tautulli_ip="host:8181")
+    plays = [{"row_id": n} for n in (5, 4, 3, 2, 1)]
+
+    async def get_history(params=None):
+        page = plays[params["start"]:params["start"] + params["length"]]
+        if params["start"] == 0:
+            plays.insert(0, {"row_id": 6})  # ends just after the first page is read
+        return {"response": {"result": "success", "data": {"data": page}}}
+
+    client.get_history = get_history
+    rows = asyncio.run(client.get_history_rows({}, page=2))
+    assert [row["row_id"] for row in rows] == [5, 4, 3, 2, 1]  # 4 came back on page two
+
+
 def test_history_rows_is_none_when_tautulli_fails_midway():
     client = Tautulli(api_key="k", tautulli_ip="host:8181")
     answers = [{"response": {"result": "success", "data": {"data": [{}, {}]}}}, None]

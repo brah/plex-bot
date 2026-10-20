@@ -87,23 +87,37 @@ class Tautulli:
         get_history returns at most `length` rows, newest first, so one call over a long window on a
         busy server would silently lose the oldest plays. Bound the rows with params (e.g. "after").
         """
-        return await self._all_rows(lambda start: self.get_history({**params, "start": start, "length": page}), page)
+        return await self._all_rows(
+            lambda start: self.get_history({**params, "start": start, "length": page}), page, key="row_id"
+        )
 
     async def get_library_media_rows(self, section_id, page: int = 1000) -> Optional[list]:
         """Every title in a library, a page at a time; None when Tautulli didn't answer."""
         return await self._all_rows(
-            lambda start: self.get_library_media_info(section_id=section_id, start=start, length=page), page
+            lambda start: self.get_library_media_info(section_id=section_id, start=start, length=page), page,
+            key="rating_key",
         )
 
-    async def _all_rows(self, fetch, page: int) -> Optional[list]:
-        """Call fetch(start) for successive pages of a paged Tautulli table until one comes back short."""
+    async def _all_rows(self, fetch, page: int, key: str) -> Optional[list]:
+        """Call fetch(start) for successive pages of a paged Tautulli table until one comes back short.
+
+        A row added while paging pushes the rest down a place, so the next page starts with a row
+        already read; rows whose `key` was seen before are dropped.
+        """
         rows: list = []
+        seen = set()
+        start = 0
         while True:
-            response = await fetch(len(rows))
+            response = await fetch(start)
             if not self.check_response(response):
                 return None
             batch = (self.get_response_data(response, {}) or {}).get("data") or []
-            rows.extend(batch)
+            start += len(batch)
+            for row in batch:
+                row_key = row.get(key)
+                if row_key is None or row_key not in seen:
+                    seen.add(row_key)
+                    rows.append(row)
             if len(batch) < page:
                 return rows
 

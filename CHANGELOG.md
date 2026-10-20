@@ -12,6 +12,8 @@ What changed in each release, newest first. Releases are also on
 - Picking someone from the suggestions on `/plex history` and `/plex chart` always shows that
   person, even when another viewer's Discord name is the same as their Plex username.
 - `/plex chart` counts whole days, today included, so its play count matches what the bars add up to.
+- `/plex hot`, `/plex chart` and `/plex recommend` no longer count a play twice when it ends while
+  the bot is reading the history.
 
 ## 1.0.0 - 2026-10-19
 
