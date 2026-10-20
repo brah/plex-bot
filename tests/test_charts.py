@@ -647,6 +647,23 @@ def test_stats_slow_page_doesnt_cover_a_later_click(monkeypatch):
     assert "Activity" in view.pages  # cached for the next click
 
 
+def test_a_window_is_whole_days_so_the_header_matches_the_bars():
+    from datetime import timedelta
+
+    first_day = datetime.now(timezone.utc).date() - timedelta(days=6)  # a 7-day window, today included
+    midnight = datetime.combine(first_day, datetime.min.time(), tzinfo=timezone.utc)
+
+    def play(at):
+        return {"user": "alice", "friendly_name": "Alice", "started": int(at.timestamp()), "media_type": "movie"}
+
+    tautulli = FakeTautulli([])
+    tautulli.history = [play(midnight + timedelta(minutes=30)), play(midnight - timedelta(seconds=1))]
+    plays = _run(lambda bot, cog: cog.plays(7), tautulli)
+    assert [moment.date() for moment, _row in plays] == [first_day]  # the day before isn't in the bars either
+    takeaway, _render = media_chart(plays, today=first_day + timedelta(days=6), days=7)
+    assert takeaway.startswith("1 movie")
+
+
 def test_a_picked_username_wins_over_someone_elses_discord_name():
     from plexbot.plex_users import PlexUsers
 

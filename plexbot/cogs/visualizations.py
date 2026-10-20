@@ -10,7 +10,7 @@ import logging
 import os
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, tzinfo
+from datetime import date, datetime, time, timedelta, tzinfo
 from functools import partial
 from itertools import accumulate
 from typing import Callable, Dict, List, Optional, Tuple
@@ -297,7 +297,9 @@ class Visualizations(commands.Cog):
     async def plays(self, days: int) -> Optional[List[Play]]:
         """Everyone's plays in the last `days` days, but ignored users'; None if Tautulli didn't answer."""
         zone = await self.timezone()
-        since = datetime.now(zone) - timedelta(days=days)
+        # Whole days, today included, as the per-day and per-month bars count them: the header's
+        # play count is then what the bars add up to.
+        since = datetime.combine(datetime.now(zone).date() - timedelta(days=days - 1), time.min, tzinfo=zone)
         params = {
             # Tautulli's "after" is a whole date; the exact cutoff is applied below.
             "after": (since.date() - timedelta(days=1)).isoformat(),
