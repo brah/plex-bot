@@ -5,6 +5,10 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### New features
+
+- `/plex downloading` works even if qBittorrent auth is turned off/bypassed on LAN: leave `qbittorrent.username` and `password` blank.
+
 ### Bug fixes
 
 - Device names and titles show as written on `/plex watchers`, even with characters Discord reads

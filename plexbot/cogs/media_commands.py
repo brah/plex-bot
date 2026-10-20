@@ -499,27 +499,41 @@ class MediaCommands(commands.Cog):
 
     @staticmethod
     def _qbit_client() -> Optional[qbittorrentapi.Client]:
-        """A qBittorrent client from config, or None when it isn't configured."""
-        settings = [config.get("qbittorrent", key) for key in ("ip", "port", "username", "password")]
-        if not all(settings):
+        """A qBittorrent client from config, or None when it has no address.
+
+        The login is optional: qBittorrent can let clients in without one (its "Bypass authentication"
+        options).
+        """
+        ip, port, username, password = (
+            config.get("qbittorrent", key) for key in ("ip", "port", "username", "password")
+        )
+        if not ip:
             return None
-        ip, port, username, password = settings
-        return qbittorrentapi.Client(host=ip, port=port, username=username, password=password)
+        return qbittorrentapi.Client(host=ip, port=port or None, username=username, password=password)
 
     async def render_downloads(self) -> tuple:
         """(reply, ok): the downloads card, or the error to send privately."""
         client = self._qbit_client()
+        not_set_up = error_state(ErrorKind.INPUT, "qBittorrent isn't set up.",
+                                 hint="An admin can add it under qbittorrent in config.json or .env.")
         if client is None:
-            return error_state(ErrorKind.INPUT, "qBittorrent isn't set up.",
-                               hint="An admin can add it under qbittorrent in config.json or .env."), False
+            return not_set_up, False
         try:
-            await asyncio.to_thread(client.auth_log_in)
+            if client.username:
+                await asyncio.to_thread(client.auth_log_in)
             torrents = await asyncio.to_thread(client.torrents.info.downloading)
-        except qbittorrentapi.LoginFailed:
+        except (qbittorrentapi.LoginFailed, qbittorrentapi.Forbidden403Error):
             logger.exception("Login to qBittorrent failed.")
+            if not client.username:
+                return error_state(ErrorKind.INPUT, "qBittorrent wants a login.",
+                                   hint="An admin can set the qbittorrent username and password."), False
             return error_state(ErrorKind.SERVICE_DOWN, "qBittorrent didn't accept the bot's login.",
                                hint="An admin should check the qbittorrent username and password."), False
-        except Exception:
+        except Exception as e:
+            if not client.username:
+                # Most likely nobody set qBittorrent up, and the default address (localhost:8080) is empty.
+                logger.info(f"Nothing answered as qBittorrent, so it counts as not set up: {e}")
+                return not_set_up, False
             logger.exception("Couldn't reach qBittorrent.")
             return service_down("qBittorrent"), False
         active, stalled = split_torrents(torrents)

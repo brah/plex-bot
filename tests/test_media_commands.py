@@ -225,14 +225,43 @@ class TestDownloading:
         assert sent["ephemeral"] is True
         assert "qBittorrent isn't set up." in sent["embeds"][0].description
 
-    def _client(self, torrents=(), fail=None):
+    def _client(self, torrents=(), fail=None, username="bot"):
         def downloading():
             if fail:
                 raise fail
             return list(torrents)
 
-        return SimpleNamespace(auth_log_in=lambda: None,
+        def auth_log_in():
+            self.logins.append(username)
+
+        self.logins = []
+        return SimpleNamespace(username=username, auth_log_in=auth_log_in,
                                torrents=SimpleNamespace(info=SimpleNamespace(downloading=downloading)))
+
+    def test_no_login_needed(self, monkeypatch):
+        """qBittorrent can let clients in without a login; the bot then doesn't try one."""
+        recorder = Recorder(monkeypatch)
+        monkeypatch.setattr(MediaCommands, "_qbit_client", staticmethod(lambda: self._client([], username="")))
+        _run(lambda bot, cog: MediaCommands.downloading.callback(cog, interaction(bot)))
+        assert "Nothing's downloading" in recorder.last("followup")["embeds"][0].description
+        assert self.logins == []
+
+    def test_without_a_login(self, monkeypatch):
+        recorder = Recorder(monkeypatch)
+        for error, text in ((ConnectionError("refused"), "qBittorrent isn't set up."),
+                            (media_commands.qbittorrentapi.LoginFailed(), "qBittorrent wants a login.")):
+            monkeypatch.setattr(MediaCommands, "_qbit_client",
+                                staticmethod(lambda e=error: self._client(fail=e, username="")))
+            _run(lambda bot, cog: MediaCommands.downloading.callback(cog, interaction(bot)))
+            assert text in recorder.last("followup")["embeds"][0].description
+
+    def test_only_the_address_is_required(self, monkeypatch):
+        settings = {"ip": "192.168.1.10", "port": "8080", "username": "", "password": ""}
+        monkeypatch.setattr(media_commands.config, "get", lambda section, key, default=None: settings[key])
+        client = MediaCommands._qbit_client()
+        assert client is not None and client.username == ""
+        settings["ip"] = ""
+        assert MediaCommands._qbit_client() is None
 
     def test_unreachable_and_bad_login(self, monkeypatch):
         recorder = Recorder(monkeypatch)

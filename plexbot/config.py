@@ -172,7 +172,7 @@ def setup_default_config():
     qbit = config.add_section("qbittorrent", "qBittorrent settings")
     qbit.add("ip", "localhost", "qBittorrent WebUI IP")
     qbit.add("port", "8080", "qBittorrent WebUI port")
-    qbit.add("username", "", "qBittorrent WebUI username")
+    qbit.add("username", "", "qBittorrent WebUI username; blank when qBittorrent asks for no login")
     qbit.add("password", "", "qBittorrent WebUI password")
 
     # Work in progress: the TMDB client is created when a key is set, but no command uses it yet.
