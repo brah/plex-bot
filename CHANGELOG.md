@@ -9,6 +9,12 @@ What changed in each release, newest first. Releases are also on
 
 - Stopping the bot, for example with `docker stop`, no longer logs "Unclosed client session" errors.
 
+### Changes
+
+- Copies cloned before 18 October 2026 can't `git pull`: run
+  `git fetch origin && git reset --hard origin/main` once.
+- The README covers [moving from a Python install to Docker](https://github.com/brah/plex-bot#docker-compose).
+
 ## 1.1.0 - 2026-10-20
 
 ### New features

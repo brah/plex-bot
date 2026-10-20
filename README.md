@@ -142,6 +142,17 @@ Then type `/plex` in Discord.
 
 **Your data.** The bot keeps its user links (`map.json`), media cache and `plexbot.log` in `/data`, and the `plexbot-data` volume keeps them across updates. To use a folder instead, such as `./plexbot:/data`, create it first and hand it to user 1000, which the bot runs as: `mkdir -p plexbot && sudo chown 1000:1000 plexbot`. A folder Docker creates for you belongs to root, and the bot stops with a `PermissionError`.
 
+**Moving from a Python install?** Copy your settings and user links into a folder, then mount it with `./plexbot:/data`:
+
+```bash
+sudo systemctl disable --now plexbot
+mkdir -p plexbot
+sudo cp /opt/plex-bot/config.json /opt/plex-bot/map.json plexbot/
+sudo chown -R 1000:1000 plexbot
+```
+
+In `config.json`, change any `localhost` address as in **Point it at Tautulli**.
+
 **Updating.**
 
 | To | Run |
@@ -196,7 +207,7 @@ Set options as environment variables or in `config.json`, starting from [`.env.e
 | `discord.stream_manager_ids` | `PLEXBOT_DISCORD_STREAM_MANAGER_IDS` | Users or roles who may stop streams |
 | `discord.show_recent_viewers` | `PLEXBOT_DISCORD_SHOW_RECENT_VIEWERS` | Show the last few viewers when nobody's watching (public, so off by default) |
 | `qbittorrent.ip`, `port` | `PLEXBOT_QBITTORRENT_IP`, `PLEXBOT_QBITTORRENT_PORT` | qBittorrent Web UI address, for `/plex downloading` |
-| `qbittorrent.username`, `password` | `PLEXBOT_QBITTORRENT_USERNAME`, `PLEXBOT_QBITTORRENT_PASSWORD` | qBittorrent Web UI login. Leave blank if qBittorrent lets the bot in without one (its **Bypass authentication** options) |
+| `qbittorrent.username`, `password` | `PLEXBOT_QBITTORRENT_USERNAME`, `PLEXBOT_QBITTORRENT_PASSWORD` | qBittorrent Web UI login; blank if it doesn't ask for one |
 | `core.legacy_text_commands` | `PLEXBOT_CORE_LEGACY_TEXT_COMMANDS` | Point old text commands like `plex status` at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
 | `core.log_level` | `PLEXBOT_CORE_LOG_LEVEL` | `DEBUG` to `ERROR` |
 
@@ -256,6 +267,7 @@ Linking matters: names, avatars, roles and `/plex recommend` need it.
 - **`PermissionError: [Errno 13] Permission denied: '/data/plexbot.log'`**: the folder mounted at `/data` isn't writable by user 1000, which the bot runs as. Run `sudo chown -R 1000:1000` on that folder.
 - **No TV sizes on `/plex status`**: run **Calculate Total File Sizes** on the library in Tautulli.
 - **`can't open file '.../plexbot.py'`**, or the systemd service won't start: the bot runs with `python -m plexbot` from the repo folder. Match `ExecStart=` and `WorkingDirectory=` to [`deploy/plexbot.service`](deploy/plexbot.service), then `sudo systemctl daemon-reload && sudo systemctl restart plexbot`.
+- **`git pull` fails** on a copy cloned before 18 October 2026: run `git fetch origin && git reset --hard origin/main` once. Your settings and user links are kept.
 
 Logs go to `plexbot.log`; admins can also fetch them with `/plexadmin logs`, with secrets redacted.
 
