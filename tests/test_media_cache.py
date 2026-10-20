@@ -149,3 +149,31 @@ def test_close_stops_a_background_refresh(tmp_path):
         return cache._refresh
 
     assert asyncio.run(run()).cancelled()
+
+
+def test_typing_a_title_starts_a_refresh_of_a_stale_cache(tmp_path):
+    tautulli = LibraryTautulli({"1": "Old title", "2": "Added today"})
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Old title")])
+
+    async def run():
+        first = cache.suggest("", "movie")  # answers at once from what's cached
+        await cache._refresh
+        return first, cache.suggest("", "movie")
+
+    before, after = asyncio.run(run())
+    assert _titles(before) == ["Old title"]
+    assert _titles(after) == ["Added today", "Old title"]
+    assert tautulli.asked == ["2"]
+
+
+def test_refresh_now_rereads_every_title_even_during_a_background_refresh(tmp_path):
+    tautulli = LibraryTautulli({"1": "Renamed in Plex", "2": "Added"})
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Old title")])
+
+    async def run():
+        await cache.get_items()  # /plex random on a stale cache starts a background refresh
+        await asyncio.sleep(0)  # which is under way
+        await cache.refresh()  # when an admin presses Refresh now
+
+    asyncio.run(run())
+    assert _titles(cache.media_items.values()) == ["Added", "Renamed in Plex"]

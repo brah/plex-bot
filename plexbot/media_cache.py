@@ -82,7 +82,12 @@ class MediaCache:
             return
         if not self.media_items:
             await self.update_cache()
-        elif self._refresh is None or self._refresh.done():
+        else:
+            self._refresh_in_background()
+
+    def _refresh_in_background(self) -> None:
+        """Start update_cache without waiting for it, unless one is already running."""
+        if self._refresh is None or self._refresh.done():
             self._refresh = asyncio.create_task(self.update_cache())
 
     async def close(self) -> None:
@@ -98,11 +103,11 @@ class MediaCache:
         """Update the media cache from Tautulli: the title list, plus metadata for new titles.
 
         full also fetches metadata again for every title already cached (genres or summaries
-        changed in Plex); that's one call per title, minutes on a big library.
+        changed in Plex), even when the cache is fresh; that's one call per title, minutes on a big library.
         """
         async with self.cache_lock:
-            if self.is_cache_valid():
-                # Another process might have updated the cache while we were waiting for the lock
+            if not full and self.is_cache_valid():
+                # Another task updated the cache while this one waited for the lock
                 return
 
             logger.info("Updating media cache...")
@@ -372,9 +377,12 @@ class MediaCache:
     def suggest(self, query: str, media_type: Optional[str] = None, limit: int = 25) -> List[Dict]:
         """Titles for autocomplete: prefix matches first, then titles containing the query.
 
-        Reads the cache as it is, without refreshing or logging: autocomplete runs on every
-        keystroke, and Discord drops an answer that takes longer than three seconds.
+        Reads the cache as it is, without waiting or logging: autocomplete runs on every keystroke,
+        and Discord drops an answer that takes longer than three seconds. A stale cache starts
+        refreshing in the background, so new titles turn up even if nobody runs /plex random.
         """
+        if not self.is_cache_valid():
+            self._refresh_in_background()
         query = (query or "").strip().lower()
         types = self._types_for(media_type)
         prefix, inner = [], []
@@ -407,13 +415,8 @@ class MediaCache:
         """Fetch the whole library again now, even if the cache is still fresh.
 
         The current items stay in use until the new ones arrive. A background refresh already
-        under way is waited for instead of starting a second one.
+        under way finishes first (it holds the lock), then every title is read again.
         """
-        if self._refresh is not None and not self._refresh.done():
-            await self._refresh
-            return
-        async with self.cache_lock:
-            self.last_updated = None
         await self.update_cache(full=True)
 
     async def _fetch_item_metadata(self, rating_key: str) -> Optional[Dict]:

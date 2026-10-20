@@ -12,6 +12,10 @@ What changed in each release, newest first. Releases are also on
 - Picking someone from the suggestions on `/plex history` and `/plex chart` always shows that
   person, even when another viewer's Discord name is the same as their Plex username.
 - `/plex chart` counts whole days, today included, so its play count matches what the bars add up to.
+- Title suggestions on `/plex movie` and `/plex tv` pick up new titles on their own, instead of
+  only after someone runs `/plex random` or `/plex recommend`.
+- **Refresh now** under `/plexadmin cache` always re-reads every title, even when a refresh was
+  already running.
 - `/plex hot`, `/plex chart` and `/plex recommend` no longer count a play twice when it ends while
   the bot is reading the history.
 
