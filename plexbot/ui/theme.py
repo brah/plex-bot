@@ -71,3 +71,4 @@ class Emoji:
     PAUSED = "⏸"
     BUFFERING = "⏳"
     BULLET = "•"
+    PLEX = "Plex Media Server"  # becomes the bot's :plex: emoji once bot.install_plex_emoji finds or uploads it

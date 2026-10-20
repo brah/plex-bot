@@ -37,7 +37,7 @@ from plexbot.ui.embeds import (
 )
 from plexbot.ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
 from plexbot.ui.images import STRIP_POSTERS, current_frame, fetch_poster_strip, mascot, plex_image, poster_key
-from plexbot.ui.theme import Colour
+from plexbot.ui.theme import Colour, Emoji
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
@@ -454,7 +454,7 @@ def build_status_reply(server: dict, libraries, activity: Optional[dict], update
     embed = card(
         title=server.get("pms_name") or "Plex Media Server",
         description=join([
-            f"Plex Media Server {_version_number(version) or 'unknown version'} "
+            f"{Emoji.PLEX} {_version_number(version) or 'unknown version'} "
             f"on {server.get('pms_platform') or 'unknown platform'}{plex_pass}",
             version_line(version, update),
         ], sep="\n"),

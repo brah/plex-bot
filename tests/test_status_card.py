@@ -11,7 +11,7 @@ from fakes import FakeTautulli, Recorder, build_bot, component_payload, settle, 
 from plexbot.cogs.server_commands import build_status_reply, library_totals, size_comparison, size_comparisons, version_line
 from plexbot.plex_status import PlexStatus, Service, Incident
 from plexbot.ui.images import Attachment
-from plexbot.ui.theme import Colour
+from plexbot.ui.theme import Colour, Emoji
 
 NOW = datetime(2026, 10, 14, tzinfo=timezone.utc)
 SERVER = {"pms_name": "Home", "pms_version": "1.41.0.1234-abcdef12", "pms_platform": "Linux",
@@ -101,6 +101,14 @@ def test_nobody_watching_and_unknown_service(monkeypatch):
     assert fields["Plex services"] == "Status unavailable"
     assert reply.embeds[0].colour.value == Colour.PLAYING
     assert reply.embeds[0].description == "Plex Media Server 1.41.0.1234 on Linux · 🎟️ Plex Pass"
+
+
+def test_version_line_uses_the_plex_emoji(monkeypatch):
+    import plexbot.cogs.server_commands as server_commands
+    monkeypatch.setattr(server_commands, "mascot", lambda slot: None)
+    monkeypatch.setattr(Emoji, "PLEX", "<:plex:7>")
+    reply = build_status_reply(SERVER, LIBRARIES, None, None, None, now=NOW, pick=first)
+    assert reply.embeds[0].description.startswith("<:plex:7> 1.41.0.1234 on Linux")
 
 
 @pytest.mark.parametrize("update, expected", [

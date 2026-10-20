@@ -5,6 +5,10 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### New features
+
+- `/plex status` shows the Plex logo before the server version. The bot adds it to its own emojis on first start.
+
 ### Bug fixes
 
 - Stopping the bot, for example with `docker stop`, no longer logs "Unclosed client session" errors.

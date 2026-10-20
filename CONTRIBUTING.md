@@ -35,6 +35,7 @@ The bot is the `plexbot` package; `python -m plexbot` runs it.
 | `plexbot/media_details.py`, `plex_status.py`, `plex_users.py` | Smaller helpers; each file's docstring says what it's for. |
 | `tests/` | The test suite; see [Tests](#tests). |
 | `assets/mascot/` | Kernel, the mascot. See its [README](assets/mascot/README.md). |
+| `assets/emoji/` | Emojis the bot uploads as its own, like the Plex logo. See its [README](assets/emoji/README.md). |
 | `docs/` | README screenshots and banner. See its [README](docs/README.md). |
 | `scripts/` | Developer tools, not used by the bot. |
 | `deploy/`, `Dockerfile`, `docker-compose.yml` | Ways to run it. See [Install](README.md#install). |

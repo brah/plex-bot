@@ -17,6 +17,7 @@ from plexbot.slash_commands import SlashGroups, admin_check
 from plexbot.tautulli_wrapper import Tautulli, TMDB
 from plexbot.media_cache import MediaCache
 from plexbot.ui.format import is_truthy
+from plexbot.ui.theme import Emoji
 from plexbot.utilities import RedactSecrets
 from plexbot.version import bot_version
 
@@ -98,6 +99,23 @@ def load_cogs(bot):
             logger.exception(f"Failed to load cog {cog_name}: {e}")
 
 
+PLEX_EMOJI = Path(__file__).resolve().parent.parent / "assets" / "emoji" / "plex.png"
+
+
+async def install_plex_emoji(bot) -> None:
+    """Use the bot's :plex: emoji, uploading it the first time. It's an application emoji: it belongs
+    to the bot rather than a server, so it shows in every server and needs no permissions."""
+    await bot.wait_until_ready()  # the application id arrives with the first connection
+    try:
+        emoji = next((e for e in await bot.fetch_application_emojis() if e.name == "plex"), None)
+        if emoji is None:
+            emoji = await bot.create_application_emoji(name="plex", image=PLEX_EMOJI.read_bytes())
+            logger.info("Uploaded the :plex: emoji to the bot's application.")
+        Emoji.PLEX = str(emoji)
+    except (nextcord.HTTPException, OSError) as exc:
+        logger.warning(f'No :plex: emoji, so replies say "Plex Media Server" instead: {exc}')
+
+
 def install_slash_groups(bot) -> None:
     """Add the cog owning the /plex and /plexadmin roots.
 
@@ -125,6 +143,7 @@ class PlexBot(commands.Bot):
         logger.info("Shared resources initialized")
         install_slash_groups(self)
         load_cogs(self)
+        self._emoji_task = asyncio.create_task(install_plex_emoji(self))
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
