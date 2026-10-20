@@ -645,3 +645,13 @@ def test_stats_slow_page_doesnt_cover_a_later_click(monkeypatch):
     assert recorder.last("edit_message")["embeds"][0].title == "Movies"
     assert "edit_original_message" not in recorder.kinds()
     assert "Activity" in view.pages  # cached for the next click
+
+
+def test_a_picked_username_wins_over_someone_elses_discord_name():
+    from plexbot.plex_users import PlexUsers
+
+    users = [{"username": "sam", "friendly_name": "Sam"}, {"username": "alex", "friendly_name": "Alex"}]
+    plex_users = PlexUsers(bot=None, tautulli=None)
+    plex_users.name = lambda row: "alex" if row["username"] == "sam" else row["friendly_name"]  # Sam is "alex" on Discord
+    assert plex_users.match(users, "alex")["username"] == "alex"  # what picking Alex's suggestion sends
+    assert plex_users.match(users, "SAM")["username"] == "sam"  # typed names still match in any case

@@ -9,6 +9,8 @@ What changed in each release, newest first. Releases are also on
 
 - Device names and titles show as written on `/plex watchers`, even with characters Discord reads
   as formatting, and a device name can no longer turn into a link.
+- Picking someone from the suggestions on `/plex history` and `/plex chart` always shows that
+  person, even when another viewer's Discord name is the same as their Plex username.
 
 ## 1.0.0 - 2026-10-19
 

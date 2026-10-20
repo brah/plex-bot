@@ -52,8 +52,13 @@ class PlexUsers:
         return shown if shown == plex_name else f"{shown} ({plex_name})"
 
     def match(self, users: list, wanted: str) -> Optional[dict]:
-        """The user whose Plex username, Plex name or Discord name is `wanted` (any case)."""
-        wanted = wanted.strip().lower()
+        """The user whose Plex username is `wanted` (what the suggestions send), else the one whose
+        Plex username, Plex name or Discord name is `wanted` in any case."""
+        wanted = wanted.strip()
+        exact = next((row for row in users if row["username"] == wanted), None)
+        if exact:  # first, or one user's Discord name could shadow another's username
+            return exact
+        wanted = wanted.lower()
         for row in users:
             names = {row["username"], row.get("friendly_name") or "", self.name(row)}
             if wanted in {n.lower() for n in names if n}:
