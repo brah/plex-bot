@@ -50,7 +50,7 @@ class MediaCache:
         self._refresh: Optional[asyncio.Task] = None  # a background update_cache, while it runs
         self._updating: Optional[asyncio.Task] = None  # whichever task is inside update_cache
         self._closed = False  # set by close(): no update starts once the bot is shutting down
-        # rating key -> when Tautulli last couldn't describe it (usually removed from Plex but still listed)
+        # rating key -> when Tautulli last refused to describe it (usually removed from Plex but still listed)
         self._unreadable: Dict[str, float] = {}
 
     async def initialize(self) -> None:
@@ -360,7 +360,8 @@ class MediaCache:
             # self.semaphore keeps this to 10 calls at a time, across every library.
             results = await asyncio.gather(*(self._fetch_item_metadata(key) for key in rating_keys))
             for key, result in zip(rating_keys, results):
-                if not result and key not in self.media_items:
+                # Refusals only: a title that got no answer is asked again next update.
+                if result == {} and key not in self.media_items:
                     self._unreadable[key] = now
                 else:
                     self._unreadable.pop(key, None)

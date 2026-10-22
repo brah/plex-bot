@@ -197,9 +197,9 @@ def test_refresh_now_rereads_every_title_even_during_a_background_refresh(tmp_pa
     assert _titles(cache.media_items.values()) == ["Added", "Renamed in Plex"]
 
 
-def test_a_title_tautulli_cant_describe_is_asked_again_daily_or_on_refresh_now(tmp_path):
-    tautulli = LibraryTautulli({"1": "Kept", "2": "Removed from Plex"})
-    tautulli.failing = {"2"}
+def test_a_title_tautulli_refuses_is_asked_again_daily_or_on_refresh_now(tmp_path):
+    tautulli = LibraryTautulli({"1": "Kept"})
+    tautulli.library_items = {"1": [{"rating_key": key} for key in ("1", "2")]}  # 2 is gone from Plex
     cache = _stale_cache(tautulli, tmp_path, [_item("1", "Kept")])
 
     def stale_refresh():
@@ -216,6 +216,22 @@ def test_a_title_tautulli_cant_describe_is_asked_again_daily_or_on_refresh_now(t
     asyncio.run(run())
     assert tautulli.asked == ["2", "2", "1", "2"]
     assert _titles(cache.media_items.values()) == ["Kept"]
+
+
+def test_a_new_title_that_got_no_answer_is_asked_again_next_update(tmp_path):
+    tautulli = LibraryTautulli({"1": "Kept", "2": "Added"})
+    tautulli.failing = {"2"}  # e.g. Tautulli restarting mid-refresh
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Kept")])
+
+    async def run():
+        await cache.update_cache()
+        tautulli.failing = set()
+        cache.last_updated = None  # an hour later
+        await cache.update_cache()
+
+    asyncio.run(run())
+    assert tautulli.asked == ["2", "2"]
+    assert _titles(cache.media_items.values()) == ["Added", "Kept"]
 
 
 def test_close_stops_refresh_now_and_any_later_update(tmp_path):

@@ -9,6 +9,10 @@ What changed in each release, newest first. Releases are also on
 
 - Patch [GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2) - Update certifi to 2026.10.19 and the Docker image to Python 3.14.9 to distrust compromised eMudhra CA certificates.
 
+### Bug fixes
+
+- New titles no longer drop out of suggestions and `/plex random` for a day after a Tautulli outage.
+
 ### Changes
 
 - Python installs: upgrade pip to 26.2.2 before updating ([how](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576)).
