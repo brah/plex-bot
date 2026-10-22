@@ -526,17 +526,7 @@ class ServerCommands(commands.Cog):
         self.status_task.start()  # type: ignore[attr-defined]
 
     async def _log_startup_info(self):
-        """Log Tautulli connectivity, and whether a newer release is out, once, at startup."""
-        try:
-            r = await self.tautulli.get_home_stats()
-            if Tautulli.check_response(r):
-                logger.info(f"Logged in as {self.bot.user}")
-                logger.info("Connection to Tautulli successful")
-            else:
-                logger.critical("Connection to Tautulli failed")
-        except Exception as e:
-            logger.error(f"Error during startup info logging: {e}")
-
+        """Log whether a newer release is out, once, at startup. (bot.py already logs the Tautulli check.)"""
         # Never raises: a GitHub that can't answer gives None.
         latest = await latest_release()
         if is_newer(latest, bot_version()):
