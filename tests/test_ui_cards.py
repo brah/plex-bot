@@ -130,3 +130,25 @@ class TestLink:
         )
         assert plex_web_link(None, "101") is None
         assert plex_web_link("abc", None) is None
+
+
+class TestNextEpisode:
+    TODAY = datetime(2026, 10, 22).date()
+
+    def test_next_episode_line(self):
+        from plexbot.ui.cards import next_episode_line
+
+        episode = {"air_date": "2026-10-23", "season_number": 2, "episode_number": 5}
+        assert next_episode_line(episode, self.TODAY) == "Next episode: S02E05 · Tomorrow"
+        assert next_episode_line(None, self.TODAY) is None
+        assert next_episode_line(dict(episode, air_date=None), self.TODAY) is None
+        assert next_episode_line(dict(episode, air_date="soon"), self.TODAY) is None
+        assert next_episode_line(dict(episode, air_date="2026-10-21"), self.TODAY) is None
+
+    def test_media_card_next_episode(self):
+        from plexbot.ui.cards import media_card
+
+        show = {"media_type": "show", "title": "Severance", "year": "2022", "summary": "Work."}
+        with_line = media_card(show, next_episode="Next episode: S01E02 · Today").description
+        assert "-# 📅 Next episode: S01E02 · Today" in with_line
+        assert "📅" not in media_card(show).description

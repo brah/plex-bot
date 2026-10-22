@@ -304,7 +304,7 @@ class TestCommands:
         tautulli.settings = {"default_timezone": "Mars/Olympus_Mons"}
 
         async def zone(bot, cog):
-            return await cog.timezone()
+            return await tautulli.server_timezone()
 
         assert _run(zone, tautulli) is not None
 
@@ -313,9 +313,9 @@ class TestCommands:
         tautulli.settings = {"default_timezone": "Australia/Sydney"}
 
         async def zones(bot, cog):
-            await cog.timezone()  # Tautulli is restarting
+            await tautulli.server_timezone()  # Tautulli is restarting
             tautulli.reachable = True
-            return str(await cog.timezone())
+            return str(await tautulli.server_timezone())
 
         assert _run(zones, tautulli) == "Australia/Sydney"
 

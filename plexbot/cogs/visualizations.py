@@ -14,10 +14,8 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from functools import partial
 from itertools import accumulate
 from typing import Callable, Dict, List, Optional, Tuple
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import nextcord
-import tzlocal
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
@@ -284,25 +282,10 @@ class Visualizations(commands.Cog):
         self.bot = bot
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.users = PlexUsers(bot, self.tautulli)
-        self._zone: Optional[tzinfo] = None
-
-    async def timezone(self) -> tzinfo:
-        """The timezone Tautulli is set to (so 9pm means 9pm on the server), else the host's."""
-        if self._zone is None:
-            response = await self.tautulli.get_settings()
-            if not Tautulli.check_response(response):
-                return tzlocal.get_localzone()  # not remembered: ask Tautulli again next time
-            name = (Tautulli.get_response_data(response, {}) or {}).get("default_timezone")
-            try:
-                self._zone = ZoneInfo(name) if name else tzlocal.get_localzone()
-            except (ZoneInfoNotFoundError, ValueError):
-                logger.warning(f"Unknown Tautulli timezone {name!r}; using the host's.")
-                self._zone = tzlocal.get_localzone()
-        return self._zone
 
     async def plays(self, days: int) -> Optional[List[Play]]:
         """Everyone's plays in the last `days` days, but ignored users'; None if Tautulli didn't answer."""
-        zone = await self.timezone()
+        zone = await self.tautulli.server_timezone()
         # Whole days, today included, as the per-day and per-month bars count them: the header's
         # play count is then what the bars add up to.
         since = datetime.combine(datetime.now(zone).date() - timedelta(days=days - 1), time.min, tzinfo=zone)
@@ -348,7 +331,7 @@ class Visualizations(commands.Cog):
                                         for library in libraries))
         if any(rows is None for rows in tables):
             return None  # a library missing would read as titles never added
-        zone = await self.timezone()
+        zone = await self.tautulli.server_timezone()
         return [(datetime.fromtimestamp(to_int(row.get("added_at")), zone).date(),
                  _LIBRARY_KINDS[library["section_type"]])
                 for library, rows in zip(libraries, tables) for row in rows if to_int(row.get("added_at"))]
@@ -360,7 +343,7 @@ class Visualizations(commands.Cog):
             reply = empty_state("There are no movies or shows in the library yet.", title=title)
             reply.view = view
             return reply
-        zone = await self.timezone()
+        zone = await self.tautulli.server_timezone()
         takeaway, render = library_chart(view.library, today=datetime.now(zone).date(), days=view.days)
         image = await asyncio.to_thread(render)
         embed = card(title=title, description=f"-# Last {plural(view.days, 'day')}\n{takeaway}",
@@ -394,7 +377,7 @@ class Visualizations(commands.Cog):
             reply = empty_state(f"{who} watched {what} in the last {plural(days, 'day')}.", title=title)
             reply.view = view
             return reply
-        zone = await self.timezone()
+        zone = await self.tautulli.server_timezone()
         if top:
             posters = await self.posters(view.poster_cache, [row for row, _total in top])
             takeaway, render = titles_chart(top, posters, filename=f"chart-{kind}.png", measure=measure)
@@ -425,7 +408,7 @@ class Visualizations(commands.Cog):
         if not plays:
             return card(title=title, description=f"-# {context}\nNobody has watched anything.",
                         colour=brand_colour()), None
-        zone = await self.timezone()
+        zone = await self.tautulli.server_timezone()
         takeaway, render = media_chart(plays, today=datetime.now(zone).date(), days=days)
         image = await asyncio.to_thread(render)
         lines = [

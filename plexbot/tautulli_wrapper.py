@@ -4,10 +4,13 @@ import asyncio
 import ipaddress
 import json
 import logging
+from datetime import tzinfo
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import aiohttp
+import tzlocal
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.tautulli_wrapper")
@@ -34,6 +37,7 @@ class Tautulli:
         self.session: Optional[aiohttp.ClientSession] = None
         self.request_timeout = 30
         self._pms_identifier: Optional[str] = None  # cached by server_id()
+        self._zone: Optional[tzinfo] = None  # cached by server_timezone()
         self._unreachable = False  # while True, connection failures are logged at DEBUG
         if not use_https and on_the_internet(tautulli_ip):
             logger.warning(f"Tautulli at {tautulli_ip} is reached over the internet using HTTP, so the API key "
@@ -234,6 +238,20 @@ class Tautulli:
             if self.check_response(response):
                 self._pms_identifier = self.get_response_data(response, {}).get("pms_identifier") or ""
         return self._pms_identifier or None
+
+    async def server_timezone(self) -> tzinfo:
+        """The timezone Tautulli is set to (so 9pm means 9pm on the server), else the host's."""
+        if self._zone is None:
+            response = await self.get_settings()
+            if not self.check_response(response):
+                return tzlocal.get_localzone()  # not remembered: ask Tautulli again next time
+            name = (self.get_response_data(response, {}) or {}).get("default_timezone")
+            try:
+                self._zone = ZoneInfo(name) if name else tzlocal.get_localzone()
+            except (ZoneInfoNotFoundError, ValueError):
+                logger.warning(f"Unknown Tautulli timezone {name!r}; using the host's.")
+                self._zone = tzlocal.get_localzone()
+        return self._zone
 
     async def get_pms_update(self) -> Optional[Dict[str, Any]]:
         """Check whether a Plex Media Server update is available."""

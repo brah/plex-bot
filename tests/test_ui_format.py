@@ -109,3 +109,14 @@ def test_file_size_uses_drive_label_units():
     assert file_size(512_000_000_000) == "512 GB"
     assert file_size(999) == "999 B"
     assert file_size(2_500_000_000_000_000) == "2.5 PB"
+
+
+def test_day_label():
+    from datetime import date
+
+    from plexbot.ui.format import day_label
+
+    today = date(2026, 10, 22)
+    assert day_label(date(2026, 10, 22), today) == "Today"
+    assert day_label(date(2026, 10, 23), today) == "Tomorrow"
+    assert day_label(date(2026, 10, 24), today) == "Saturday 24 Oct"

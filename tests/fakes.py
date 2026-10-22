@@ -112,6 +112,8 @@ class FakeTautulli:
     _all_rows = Tautulli._all_rows
     server_id = Tautulli.server_id
     _pms_identifier = None
+    server_timezone = Tautulli.server_timezone
+    _zone = None
     check_response = staticmethod(Tautulli.check_response)
     get_response_data = staticmethod(Tautulli.get_response_data)
 

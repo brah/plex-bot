@@ -1,6 +1,6 @@
 """Renderers for the /plex watchers stream cards and the media card (lookups, random, recent)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Optional, Sequence
 from urllib.parse import quote
 
@@ -8,7 +8,7 @@ import nextcord
 from nextcord.utils import escape_markdown
 
 from plexbot.ui.embeds import card, set_image, set_thumbnail
-from plexbot.ui.format import format_ms, join, plural, progress_bar, timestamp, to_int, truncate
+from plexbot.ui.format import day_label, format_ms, join, plural, progress_bar, timestamp, to_int, truncate
 from plexbot.ui.images import Attachment, dominant_colour
 from plexbot.ui.theme import Colour, Emoji, Limits, media_colour
 
@@ -294,11 +294,25 @@ def _credits(item: dict) -> Optional[str]:
     ]) or None
 
 
+def next_episode_line(episode: Optional[dict], today: date) -> Optional[str]:
+    """"Next episode: S02E05 · Tomorrow" from TMDB's next_episode_to_air; None if unknown or past."""
+    try:
+        day = datetime.strptime(str((episode or {}).get("air_date")), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    if day < today:
+        return None
+    code = f"S{to_int(episode.get('season_number')):02d}E{to_int(episode.get('episode_number')):02d}"
+    return f"Next episode: {code} · {day_label(day, today)}"
+
+
 def media_card(item: dict, *, poster: Optional[Attachment] = None, art: Optional[Attachment] = None,
-               url: Optional[str] = None, stats: Optional[str] = None) -> nextcord.Embed:
+               url: Optional[str] = None, stats: Optional[str] = None,
+               next_episode: Optional[str] = None) -> nextcord.Embed:
     """A movie, show, season or episode (Tautulli metadata or a media cache item).
 
-    Tinted with the poster's colour when there is one; `stats` is an extra line for watch stats.
+    Tinted with the poster's colour when there is one; `stats` is an extra line for watch stats and
+    `next_episode` a line from next_episode_line.
     """
     media_type = item.get("media_type")
     facts, credit_line = media_facts(item), _credits(item)
@@ -309,6 +323,7 @@ def media_card(item: dict, *, poster: Optional[Attachment] = None, art: Optional
         f"*{escape_markdown(tagline)}*" if tagline else None,
         escape_markdown(summary) if summary else None,
         f"-# {escape_markdown(credit_line)}" if credit_line else None,
+        f"-# 📅 {next_episode}" if next_episode else None,
         f"\n{stats}" if stats else None,
     ], "\n")
     colour = (dominant_colour(poster.data) if poster else None) or media_colour(media_type)

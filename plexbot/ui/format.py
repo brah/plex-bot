@@ -1,6 +1,6 @@
 """Text helpers shared by every response: truncation, durations, progress bars, timestamps."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Iterable, Optional, Union
 
 
@@ -49,6 +49,16 @@ def timestamp(moment: Union[datetime, int, float], style: str = "R") -> str:
     """A Discord timestamp: renders live (style R: "2 minutes ago") in each viewer's timezone."""
     seconds = int(moment.timestamp()) if isinstance(moment, datetime) else int(moment)
     return f"<t:{seconds}:{style}>"
+
+
+def day_label(day: date, today: date) -> str:
+    """"Today", "Tomorrow", else like "Saturday 24 Oct"."""
+    offset = (day - today).days
+    if offset == 0:
+        return "Today"
+    if offset == 1:
+        return "Tomorrow"
+    return f"{day:%A} {day.day} {day:%b}"
 
 
 def plural(count: int, singular: str, plural_form: Optional[str] = None) -> str:
