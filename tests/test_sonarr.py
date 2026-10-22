@@ -37,3 +37,9 @@ def test_plain_http_over_the_internet_warns(caplog):
         assert "plaintext" not in caplog.text
         Sonarr("http://sonarr.example.com", "key")
     assert "plaintext" in caplog.text
+
+
+def test_an_address_without_a_scheme_gets_http():
+    # Like tautulli.ip, or a Docker service name.
+    assert Sonarr("sonarr:8989", "key").api_url == "http://sonarr:8989/api/v3/"
+    assert Sonarr("https://sonarr.example.com", "key").api_url == "https://sonarr.example.com/api/v3/"

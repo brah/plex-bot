@@ -394,6 +394,7 @@ class Sonarr(_HTTPClient):
     TIMEOUT = 10  # seconds
 
     def __init__(self, url: str, api_key: str) -> None:
+        url = url if "://" in url else f"http://{url}"  # written like tautulli.ip: "sonarr:8989"
         self.api_url = url.rstrip("/") + "/api/v3/"
         self.api_key = api_key
         parts = urlsplit(url)
