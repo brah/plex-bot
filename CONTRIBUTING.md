@@ -26,7 +26,7 @@ The bot is the `plexbot` package; `python -m plexbot` runs it.
 | `plexbot/slash_commands.py` | The `/plex` and `/plexadmin` command groups. `/plexadmin` is admin-only, through `admin_check`. |
 | `plexbot/cogs/` | The commands, one module per area: server, media, stats, charts, recommendations, user management, help. |
 | `plexbot/ui/` | Everything users see: colours, text formatting, images, charts, and the `Reply` builder. |
-| `plexbot/tautulli_wrapper.py` | The Tautulli API client. |
+| `plexbot/tautulli_wrapper.py` | The Tautulli and TMDB API clients. |
 | `plexbot/media_cache.py` | A local copy of the library for autocomplete, random picks and recommendations. |
 | `plexbot/utilities.py` | Links between Plex users and Discord members (`map.json`), viewer names and avatars, log redaction. |
 | `plexbot/config.py` | Every setting with its default. |
@@ -44,12 +44,14 @@ The bot is the `plexbot` package; `python -m plexbot` runs it.
 
 - **Commands** attach to the shared groups with `@plex.subcommand` or `@plexadmin.subcommand`. The
   groups live in the `SlashGroups` cog because nextcord drops a group registered outside a cog.
+  Every module in `plexbot/cogs/` not starting with `_` loads as a cog, and CI fails unless all of
+  them load, so shared helpers go elsewhere.
 - **Replies**: a command builds a `ui.embeds.Reply` (embeds, attachments and a view) and calls
   `.send(interaction)`. Use `error_state`, `service_down`, `empty_state` and `success` for the
   standard frames, so errors and empty results look the same everywhere. Views subclass
   `errors.LoggedView`, which logs their exceptions.
 - **Tautulli**: every call goes through `Tautulli.api_call`. Check results with
-  `Tautulli.check_response` and `Tautulli.get_response_data`.
+  `Tautulli.check_response` and `Tautulli.get_response_data`, or `Tautulli.data` for both at once.
 - **Settings**: read with `config.get(section, key)`. A new setting goes in `plexbot/config.py` with
   its default, and gets a `PLEXBOT_<SECTION>_<KEY>` environment variable for free, typed from the
   default.
@@ -70,6 +72,10 @@ To call a slash command directly, use `Cog.cmd.callback(cog, interaction(bot), *
 every option, with `None` for unset ones. An omitted option arrives as a `SlashOption` object, not
 its default.
 
+To click a button or menu, pass `component_payload(custom_id)` to
+`bot._connection.parse_interaction_create`, then `await settle()` so its callback runs. There's no
+pytest-asyncio: run coroutines with `asyncio.run`.
+
 ## Rules
 
 - Never commit `config.json`, `map.json` or `cache/`: they hold tokens, API keys and user data. Git
@@ -81,8 +87,15 @@ its default.
   **Security**, **New features**, **Bug fixes** or **Changes**. Anything people must do themselves
   after updating goes under **Changes**. Use full `https://github.com/...` links there: each release's
   section is copied to its GitHub Release page, where links to repo files don't resolve.
+- One short CHANGELOG line per change. A bug fix names the symptom that's gone, not the mechanism. A
+  security fix reads `Patch [<ID>](link) - Update <thing> to <version> to <effect>.`
 - Cosmetic changes keep every user-visible feature.
 - README text is plain English for people running the bot, not developers.
+- Keep README, CHANGELOG and comment text short: the step or fact the reader acts on. Skip why it
+  matters, edge cases and anything already said elsewhere.
+- Commit subjects say what changed in plain English, from the user's side when they'd notice it
+  (`Show library sizes as soon as Tautulli calculates them`). The body says why, with numbers when
+  there are some.
 
 ## Cutting a release
 

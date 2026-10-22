@@ -69,4 +69,4 @@ jobs:
             -e PLEXBOT_TAUTULLI_IP=127.0.0.1:9 -e PLEXBOT_TAUTULLI_APIKEY=placeholder \
             plexbot > run.log 2>&1 || true
           cat run.log
-          test "$(grep -c 'Loaded cog:' run.log)" -eq "$(find plexbot/cogs -name '*.py' | wc -l)"
+          test "$(grep -c 'Loaded cog:' run.log)" -eq "$(find plexbot/cogs -name '[!_]*.py' | wc -l)"
