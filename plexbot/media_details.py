@@ -75,34 +75,33 @@ class MediaDetails:
         self.media_cache = bot.shared_resources.get("media_cache")
 
     def _tmdb_title(self, item: dict) -> tuple:
-        """(TMDB kind, TMDB id, rating key) of the movie or show a card is about; Nones if unknown.
+        """(Plex type, TMDB id, rating key) of the movie or show a card is about; Nones if unknown.
 
         Seasons and episodes have TMDB ids of their own, so they use their cached show's instead.
         """
         media_type = item.get("media_type")
         if media_type in TMDB_KINDS:
-            tmdb_id = TMDB.id_from_guids(item.get("guids"))
-            return TMDB_KINDS[media_type], tmdb_id, str(item.get("rating_key"))
+            return media_type, TMDB.id_from_guids(item.get("guids")), str(item.get("rating_key"))
         show_key = {"season": "parent_rating_key", "episode": "grandparent_rating_key"}.get(media_type)
         if not show_key or self.media_cache is None:
             return None, None, None
         show = self.media_cache.media_items.get(str(item.get(show_key)))
         if not show:
             return None, None, None
-        return "tv", show.get("tmdb_id"), str(show["rating_key"])
+        return "show", show.get("tmdb_id"), str(show["rating_key"])
 
     async def tmdb_extras(self, item: dict) -> TmdbExtras:
         """The card's trailer, More like this titles on the server and, for shows, the next episode."""
-        kind, tmdb_id, own_key = self._tmdb_title(item)
+        media_type, tmdb_id, own_key = self._tmdb_title(item)
         if self.tmdb is None or tmdb_id is None:
             return TmdbExtras()
+        kind = TMDB_KINDS[media_type]
         details, more = await asyncio.gather(self.tmdb.title(kind, tmdb_id),
                                              self.tmdb.recommendations(kind, tmdb_id))
         if details is None:
             return TmdbExtras()
-        library_type = next(plex for plex, tmdb in TMDB_KINDS.items() if tmdb == kind)
         ids = TMDB.suggestion_ids(details, more)
-        similar = self.media_cache.by_tmdb_ids(library_type, ids) if self.media_cache else []
+        similar = self.media_cache.by_tmdb_ids(media_type, ids) if self.media_cache else []
         return TmdbExtras(
             trailer=TMDB.trailer_url((details.get("videos") or {}).get("results")),
             similar=[i for i in similar if str(i.get("rating_key")) != own_key][:MORE_LIKE_THIS],
