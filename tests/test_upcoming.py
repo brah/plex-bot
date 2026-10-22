@@ -373,9 +373,19 @@ def test_command_lists_radarr_movies_on_their_date_behind_utc(monkeypatch):
     assert "**Today**" in text and "Dune: Part Three (2026)** · In cinemas" in text
 
 
-def test_command_radarr_down(monkeypatch):
+def test_radarr_down_still_shows_the_episodes(monkeypatch):
     recorder = Recorder(monkeypatch)
-    _command(None, [], FakeSonarr([]), FakeRadarr(reachable=False))
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _command(None, [], FakeSonarr([_sonarr_episode(now)]), FakeRadarr(reachable=False))
+    sent = recorder.last("followup")
+    assert sent["ephemeral"] is False
+    assert "**Severance**" in sent["embeds"][0].description
+    assert sent["embeds"][0].footer.text == "Couldn't reach Radarr, so some releases may be missing."
+
+
+def test_nothing_answered(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    _command(None, [], FakeSonarr(reachable=False), FakeRadarr(reachable=False))
     sent = recorder.last("followup")
     assert sent["ephemeral"] is True
-    assert "Couldn't reach **Radarr**." in sent["embeds"][0].description
+    assert "Couldn't reach **Sonarr and Radarr**." in sent["embeds"][0].description

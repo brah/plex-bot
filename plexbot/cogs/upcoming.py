@@ -207,44 +207,44 @@ class Upcoming(commands.Cog):
         today = datetime.now(zone).date()
         start = datetime.combine(today, day_start(), tzinfo=zone)
         end = start + timedelta(days=UPCOMING_DAYS)
-        rows = []
+        rows, down = [], []  # down: the sources that didn't answer; the others still show
         if self.sonarr is not None:
-            episodes = await self._calendar(interaction, "Sonarr", self.sonarr, start, end)
+            episodes = await self.sonarr.calendar(start, end)
             if episodes is None:
-                return
-            # Only for Plex links, so the cache as it is: a first fill would take minutes.
-            shows = self._shows(self.media_cache.media_items.values()) if self.media_cache else []
-            rows += sonarr_rows(episodes, {show["tmdb_id"]: show for show in shows}, zone, today)
+                down.append("Sonarr")
+            else:
+                # Only for Plex links, so the cache as it is: a first fill would take minutes.
+                shows = self._shows(self.media_cache.media_items.values()) if self.media_cache else []
+                rows += sonarr_rows(episodes, {show["tmdb_id"]: show for show in shows}, zone, today)
         elif self.tmdb is not None:
-            tmdb_rows = await self._tmdb_rows(interaction, today)
+            tmdb_rows = await self._tmdb_rows(today)
             if tmdb_rows is None:
-                return
-            rows += tmdb_rows
+                down.append("TMDB")
+            else:
+                rows += tmdb_rows
         if self.radarr is not None:
             # A day either side: a release at midnight UTC on its date can fall outside the local window.
             one_day = timedelta(days=1)
-            movies = await self._calendar(interaction, "Radarr", self.radarr,
-                                          start - one_day, end + one_day)
+            movies = await self.radarr.calendar(start - one_day, end + one_day)
             if movies is None:
-                return
-            rows += radarr_rows(movies, today)
+                down.append("Radarr")
+            else:
+                rows += radarr_rows(movies, today)
+        if down and not rows:
+            await service_down(" and ".join(down)).send(interaction, ephemeral=True,
+                                                         replace_placeholder=True)
+            return
         if not rows:
             await empty_state("Nothing's coming up in the next week.").send(interaction)
             return
-        card_reply = upcoming_card(sorted(rows, key=_row_order), today, await self.tautulli.server_id())
-        await card_reply.send(interaction)
+        reply = upcoming_card(sorted(rows, key=_row_order), today, await self.tautulli.server_id())
+        if down:
+            missing = " and ".join(down)
+            reply.embeds[0].set_footer(text=f"Couldn't reach {missing}, so some releases may be missing.")
+        await reply.send(interaction)
 
-    @staticmethod
-    async def _calendar(interaction: nextcord.Interaction, name: str, client, start: datetime,
-                        end: datetime) -> Optional[list]:
-        """Sonarr's or Radarr's calendar; None (after replying) when it didn't answer."""
-        items = await client.calendar(start, end)
-        if items is None:
-            await service_down(name).send(interaction, ephemeral=True, replace_placeholder=True)
-        return items
-
-    async def _tmdb_rows(self, interaction: nextcord.Interaction, today: date) -> Optional[list]:
-        """The week's rows from what TMDB said; None (after replying) when it has said nothing."""
+    async def _tmdb_rows(self, today: date) -> Optional[list]:
+        """The week's rows from what TMDB said; None when it has said nothing."""
         cached = []
         if self.media_cache:
             cached = await self.media_cache.get_items(media_type="show", limit=_WHOLE_LIBRARY)
@@ -252,7 +252,6 @@ class Upcoming(commands.Cog):
         if self.entries:
             self._refresh_in_background(shows)  # answer with what's known; due shows update for next time
         elif not await self.refresh(shows):
-            await service_down("TMDB").send(interaction, ephemeral=True, replace_placeholder=True)
             return None
         return upcoming_rows(shows, self.entries, today)
 
