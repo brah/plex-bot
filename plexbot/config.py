@@ -197,9 +197,5 @@ def setup_default_config():
     commands = config.add_section("commands", "Command-specific settings")
     commands.add("recommendation_timeout", 180, "Timeout in seconds for recommendation buttons")
 
-    colors = config.add_section("colors", "Visualization colors")
-    colors.add("plex_orange", "#E5A00D", "Plex orange color")
-    colors.add("plex_grey_dark", "#1B1B1B", "Dark grey background")
-
 
 setup_default_config()

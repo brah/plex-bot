@@ -18,6 +18,7 @@ What changed in each release, newest first. Releases are also on
 ### Changes
 
 - Python installs: upgrade pip to 26.2.2 before updating ([how](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576)).
+- Charts use `ui.plex_embed_color`; the `colors` settings are removed.
 
 ## 1.2.1 - 2026-10-22
 

@@ -18,7 +18,9 @@ from PIL import Image, UnidentifiedImageError
 
 from plexbot.config import config
 from plexbot.ui.images import Attachment
+from plexbot.ui.theme import brand_colour
 
+BACKGROUND = "#1B1B1B"
 TEXT = "#DBDEE1"
 MUTED = "#949BA4"
 GRID = "#3F4147"
@@ -26,19 +28,18 @@ PEAK = "#F5C04A"  # the tallest bar, so the answer stands out
 
 
 def _accent() -> str:
-    return config.get("colors", "plex_orange")
+    return f"#{brand_colour():06X}"
 
 
 def _figure():
-    background = config.get("colors", "plex_grey_dark")
     fig = Figure(
         # Discord shows an embed image about 430px wide, so a small canvas at a high dpi keeps text readable.
         figsize=(config.get("charts", "width"), config.get("charts", "height")),
         dpi=config.get("charts", "dpi"),
-        facecolor=background,
+        facecolor=BACKGROUND,
     )
     ax = fig.add_subplot()
-    ax.set_facecolor(background)
+    ax.set_facecolor(BACKGROUND)
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.spines["bottom"].set_color(GRID)
