@@ -64,7 +64,7 @@ A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautu
 
 ## Install
 
-Run exactly one instance, near Tautulli. It needs no open ports. You need a working Tautulli, a Discord server you can add bots to, and either Docker or Python 3.12+. qBittorrent is optional.
+Run exactly one instance, near Tautulli. It needs no open ports. You need a working Tautulli, a Discord server you can add bots to, and either Docker or Python 3.12+. qBittorrent and a TMDB API key are optional.
 
 ### 1. Discord
 

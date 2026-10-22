@@ -7,9 +7,10 @@ What changed in each release, newest first. Releases are also on
 
 ### New features
 
-- Movie and TV cards get a **Trailer** button and **More like this** from your library. Needs a TMDB key.
+- Movie and TV cards get a **Trailer** button and **More like this** from your library.
 - Show cards say when the next episode airs.
-- `/plex upcoming`: new episodes this week for shows on the server. Needs a TMDB key.
+- `/plex upcoming`: new episodes this week for shows on the server.
+- These need a TMDB API key in `tmdb.apikey` ([how](https://github.com/brah/plex-bot#configuration)).
 
 ### Security
 
