@@ -331,7 +331,7 @@ class WatchersView(LoggedView):
 
 
 # Library sizes: Tautulli's media info is slow to build the first time, so wait briefly and
-# remember what came back. A library that timed out is asked again next time.
+# remember what came back. A library that timed out, or has no size yet, is asked again next time.
 _SIZE_WAIT = 4
 _SIZE_TTL = 6 * 3600
 _SIZED_KINDS = ("movie", "show", "artist")
@@ -614,7 +614,7 @@ class ServerCommands(commands.Cog):
                  if sid not in self._section_sizes or now - self._section_sizes[sid][0] > _SIZE_TTL]
         if stale:
             for sid, size in zip(stale, await asyncio.gather(*(self._section_size(sid) for sid in stale))):
-                if size is not None:
+                if size:  # 0 means not calculated yet
                     self._section_sizes[sid] = (now, size)
         totals: dict = {}
         for sid, kind in sections:

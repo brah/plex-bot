@@ -12,6 +12,7 @@ What changed in each release, newest first. Releases are also on
 ### Bug fixes
 
 - New titles no longer drop out of suggestions and `/plex random` for a day after a Tautulli outage.
+- `/plex status` shows TV and music sizes as soon as Tautulli calculates them.
 
 ### Changes
 

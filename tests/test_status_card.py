@@ -203,7 +203,7 @@ def test_cog_library_sizes_are_cached_and_skip_slow_libraries(monkeypatch):
     assert sorted(calls) == ["1", "2", "3", "4"]  # photo libraries aren't sized
     assert first_sizes == {"movie": 6 * TB}  # TV reports 0 (not calculated); music timed out
     assert second_sizes == first_sizes
-    assert sorted(cog.tautulli.calls[4:]) == ["4"]  # only the library that timed out is retried
+    assert sorted(cog.tautulli.calls[4:]) == ["3", "4"]  # TV with no size yet, and the one that timed out
 
 
 def _click_services(monkeypatch, latest):
