@@ -78,9 +78,9 @@ its default.
   update them. Any image you add must never show real Plex or Discord user names.
 - When a command changes, update the commands table in the README.
 - A change people would notice adds a line to **Unreleased** in [CHANGELOG.md](CHANGELOG.md), under
-  **New features**, **Bug fixes** or **Changes**. Anything people must do themselves after updating goes
-  under **Changes**. Use full `https://github.com/...` links there: each release's section is copied
-  to its GitHub Release page, where links to repo files don't resolve.
+  **Security**, **New features**, **Bug fixes** or **Changes**. Anything people must do themselves
+  after updating goes under **Changes**. Use full `https://github.com/...` links there: each release's
+  section is copied to its GitHub Release page, where links to repo files don't resolve.
 - Cosmetic changes keep every user-visible feature.
 - README text is plain English for people running the bot, not developers.
 

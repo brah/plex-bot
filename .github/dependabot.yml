@@ -11,9 +11,7 @@ updates:
     schedule:
       interval: "weekly"
 
-  # Base image in the Dockerfile. Patch releases ship within the floating
-  # python:3.x-slim tag, so PRs here are Python minor-version bumps — keep
-  # the newest version in CI's test matrix in step when merging one.
+  # Base image in the Dockerfile. On a minor-version bump, update CI's test matrix too.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

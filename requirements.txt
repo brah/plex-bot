@@ -20,3 +20,6 @@ pillow==12.3.0
 # tzlocal detects the local zone.
 tzdata==2026.5
 tzlocal==5.4.4
+
+# Security floor (pulled in by requests): GHSA-6q48-6c7w-9gw2.
+certifi>=2026.10.19
