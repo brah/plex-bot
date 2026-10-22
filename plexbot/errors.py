@@ -150,8 +150,16 @@ class LoggedView(nextcord.ui.View):
 
     async def on_timeout(self):
         if self.message:
+            # Link buttons (a trailer) work without the bot, so they stay.
+            links = [item for item in self.children if isinstance(item, nextcord.ui.Button) and item.url]
+            kept = None
+            if links:
+                kept = nextcord.ui.View(timeout=None)
+                for link in links:
+                    kept.add_item(link)
+                kept.stop()  # nothing to dispatch, so nextcord doesn't keep it
             try:
-                await self.message.edit(view=None)
+                await self.message.edit(view=kept)
             except nextcord.HTTPException:
                 pass
 

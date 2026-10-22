@@ -12,7 +12,7 @@ from nextcord.utils import escape_markdown
 from plexbot.config import config
 from plexbot.errors import LoggedView
 from plexbot.media_cache import MediaCache
-from plexbot.media_details import MediaDetails, TautulliUnavailable, item_viewers
+from plexbot.media_details import MediaDetails, TautulliUnavailable, item_viewers, set_card_extras
 from plexbot.slash_commands import plex
 from plexbot.tautulli_wrapper import Tautulli
 from plexbot.ui.cards import genre_label, media_icon, session_title
@@ -69,7 +69,8 @@ def overview_card(picks: list, counts: list, genres: List[str], *, strip) -> nex
 class RecommendationView(LoggedView):
     """Numbered buttons open each pick's card in place; Back returns to the list.
 
-    They change the shared message, so only the person who ran the command can use them.
+    They change the shared message, so only the person who ran the command can use them. More like
+    this on a card answers privately, so anyone can.
     """
 
     def __init__(self, details: MediaDetails, author_id: int, picks: list, overview: Reply, timeout: float):
@@ -87,7 +88,7 @@ class RecommendationView(LoggedView):
         self.back_button.callback = self._back
         self.add_item(self.back_button)
 
-    async def interaction_check(self, interaction: nextcord.Interaction) -> bool:
+    async def _is_author(self, interaction: nextcord.Interaction) -> bool:
         if interaction.user.id == self.author_id:
             return True
         await error_state(ErrorKind.PERMISSION, f"Only <@{self.author_id}> can browse these picks.",
@@ -96,15 +97,16 @@ class RecommendationView(LoggedView):
 
     def _detail_callback(self, index: int):
         async def callback(interaction: nextcord.Interaction):
-            await self.show_pick(interaction, index)
+            if await self._is_author(interaction):
+                await self.show_pick(interaction, index)
         return callback
 
     async def show_pick(self, interaction: nextcord.Interaction, index: int):
         await interaction.response.defer()
         self.message = interaction.message  # bot-token handle; the command's webhook expires
         try:
-            reply = await self.details.render(str(self.picks[index]["rating_key"]),
-                                              footer=f"Recommendation {index + 1} of {len(self.picks)}")
+            footer = f"Recommendation {index + 1} of {len(self.picks)}"
+            reply = await self.details.render(str(self.picks[index]["rating_key"]), footer=footer, view=self)
         except TautulliUnavailable:
             await service_down("Tautulli").send(interaction, ephemeral=True)
             return
@@ -112,13 +114,15 @@ class RecommendationView(LoggedView):
             await error_state(ErrorKind.INPUT, "That's not in the library anymore.").send(interaction, ephemeral=True)
             return
         self.back_button.disabled = False
-        reply.view = self
         await reply.edit(interaction)
 
     async def _back(self, interaction: nextcord.Interaction):
+        if not await self._is_author(interaction):
+            return
         await interaction.response.defer()
         self.message = interaction.message
         self.back_button.disabled = True
+        set_card_extras(self, [])
         self.overview.view = self
         await self.overview.edit(interaction)
 

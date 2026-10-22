@@ -5,6 +5,11 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### New features
+
+- Movie and TV cards get a **Trailer** button and **More like this** from your library. Needs a TMDB key.
+- Show cards say when the next episode airs.
+
 ### Security
 
 - Patch [GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2) - Update certifi to 2026.10.19 and the Docker image to Python 3.14.9 to distrust compromised eMudhra CA certificates.

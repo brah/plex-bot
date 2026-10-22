@@ -294,6 +294,25 @@ def _credits(item: dict) -> Optional[str]:
     ]) or None
 
 
+def item_choices(entries) -> dict:
+    """{label: rating_key} for a dropdown of titles (unique keys, at most 25)."""
+    choices, seen = {}, set()
+    for entry in entries:
+        key = str(entry.get("rating_key") or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        base = truncate(session_title(entry), Limits.SELECT_LABEL)
+        label, number = base, 2
+        while label in choices:  # Discord shows labels, so make repeats distinguishable
+            label = f"{truncate(base, Limits.SELECT_LABEL - 4)} #{number}"
+            number += 1
+        choices[label] = key
+        if len(choices) == Limits.SELECT_OPTIONS:
+            break
+    return choices
+
+
 def next_episode_line(episode: Optional[dict], today: date) -> Optional[str]:
     """"Next episode: S02E05 · Tomorrow" from TMDB's next_episode_to_air; None if unknown or past."""
     try:

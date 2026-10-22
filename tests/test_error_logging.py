@@ -252,3 +252,31 @@ def test_a_sigterm_shutdown_closes_the_sessions_before_run_cleans_up(monkeypatch
         return list(closed)  # what's closed by the time run() starts cancelling tasks
 
     assert asyncio.run(run()) == ["tautulli"]
+
+
+class _EditedMessage:
+    def __init__(self):
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
+
+
+def test_timeout_keeps_link_buttons():
+    async def run():
+        trailer = nextcord.ui.Button(label="Trailer", url="https://www.youtube.com/watch?v=abc")
+        view = LoggedView()
+        view.add_item(nextcord.ui.Button(label="Roll again"))
+        view.add_item(trailer)
+        view.message = _EditedMessage()
+        plain = LoggedView()
+        plain.add_item(nextcord.ui.Button(label="Refresh"))
+        plain.message = _EditedMessage()
+        await view.on_timeout()
+        await plain.on_timeout()
+        return trailer, view.message.edits, plain.message.edits
+
+    trailer, edits, plain_edits = asyncio.run(run())
+    kept = edits[0]["view"]
+    assert kept.children == [trailer] and kept.is_finished()
+    assert plain_edits == [{"view": None}]

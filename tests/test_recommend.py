@@ -13,8 +13,8 @@ from plexbot.cogs.recommendations import (
 )
 from plexbot.media_details import item_viewers
 from fakes import (
-    GUILD_ID, MESSAGE_ID, FakeTautulli, Recorder, component_payload, interaction, member_payload, patch_images,
-    settle,
+    GUILD_ID, MESSAGE_ID, FakeTautulli, FakeTMDB, Recorder, component_payload, interaction, member_payload,
+    patch_images, settle,
 )
 from plexbot.media_cache import MediaCache
 
@@ -64,7 +64,7 @@ class TestPicking:
         assert blocks[2].split("\n")[1] == "-# Crime · nobody's watched it yet"
 
 
-def _build(tautulli):
+def _build(tautulli, tmdb=None):
     from plexbot.bot import PlexBot, install_slash_groups
 
     cache = MediaCache(tautulli)
@@ -72,7 +72,7 @@ def _build(tautulli):
     cache.last_updated = datetime.now()
     bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
-    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache}
+    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb}
     bot._connection.application_id = 999
     install_slash_groups(bot)
     cog = Recommendations(bot)
@@ -88,9 +88,9 @@ def _tautulli():
     return tautulli
 
 
-def _run(fn, tautulli):
+def _run(fn, tautulli, tmdb=None):
     async def run():
-        bot, cog = _build(tautulli)
+        bot, cog = _build(tautulli, tmdb)
         return await fn(bot, cog)
 
     return asyncio.run(run())
@@ -181,6 +181,44 @@ class TestButtons:
         assert sent["ephemeral"] is True
         assert "Only <@42> can browse these picks." in sent["embeds"][0].description
         assert "edit_original_message" not in recorder.kinds()
+
+
+def test_stranger_can_use_more_like_this(monkeypatch):
+    from plexbot.media_details import MoreLikeThisSelect
+
+    recorder = Recorder(monkeypatch)
+    tautulli = _tautulli()
+    tautulli.metadata["3"]["guids"] = ["tmdb://3"]
+    tmdb = FakeTMDB(titles={("movie", 3): {"recommendations": {"results": [{"id": 4}]}}})
+    stranger = member_payload(user_id=7)
+
+    async def run(bot, cog):
+        bot.shared_resources["media_cache"].media_items["4"] = dict(CACHE["4"], tmdb_id=4)
+        view = TestButtons()._view(bot, cog)
+        bot._connection.parse_interaction_create(component_payload(view.children[0].custom_id))
+        await settle()
+        bot._connection.store_view(view, MESSAGE_ID)  # as nextcord's edit_original_message does
+        select = next(item for item in view.children if isinstance(item, MoreLikeThisSelect))
+        recorder.calls.clear()
+        bot._connection.parse_interaction_create(
+            component_payload(select.custom_id, component_type=3, values=["4"], member=stranger))
+        await settle()
+        picked = list(recorder.calls)
+        recorder.calls.clear()
+        bot._connection.parse_interaction_create(
+            component_payload(view.children[1].custom_id, member=stranger))
+        await settle()
+        refused = list(recorder.calls)
+        bot._connection.parse_interaction_create(component_payload(view.back_button.custom_id))
+        await settle()
+        return view, picked, refused
+
+    view, picked, refused = _run(run, tautulli, tmdb)
+    assert [kind for kind, _ in picked] == ["edit_message", "followup"]
+    assert picked[1][1]["ephemeral"] is True
+    assert picked[1][1]["embeds"][0].title == "Collateral (2004)"
+    assert "Only <@42> can browse these picks." in refused[0][1]["embeds"][0].description
+    assert not any(isinstance(item, MoreLikeThisSelect) for item in view.children)
 
 
 def test_registered_in_help():

@@ -5,7 +5,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from fakes import FakeTautulli, FakeTMDB, build_media_bot, patch_images
+from fakes import (
+    MESSAGE_ID, FakeTautulli, FakeTMDB, Recorder, build_media_bot, component_payload, interaction,
+    patch_images, settle,
+)
 from plexbot import utilities
 
 TRAILER = {"site": "YouTube", "type": "Trailer", "key": "abc", "official": True,
@@ -19,7 +22,8 @@ EPISODE = {"rating_key": "21", "media_type": "episode", "title": "Hello, Ms. Cob
 SEASON = {"rating_key": "22", "media_type": "season", "title": "Season 1", "parent_title": "Severance",
           "guids": ["tmdb://888"], "parent_rating_key": "20"}
 CACHE = [
-    {"rating_key": "1", "media_type": "movie", "title": "Spirited Away", "year": "2001", "tmdb_id": 10},
+    {"rating_key": "1", "media_type": "movie", "title": "Spirited Away", "year": "2001", "tmdb_id": 10,
+     "genres": ["animation"]},
     {"rating_key": "11", "media_type": "movie", "title": "My Neighbor Totoro", "year": "1988", "tmdb_id": 11},
     {"rating_key": "12", "media_type": "movie", "title": "Princess Mononoke", "year": "1997", "tmdb_id": 12},
     {"rating_key": "13", "media_type": "show", "title": "Spirited, the show", "year": "2020", "tmdb_id": 13},
@@ -44,7 +48,9 @@ def no_mappings(monkeypatch):
 
 def _tautulli():
     tautulli = FakeTautulli([])
-    tautulli.metadata = {"1": MOVIE, "20": SHOW, "21": EPISODE, "22": SEASON, "2": dict(MOVIE, guids=[])}
+    tautulli.metadata = {"1": MOVIE, "20": SHOW, "21": EPISODE, "22": SEASON, "2": dict(MOVIE, guids=[]),
+                         "12": {"rating_key": "12", "media_type": "movie", "title": "Princess Mononoke",
+                                "year": "1997"}}
     return tautulli
 
 
@@ -108,3 +114,80 @@ def test_card_without_tmdb_answer():
     down = _run(lambda details: details.render("1"), FakeTMDB(reachable=False))
     assert down.embeds[0].description == plain.embeds[0].description
     assert "📅" not in plain.embeds[0].description
+
+
+def _run_cog(coro_fn, tmdb=None):
+    async def run():
+        bot, cog = build_media_bot(_tautulli(), CACHE, tmdb=tmdb)
+        return await coro_fn(bot, cog)
+
+    return asyncio.run(run())
+
+
+def _movie(bot, cog):
+    from plexbot.cogs.media_commands import MediaCommands
+
+    return MediaCommands.movie.callback(cog, interaction(bot), title="key:1")
+
+
+def test_lookup_card_has_trailer_and_more_like_this(monkeypatch):
+    from plexbot.media_details import MoreLikeThisSelect
+
+    recorder = Recorder(monkeypatch)
+    _run_cog(_movie, _tmdb())
+    view = recorder.last("followup")["view"]
+    links = [item.url for item in view.children if getattr(item, "url", None)]
+    assert links == ["https://www.youtube.com/watch?v=abc"]
+    select = next(item for item in view.children if isinstance(item, MoreLikeThisSelect))
+    assert [option.value for option in select.options] == ["12", "11"]
+    assert select.placeholder == "More like this on the server…"
+
+
+def test_no_controls_without_tmdb(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    _run_cog(_movie)
+    assert "view" not in recorder.last("followup")
+
+
+def test_more_like_this_pick_answers_privately(monkeypatch):
+    from plexbot.media_details import MoreLikeThisSelect
+
+    recorder = Recorder(monkeypatch)
+
+    async def run(bot, cog):
+        await _movie(bot, cog)
+        view = recorder.last("followup")["view"]
+        bot._connection.store_view(view, MESSAGE_ID)
+        select = next(item for item in view.children if isinstance(item, MoreLikeThisSelect))
+        recorder.calls.clear()
+        bot._connection.parse_interaction_create(
+            component_payload(select.custom_id, component_type=3, values=["12"]))
+        await settle()
+        return view
+
+    view = _run_cog(run, _tmdb())
+    assert recorder.kinds() == ["edit_message", "followup"]
+    assert recorder.calls[0][1]["view"] is view  # the dropdown is reset, so it can be used again
+    sent = recorder.last("followup")
+    assert sent["ephemeral"] is True
+    assert sent["embeds"][0].title == "Princess Mononoke (1997)"
+
+
+def test_roll_again_swaps_controls(monkeypatch):
+    from plexbot.cogs.media_commands import MediaCommands
+    from plexbot.media_details import MoreLikeThisSelect
+
+    recorder = Recorder(monkeypatch)
+
+    async def run(bot, cog):
+        await MediaCommands.random_pick.callback(cog, interaction(bot), kind="movie", genre="animation")
+        view = recorder.last("followup")["view"]
+        bot._connection.store_view(view, MESSAGE_ID)
+        bot._connection.parse_interaction_create(component_payload(view.roll_again.custom_id))
+        await settle()
+        return view
+
+    view = _run_cog(run, _tmdb())
+    assert "edit_original_message" in recorder.kinds()
+    assert view.children[0] is view.roll_again
+    assert sum(isinstance(item, MoreLikeThisSelect) for item in view.children) == 1

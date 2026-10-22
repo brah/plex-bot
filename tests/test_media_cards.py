@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from PIL import Image
 
 from plexbot.cogs.media_commands import (
-    _recent_choices, downloads_card, recent_line, split_torrents, title_choices, torrent_block,
+    downloads_card, recent_line, split_torrents, title_choices, torrent_block,
 )
 from plexbot.media_details import watch_stats
-from plexbot.ui.cards import media_card, media_facts, runtime, session_title
+from plexbot.ui.cards import item_choices, media_card, media_facts, runtime, session_title
 from plexbot.ui.images import Attachment
 from plexbot.ui.theme import Colour
 
@@ -104,14 +104,14 @@ class TestRecent:
         entries = [MATRIX, MATRIX, dict(MATRIX, rating_key="102")] + [
             dict(MATRIX, rating_key=str(300 + i), title=f"Film {i}") for i in range(30)
         ]
-        choices = _recent_choices(entries)
+        choices = item_choices(entries)
         assert len(choices) == 25
         assert choices["The Matrix (1999)"] == "101"
         assert choices["The Matrix (1999) #2"] == "102"  # same title, different item
 
     def test_repeated_long_titles_stay_distinct_and_within_limits(self):
         long = dict(MATRIX, title="X" * 120, year=None)
-        choices = _recent_choices([dict(long, rating_key=str(i)) for i in range(4)])
+        choices = item_choices([dict(long, rating_key=str(i)) for i in range(4)])
         assert len(choices) == 4
         assert all(len(label) <= 100 for label in choices)
 

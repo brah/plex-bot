@@ -2,15 +2,18 @@
 show an item: /plex movie, /plex tv, /plex random, /plex recent details and /plex recommend."""
 
 import asyncio
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+import nextcord
 from nextcord.utils import escape_markdown
 
+from plexbot.errors import LoggedView
 from plexbot.tautulli_wrapper import TMDB, TMDB_KINDS, Tautulli
-from plexbot.ui.cards import media_card, next_episode_line, plex_web_link
-from plexbot.ui.embeds import Reply
+from plexbot.ui.cards import item_choices, media_card, next_episode_line, plex_web_link
+from plexbot.ui.embeds import ErrorKind, Reply, error_state, service_down
 from plexbot.ui.format import join, plural, to_int
 from plexbot.ui.images import plex_image, poster_key
 from plexbot.utilities import format_duration, ignored_usernames, viewer_name
@@ -106,8 +109,12 @@ class MediaDetails:
             next_episode=details.get("next_episode_to_air") if kind == "tv" else None,
         )
 
-    async def render(self, rating_key: str, footer: Optional[str] = None) -> Optional[Reply]:
+    async def render(self, rating_key: str, footer: Optional[str] = None,
+                     view: Optional[nextcord.ui.View] = None) -> Optional[Reply]:
         """The item's card with its watch stats; None when Tautulli has no such item.
+
+        TMDB's Trailer and More like this go on `view`, replacing the previous card's (a command that
+        shows one card at a time), or on a new view when there's none.
 
         Raises TautulliUnavailable when Tautulli doesn't answer.
         """
@@ -142,4 +149,59 @@ class MediaDetails:
                            stats=stats, next_episode=next_episode)
         if footer:
             embed.set_footer(text=footer)
-        return Reply([embed], [a for a in (poster, art) if a])
+        controls = card_controls(self, extras)
+        if view is None and controls:
+            view = LoggedView(timeout=600)
+        if view is not None:
+            set_card_extras(view, controls)
+        return Reply([embed], [a for a in (poster, art) if a], view=view)
+
+    async def send_private(self, interaction: nextcord.Interaction, rating_key: str) -> None:
+        """An item's card for just the person who picked it from a dropdown."""
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, with_message=True)
+        try:
+            reply = await self.render(rating_key)
+        except TautulliUnavailable:
+            reply = service_down("Tautulli")
+        if reply is None:
+            reply = error_state(ErrorKind.INPUT, "That's not in the library anymore.")
+        message = await reply.send(interaction, ephemeral=True)
+        if reply.view is not None:
+            reply.view.message = message  # a private message is only editable through this token
+
+
+class MoreLikeThisSelect(nextcord.ui.StringSelect):
+    """Titles on the server like the card's. Anyone can pick one and gets its card privately."""
+
+    def __init__(self, details: MediaDetails, items: list):
+        options = [nextcord.SelectOption(label=label, value=key)
+                   for label, key in item_choices(items).items()]
+        # nextcord 3.2 StringSelect never generates a custom_id itself (see StreamDetailsSelect).
+        super().__init__(custom_id=os.urandom(16).hex(), placeholder="More like this on the server…",
+                         options=options)
+        self.details = details
+
+    async def callback(self, interaction: nextcord.Interaction):
+        # Re-sending the view answers within Discord's 3 seconds and resets the dropdown for another pick.
+        await interaction.response.edit_message(view=self.view)
+        await self.details.send_private(interaction, self.values[0])
+
+
+def card_controls(details: MediaDetails, extras: TmdbExtras) -> list:
+    """The card's Trailer link and More like this dropdown, when TMDB had them."""
+    controls = []
+    if extras.trailer:
+        controls.append(nextcord.ui.Button(label="Trailer", emoji="🎬", url=extras.trailer))
+    if extras.similar:
+        controls.append(MoreLikeThisSelect(details, extras.similar))
+    return controls
+
+
+def set_card_extras(view: nextcord.ui.View, items: list) -> None:
+    """Swap the card controls on a view, removing the previous card's."""
+    for item in getattr(view, "card_extras", []):
+        view.remove_item(item)
+    for item in items:
+        view.add_item(item)
+    view.card_extras = items

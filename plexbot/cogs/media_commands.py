@@ -20,7 +20,7 @@ from plexbot.media_cache import MediaCache
 from plexbot.media_details import MediaDetails, TautulliUnavailable
 from plexbot.slash_commands import plex, plexadmin
 from plexbot.tautulli_wrapper import Tautulli
-from plexbot.ui.cards import genre_label, media_icon, session_title
+from plexbot.ui.cards import genre_label, item_choices, media_icon, session_title
 from plexbot.ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_state, error_state, service_down, set_thumbnail
 from plexbot.ui.format import file_size, join, plural, progress_bar, timestamp, to_int, truncate
 from plexbot.ui.images import STRIP_POSTERS, fetch_poster_strip, mascot, poster_key
@@ -74,25 +74,6 @@ def recent_overview(entries, *, strip) -> nextcord.Embed:
     return embed
 
 
-def _recent_choices(entries) -> dict:
-    """{label: rating_key} for the details dropdown (unique keys, at most 25)."""
-    choices, seen = {}, set()
-    for entry in entries:
-        key = str(entry.get("rating_key") or "")
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        base = truncate(session_title(entry), Limits.SELECT_LABEL)
-        label, number = base, 2
-        while label in choices:  # Discord shows labels, so make repeats distinguishable
-            label = f"{truncate(base, Limits.SELECT_LABEL - 4)} #{number}"
-            number += 1
-        choices[label] = key
-        if len(choices) == Limits.SELECT_OPTIONS:
-            break
-    return choices
-
-
 class RecentDetailsSelect(nextcord.ui.StringSelect):
     def __init__(self, choices: dict):
         options = [
@@ -104,7 +85,7 @@ class RecentDetailsSelect(nextcord.ui.StringSelect):
     async def callback(self, interaction: nextcord.Interaction):
         view: RecentView = self.view
         view.message = interaction.message  # bot-token handle; the command's webhook expires
-        await view.cog.send_item_detail(interaction, self.values[0])
+        await view.cog.details.send_private(interaction, self.values[0])
         # Re-send the view so the same choice can be picked again.
         try:
             await interaction.message.edit(view=view)
@@ -118,7 +99,7 @@ class RecentView(LoggedView):
     def __init__(self, cog: "MediaCommands", entries: list, timeout: float = 600):
         super().__init__(timeout=timeout)
         self.cog = cog
-        choices = _recent_choices(entries)
+        choices = item_choices(entries)
         if choices:
             self.add_item(RecentDetailsSelect(choices))
 
@@ -302,20 +283,10 @@ class MediaCommands(commands.Cog):
 
     # --- shared: one item's card -------------------------------------------------
 
-    async def render_item(self, rating_key: str, footer: Optional[str] = None) -> Optional[Reply]:
+    async def render_item(self, rating_key: str, footer: Optional[str] = None,
+                          view: Optional[nextcord.ui.View] = None) -> Optional[Reply]:
         """The card for one library item; None when Tautulli has no such item."""
-        return await self.details.render(rating_key, footer)
-
-    async def send_item_detail(self, interaction: nextcord.Interaction, rating_key: str) -> None:
-        """A private card for an item picked from a public message."""
-        await interaction.response.defer(ephemeral=True, with_message=True)
-        try:
-            reply = await self.render_item(rating_key)
-        except TautulliUnavailable:
-            reply = service_down("Tautulli")
-        if reply is None:
-            reply = error_state(ErrorKind.INPUT, "That's not in the library anymore.")
-        await reply.send(interaction, ephemeral=True)
+        return await self.details.render(rating_key, footer, view=view)
 
     # --- /plex movie and /plex tv ---------------------------------------------------
 
@@ -376,7 +347,9 @@ class MediaCommands(commands.Cog):
                 )
             await reply.send(interaction, ephemeral=True, replace_placeholder=True)
             return
-        await reply.send(interaction)
+        message = await reply.send(interaction)
+        if reply.view is not None:
+            reply.view.message = bot_token_handle(interaction, message)
 
     def _title_suggestions(self, typed: str, kind: str) -> dict:
         if not self.media_cache:
@@ -414,9 +387,8 @@ class MediaCommands(commands.Cog):
         for _attempt in range(3):
             item = view.pick()
             footer = f"🎲 Random pick from {plural(len(view.pool), 'match', 'matches')}"
-            reply = await self.render_item(str(item["rating_key"]), footer=footer)
+            reply = await self.render_item(str(item["rating_key"]), footer=footer, view=view)
             if reply is not None:
-                reply.view = view
                 return reply
         return error_state(ErrorKind.INPUT, "Couldn't find a pick that's still in the library.",
                            hint="An admin can refresh the media cache with /plexadmin cache.")
