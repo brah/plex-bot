@@ -64,7 +64,7 @@ A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautu
 
 ## Install
 
-Run exactly one instance, near Tautulli. It needs no open ports. You need a working Tautulli, a Discord server you can add bots to, and either Docker or Python 3.12+. qBittorrent and a TMDB API key are optional.
+Run exactly one instance, near Tautulli. It needs no open ports. You need a working Tautulli, a Discord server you can add bots to, and either Docker or Python 3.12+. qBittorrent, Sonarr and a TMDB API key are optional.
 
 ### 1. Discord
 
@@ -209,6 +209,8 @@ Set options as environment variables or in `config.json`, starting from [`.env.e
 | `qbittorrent.ip`, `port` | `PLEXBOT_QBITTORRENT_IP`, `PLEXBOT_QBITTORRENT_PORT` | qBittorrent Web UI address, for `/plex downloading` |
 | `qbittorrent.username`, `password` | `PLEXBOT_QBITTORRENT_USERNAME`, `PLEXBOT_QBITTORRENT_PASSWORD` | qBittorrent Web UI login; blank if it doesn't ask for one |
 | `tmdb.apikey` | `PLEXBOT_TMDB_APIKEY` | [TMDB API key](https://www.themoviedb.org/settings/api), for trailers, More like this, next episodes and `/plex upcoming` |
+| `sonarr.url` | `PLEXBOT_SONARR_URL` | Sonarr's address, like `http://192.168.1.10:8989`. `/plex upcoming` then reads Sonarr's calendar |
+| `sonarr.apikey` | `PLEXBOT_SONARR_APIKEY` | Sonarr's API key, under **Settings → General** |
 | `core.legacy_text_commands` | `PLEXBOT_CORE_LEGACY_TEXT_COMMANDS` | Point old text commands like `plex status` at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
 | `core.log_level` | `PLEXBOT_CORE_LOG_LEVEL` | `DEBUG` to `ERROR` |
 

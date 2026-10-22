@@ -1,9 +1,9 @@
-"""/plex upcoming: new episodes this week for shows on the server, from TMDB."""
+"""/plex upcoming: new episodes this week, from Sonarr's calendar when it's set up, else from TMDB."""
 
 import asyncio
 import logging
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time as day_start, timedelta, tzinfo
 from typing import Optional
 
 import nextcord
@@ -29,7 +29,7 @@ _MIN_REQUEST_SECONDS = 0.5
 def upcoming_rows(shows: list, entries: dict, today: date, days: int = UPCOMING_DAYS) -> list:
     """(air date, cached show, TMDB episode) for episodes airing in the next `days` days, soonest first."""
     # shortcut: next_episode_to_air is one episode per show, so a multi-episode drop lists the first;
-    # read the season's episodes if that matters.
+    # Sonarr's calendar lists them all.
     rows, seen = [], set()
     for show in shows:
         if show.get("tmdb_id") in seen:  # the same show in two libraries (HD and 4K)
@@ -39,14 +39,43 @@ def upcoming_rows(shows: list, entries: dict, today: date, days: int = UPCOMING_
         day = episode_air_date(episode)
         if day and today <= day < today + timedelta(days=days):
             rows.append((day, show, episode))
-    return sorted(rows, key=lambda row: (row[0], (row[1].get("title") or "").lower()))
+    return sorted(rows, key=_row_order)
+
+
+def _row_order(row: tuple) -> tuple:
+    day, show, episode = row
+    title = (show.get("title") or "").lower()
+    return day, title, episode.get("season_number") or 0, episode.get("episode_number") or 0
+
+
+def sonarr_rows(episodes: list, shows_by_tmdb: dict, zone: tzinfo, today: date,
+                days: int = UPCOMING_DAYS) -> list:
+    """upcoming_rows' (day, show, episode) from Sonarr's calendar: each episode on its day in `zone`.
+
+    The show is the cached one with the series' TMDB id, for its Plex link, else just the series' title.
+    """
+    rows = []
+    for episode in episodes:
+        try:
+            day = datetime.fromisoformat(episode["airDateUtc"]).astimezone(zone).date()
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not today <= day < today + timedelta(days=days):
+            continue
+        series = episode.get("series") or {}
+        show = shows_by_tmdb.get(series.get("tmdbId")) or {"title": series.get("title")}
+        rows.append((day, show, {"season_number": episode.get("seasonNumber"),
+                                 "episode_number": episode.get("episodeNumber"),
+                                 "name": episode.get("title"), "downloaded": bool(episode.get("hasFile"))}))
+    return sorted(rows, key=_row_order)
 
 
 def _episode_line(show: dict, episode: dict, server_id: Optional[str]) -> str:
     title = escape_markdown(show.get("title") or "Unknown")
     url = plex_web_link(server_id, show.get("rating_key"))
     name = escape_markdown(episode["name"]) if episode.get("name") else None
-    return join([f"[{title}]({url})" if url else f"**{title}**", episode_code(episode), name])
+    downloaded = "✅ Downloaded" if episode.get("downloaded") else None
+    return join([f"[{title}]({url})" if url else f"**{title}**", episode_code(episode), name, downloaded])
 
 
 def upcoming_card(rows: list, today: date, server_id: Optional[str]) -> Reply:
@@ -75,6 +104,7 @@ class Upcoming(commands.Cog):
         self.bot = bot
         self.tautulli = bot.shared_resources.get("tautulli")
         self.tmdb = bot.shared_resources.get("tmdb")
+        self.sonarr = bot.shared_resources.get("sonarr")
         self.media_cache = bot.shared_resources.get("media_cache")
         # TMDB id -> {"status": TMDB's, "next": its next_episode_to_air, "fetched": time.monotonic()}
         self.entries: dict = {}
@@ -93,7 +123,7 @@ class Upcoming(commands.Cog):
 
     def start_warm_up(self) -> None:
         """Ask TMDB about every show in the background at startup, so /plex upcoming answers at once."""
-        if self.tmdb is not None and self.media_cache is not None:
+        if self.tmdb is not None and self.sonarr is None and self.media_cache is not None:
             self._refreshing = asyncio.create_task(self.warm_up())
 
     async def warm_up(self) -> None:
@@ -131,12 +161,34 @@ class Upcoming(commands.Cog):
 
     @plex.subcommand(description="New episodes airing this week for shows on the server")
     async def upcoming(self, interaction: nextcord.Interaction):
-        if self.tmdb is None:
-            await error_state(ErrorKind.INPUT, "TMDB isn't set up.",
-                              hint="An admin can add a TMDB API key under tmdb in config.json or .env.",
+        if self.tmdb is None and self.sonarr is None:
+            await error_state(ErrorKind.INPUT, "Neither Sonarr nor TMDB is set up.",
+                              hint="An admin can add either in config.json or .env.",
                               ).send(interaction, ephemeral=True)
             return
         await interaction.response.defer()
+        zone = await self.tautulli.server_timezone()
+        today = datetime.now(zone).date()
+        if self.sonarr is not None:
+            start = datetime.combine(today, day_start(), tzinfo=zone)
+            episodes = await self.sonarr.calendar(start, start + timedelta(days=UPCOMING_DAYS))
+            if episodes is None:
+                await service_down("Sonarr").send(interaction, ephemeral=True, replace_placeholder=True)
+                return
+            # Only for Plex links, so the cache as it is: a first fill would take minutes.
+            shows = self._shows(self.media_cache.media_items.values()) if self.media_cache else []
+            rows = sonarr_rows(episodes, {show["tmdb_id"]: show for show in shows}, zone, today)
+        else:
+            rows = await self._tmdb_rows(interaction, today)
+            if rows is None:
+                return
+        if not rows:
+            await empty_state("Nothing's airing in the next week.").send(interaction)
+            return
+        await upcoming_card(rows, today, await self.tautulli.server_id()).send(interaction)
+
+    async def _tmdb_rows(self, interaction: nextcord.Interaction, today: date) -> Optional[list]:
+        """The week's rows from what TMDB said; None (after replying) when it has said nothing."""
         cached = []
         if self.media_cache:
             cached = await self.media_cache.get_items(media_type="show", limit=_WHOLE_LIBRARY)
@@ -145,13 +197,8 @@ class Upcoming(commands.Cog):
             self._refresh_in_background(shows)  # answer with what's known; due shows update for next time
         elif not await self.refresh(shows):
             await service_down("TMDB").send(interaction, ephemeral=True, replace_placeholder=True)
-            return
-        today = datetime.now(await self.tautulli.server_timezone()).date()
-        rows = upcoming_rows(shows, self.entries, today)
-        if not rows:
-            await empty_state("Nothing's airing in the next week.").send(interaction)
-            return
-        await upcoming_card(rows, today, await self.tautulli.server_id()).send(interaction)
+            return None
+        return upcoming_rows(shows, self.entries, today)
 
 
 def setup(bot):

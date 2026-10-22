@@ -1,9 +1,11 @@
 """Shared test fakes: Tautulli session payloads and nextcord dispatch helpers."""
 
 import asyncio
+import contextlib
 import io
 from types import SimpleNamespace
 
+import aiohttp
 import nextcord
 from nextcord.ext import commands
 from PIL import Image
@@ -205,6 +207,48 @@ class FakeTMDB:
         pass
 
 
+class FakeSonarr:
+    """Stands in for tautulli_wrapper.Sonarr: the calendar's episodes, or None when it's down."""
+
+    def __init__(self, episodes=None, reachable=True):
+        self.episodes, self.reachable = list(episodes or []), reachable
+        self.calls = []
+
+    async def calendar(self, start, end):
+        self.calls.append((start, end))
+        return self.episodes if self.reachable else None
+
+    async def close(self):
+        pass
+
+
+class FakeHTTPSession:
+    """Stands in for an aiohttp session: answers each get() with the next (status, json body)."""
+
+    closed = False
+
+    def __init__(self, *answers):
+        self.answers = list(answers)
+        self.requests = []
+
+    @contextlib.asynccontextmanager
+    async def get(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        status, body = self.answers.pop(0)
+        response = SimpleNamespace(status=status, json=lambda: _resolved(body))
+
+        def raise_for_status():
+            if status >= 400:
+                raise aiohttp.ClientResponseError(None, (), status=status)
+
+        response.raise_for_status = raise_for_status
+        yield response
+
+
+async def _resolved(value):
+    return value
+
+
 def patch_images(monkeypatch):
     """Make every Plex image fetch return a tiny valid PNG instead of hitting the network."""
 
@@ -294,8 +338,8 @@ def build_bot(tautulli):
     return bot, cog
 
 
-def _library_bot(cog_class, tautulli, items, tmdb):
-    """A PlexBot with `cog_class` loaded, a fresh media cache holding `items`, and `tmdb` (or None)."""
+def _library_bot(cog_class, tautulli, items, tmdb, sonarr=None):
+    """A PlexBot with `cog_class` loaded, a fresh media cache holding `items`, and `tmdb` and `sonarr`."""
     from datetime import datetime
 
     from plexbot.media_cache import MediaCache
@@ -306,7 +350,7 @@ def _library_bot(cog_class, tautulli, items, tmdb):
     cache.last_updated = datetime.now()
     bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
-    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb}
+    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb, "sonarr": sonarr}
     bot._connection.application_id = 999
     install_slash_groups(bot)
     cog = cog_class(bot)
@@ -321,11 +365,11 @@ def build_media_bot(tautulli, items=(), tmdb=None):
     return _library_bot(MediaCommands, tautulli, items, tmdb)
 
 
-def build_upcoming_bot(tautulli, tmdb, items=()):
+def build_upcoming_bot(tautulli, tmdb, items=(), sonarr=None):
     """A PlexBot with Upcoming loaded."""
     from plexbot.cogs.upcoming import Upcoming
 
-    return _library_bot(Upcoming, tautulli, items, tmdb)
+    return _library_bot(Upcoming, tautulli, items, tmdb, sonarr)
 
 
 def build_stats_bot(tautulli):

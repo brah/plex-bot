@@ -1,10 +1,10 @@
-"""Async clients for Tautulli's API (every call goes through Tautulli.api_call) and TMDB's."""
+"""Async clients for Tautulli's API (every call goes through Tautulli.api_call), TMDB's and Sonarr's."""
 
 import asyncio
 import ipaddress
 import json
 import logging
-from datetime import tzinfo
+from datetime import datetime, timezone, tzinfo
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -26,7 +26,21 @@ def on_the_internet(address: str) -> bool:
         return "." in host and not host.endswith((".local", ".lan", ".internal", ".home.arpa"))
 
 
-class Tautulli:
+class _HTTPClient:
+    """Opens its aiohttp session on the first request; the bot calls close() at shutdown."""
+
+    session: Optional[aiohttp.ClientSession] = None
+
+    def _ensure_session(self) -> None:
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+
+    async def close(self) -> None:
+        if self.session and not self.session.closed:
+            await self.session.close()
+
+
+class Tautulli(_HTTPClient):
     def __init__(self, api_key: str, tautulli_ip: str, use_https: bool = False) -> None:
         logger.info("Initializing Tautulli wrapper.")
         self.api_key = api_key
@@ -34,7 +48,6 @@ class Tautulli:
         self.use_https = use_https
         self.protocol = "https" if use_https else "http"
         self.tautulli_api_url = f"{self.protocol}://{self.tautulli_ip}/api/v2"
-        self.session: Optional[aiohttp.ClientSession] = None
         self.request_timeout = 30
         self._pms_identifier: Optional[str] = None  # cached by server_id()
         self._zone: Optional[tzinfo] = None  # cached by server_timezone()
@@ -43,18 +56,6 @@ class Tautulli:
             logger.warning(f"Tautulli at {tautulli_ip} is reached over the internet using HTTP, so the API key "
                            "is sent in plaintext. Set tautulli.use_https (PLEXBOT_TAUTULLI_USE_HTTPS) to true.")
         logger.info(f"Tautulli API URL set to {self.tautulli_api_url}")
-
-    def _ensure_session(self) -> None:
-        """Create an HTTP session if one is not already available."""
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession()
-            logger.info("aiohttp ClientSession initialized for Tautulli.")
-
-    async def close(self) -> None:
-        """Close the aiohttp ClientSession."""
-        if self.session and not self.session.closed:
-            await self.session.close()
-            logger.info("aiohttp ClientSession closed for Tautulli.")
 
     async def api_call(self, cmd: str, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         if params is None:
@@ -290,7 +291,7 @@ class Tautulli:
 TMDB_KINDS = {"movie": "movie", "show": "tv"}
 
 
-class TMDB:
+class TMDB(_HTTPClient):
     """TMDB's API, for trailers, More like this and next episodes. Created when tmdb.apikey is set.
 
     Every call returns None when TMDB doesn't answer, so a card never waits on it for long.
@@ -301,16 +302,7 @@ class TMDB:
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
         self.api_url = "https://api.themoviedb.org/3/"
-        self.session: Optional[aiohttp.ClientSession] = None
         self._unreachable = False  # while True, failures are logged at DEBUG
-
-    def _ensure_session(self) -> None:
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession()
-
-    async def close(self) -> None:
-        if self.session and not self.session.closed:
-            await self.session.close()
 
     def _auth(self) -> tuple:
         """(headers, params): TMDB's settings offer an API key and a longer Read Access Token (a JWT)."""
@@ -387,3 +379,42 @@ class TMDB:
             *((details.get("similar") or {}).get("results") or []),
         ]
         return list(dict.fromkeys(r["id"] for r in results if isinstance(r.get("id"), int)))
+
+
+def _utc(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class Sonarr(_HTTPClient):
+    """Sonarr's API, for /plex upcoming. Created when sonarr.url and sonarr.apikey are set.
+
+    Sonarr v4 and v5 both serve it at /api/v3.
+    """
+
+    TIMEOUT = 10  # seconds
+
+    def __init__(self, url: str, api_key: str) -> None:
+        self.api_url = url.rstrip("/") + "/api/v3/"
+        self.api_key = api_key
+        parts = urlsplit(url)
+        if parts.scheme == "http" and on_the_internet(parts.netloc):
+            logger.warning(f"Sonarr at {parts.netloc} is reached over the internet using HTTP, so the API "
+                           "key is sent in plaintext. Set sonarr.url to an https:// address.")
+
+    async def calendar(self, start: datetime, end: datetime) -> Optional[list]:
+        """Monitored episodes from start to end, with their series; None when Sonarr didn't answer."""
+        self._ensure_session()
+        params = {"start": _utc(start), "end": _utc(end), "includeSeries": "true"}
+        try:
+            async with self.session.get(
+                self.api_url + "calendar", params=params, headers={"X-Api-Key": self.api_key},
+                timeout=aiohttp.ClientTimeout(total=self.TIMEOUT),
+            ) as response:
+                response.raise_for_status()
+                return await response.json()
+        except aiohttp.ClientResponseError as exc:
+            hint = " Check sonarr.apikey." if exc.status == 401 else ""
+            logger.error(f"Sonarr refused the calendar request (HTTP {exc.status}).{hint}")
+        except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError) as exc:
+            logger.error(f"Couldn't reach Sonarr: {exc!r}")
+        return None

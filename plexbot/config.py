@@ -174,9 +174,12 @@ def setup_default_config():
     qbit.add("username", "", "qBittorrent WebUI username; blank when qBittorrent asks for no login")
     qbit.add("password", "", "qBittorrent WebUI password")
 
-    # Work in progress: the TMDB client is created when a key is set, but no command uses it yet.
     tmdb = config.add_section("tmdb", "TMDB API settings")
     tmdb.add("apikey", "", "TMDB API key")
+
+    sonarr = config.add_section("sonarr", "Sonarr settings, for /plex upcoming")
+    sonarr.add("url", "", 'Sonarr\'s address, like "http://192.168.1.10:8989"')
+    sonarr.add("apikey", "", "Sonarr API key (Settings > General)")
 
     ui = config.add_section("ui", "User interface settings")
     ui.add("plex_embed_color", 0xE5A00D, 'Embed color: a number (15040013) or hex text ("#E5A00D")')

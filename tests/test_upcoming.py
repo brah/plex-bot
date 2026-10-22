@@ -1,13 +1,14 @@
-"""/plex upcoming: next episodes from TMDB for shows on the server."""
+"""/plex upcoming: next episodes from Sonarr's calendar, or TMDB, for shows on the server."""
 
 import asyncio
 import time
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from fakes import FakeTautulli, FakeTMDB, Recorder, build_upcoming_bot, interaction
-from plexbot.cogs.upcoming import Upcoming, upcoming_card, upcoming_rows
+from fakes import FakeSonarr, FakeTautulli, FakeTMDB, Recorder, build_upcoming_bot, interaction
+from plexbot.cogs.upcoming import Upcoming, sonarr_rows, upcoming_card, upcoming_rows
 from plexbot.ui.theme import Limits
 
 TODAY = date(2026, 10, 22)
@@ -98,21 +99,21 @@ def test_refresh_skips_finished_and_fresh():
     assert cog.entries[1]["next"] == {"air_date": "2026-10-23"}  # kept from the last answer
 
 
-def _command(tmdb, items):
+def _command(tmdb, items, sonarr=None):
     async def run():
-        bot, cog = build_upcoming_bot(FakeTautulli([]), tmdb, items)
+        bot, cog = build_upcoming_bot(FakeTautulli([]), tmdb, items, sonarr)
         await Upcoming.upcoming.callback(cog, interaction(bot))
 
     asyncio.run(run())
 
 
-def test_command_without_tmdb(monkeypatch):
+def test_command_without_tmdb_or_sonarr(monkeypatch):
     recorder = Recorder(monkeypatch)
     _command(None, [_show("1", "Severance", 1)])
     sent = recorder.last("send_message")
     assert sent["ephemeral"] is True
     assert sent["embeds"][0].description == (
-        "TMDB isn't set up.\n-# An admin can add a TMDB API key under tmdb in config.json or .env.")
+        "Neither Sonarr nor TMDB is set up.\n-# An admin can add either in config.json or .env.")
 
 
 def test_command_tmdb_down_first_time(monkeypatch):
@@ -222,3 +223,102 @@ def test_lookups_stay_under_tmdbs_rate_limit(monkeypatch):
         return time.monotonic() - started
 
     assert asyncio.run(run()) >= 0.1  # 32 lookups, 16 at a time, each holding its slot 0.05 s
+
+
+def _sonarr_episode(air_utc, title="Severance", tmdb_id=1, season=2, episode=5, name=None, has_file=False):
+    return {"airDateUtc": air_utc, "seasonNumber": season, "episodeNumber": episode, "title": name,
+            "hasFile": has_file, "series": {"title": title, "tmdbId": tmdb_id}}
+
+
+def test_sonarr_rows_use_the_server_day():
+    # Thursday 9 pm in New York is 3 am Friday in Berlin.
+    episodes = [_sonarr_episode("2026-10-23T01:00:00Z")]
+    berlin = sonarr_rows(episodes, {}, ZoneInfo("Europe/Berlin"), TODAY)
+    new_york = sonarr_rows(episodes, {}, ZoneInfo("America/New_York"), TODAY)
+    assert [day.isoformat() for day, _, _ in berlin] == ["2026-10-23"]
+    assert [day.isoformat() for day, _, _ in new_york] == ["2026-10-22"]
+
+
+def test_sonarr_rows_link_cached_shows_and_mark_downloads():
+    cached = _show("200", "Severance", 1)
+    episodes = [
+        _sonarr_episode("2026-10-22T12:00:00Z", episode=6),
+        _sonarr_episode("2026-10-22T11:00:00Z", episode=5, name="Trojan's Horse", has_file=True),
+        _sonarr_episode("2026-10-22T10:00:00Z", title="A new show", tmdb_id=0, season=1, episode=1),
+        _sonarr_episode("2026-10-29T10:00:00Z", title="Next week"),  # past the window
+        _sonarr_episode(None, title="No air time"),
+    ]
+    rows = sonarr_rows(episodes, {1: cached}, timezone.utc, TODAY)
+    assert [(show["title"], episode["episode_number"]) for _, show, episode in rows] == [
+        ("A new show", 1), ("Severance", 5), ("Severance", 6)]
+    assert rows[1][1] is cached
+    assert rows[1][2] == {"season_number": 2, "episode_number": 5, "name": "Trojan's Horse",
+                          "downloaded": True}
+    assert "rating_key" not in rows[0][1]
+
+
+def test_upcoming_card_marks_downloaded_episodes():
+    rows = [(TODAY, _show("200", "Severance", 1),
+             {"season_number": 2, "episode_number": 5, "name": None, "downloaded": True}),
+            (TODAY, {"title": "A new show"},
+             {"season_number": 1, "episode_number": 1, "downloaded": False})]
+    text = upcoming_card(rows, TODAY, "srv1").embeds[0].description
+    assert "S02E05 · ✅ Downloaded" in text
+    assert "**A new show** · S01E01" in text and text.count("Downloaded") == 1
+
+
+def test_command_reads_sonarr_when_set(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    now = datetime.now(timezone.utc)
+    sonarr = FakeSonarr([_sonarr_episode(now.strftime("%Y-%m-%dT%H:%M:%SZ"), has_file=True)])
+    tmdb = FakeTMDB(shows={1: {"status": "Returning Series"}})
+    _command(tmdb, [_show("200", "Severance", 1)], sonarr)
+    sent = recorder.last("followup")
+    assert sent["ephemeral"] is False
+    text = sent["embeds"][0].description
+    assert "**Today**" in text and "✅ Downloaded" in text
+    start, end = sonarr.calls[0]
+    # FakeTautulli's server is on UTC.
+    midnight = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+    assert (start, end - start) == (midnight, timedelta(days=7))
+    assert tmdb.calls == []
+
+
+def test_command_sonarr_down(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    _command(FakeTMDB(), [_show("200", "Severance", 1)], FakeSonarr(reachable=False))
+    sent = recorder.last("followup")
+    assert sent["ephemeral"] is True
+    assert "Couldn't reach **Sonarr**." in sent["embeds"][0].description
+
+
+def test_no_tmdb_warm_up_with_sonarr():
+    tmdb = FakeTMDB(shows={1: {"status": "Ended"}})
+
+    async def run():
+        bot, cog = build_upcoming_bot(FakeTautulli([]), tmdb, [_show("1", "Severance", 1)], FakeSonarr())
+        cog.start_warm_up()
+        await asyncio.sleep(0.01)
+        return cog._refreshing
+
+    assert asyncio.run(run()) is None and tmdb.calls == []
+
+
+def test_sonarr_answers_without_waiting_for_an_empty_media_cache(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    sonarr = FakeSonarr([_sonarr_episode(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))])
+
+    async def run():
+        bot, cog = build_upcoming_bot(FakeTautulli([]), None, [], sonarr)
+        filled = []
+
+        async def update_cache(full=False):
+            filled.append(full)  # the first fill reads the whole library: minutes on a big one
+            return True
+
+        cog.media_cache.update_cache = update_cache
+        await Upcoming.upcoming.callback(cog, interaction(bot))
+        return filled
+
+    assert asyncio.run(run()) == []
+    assert "**Severance**" in recorder.last("followup")["embeds"][0].description

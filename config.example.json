@@ -26,5 +26,9 @@
     },
     "tmdb": {
         "apikey": ""
+    },
+    "sonarr": {
+        "url": "",
+        "apikey": ""
     }
 }

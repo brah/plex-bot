@@ -1,11 +1,9 @@
 """The TMDB client: ids from Plex guids, trailer choice, suggestion order, auth and failures."""
 
 import asyncio
-import contextlib
 import logging
 
-import aiohttp
-
+from fakes import FakeHTTPSession
 from plexbot.tautulli_wrapper import TMDB
 
 
@@ -45,27 +43,8 @@ def test_api_key_or_read_access_token():
     assert TMDB("eyJhbGciOi.x.y")._auth() == ({"Authorization": "Bearer eyJhbGciOi.x.y"}, {})
 
 
-class _Response:
-    def __init__(self, status):
-        self.status = status
-
-    def raise_for_status(self):
-        if self.status >= 400:
-            raise aiohttp.ClientResponseError(None, (), status=self.status)
-
-    async def json(self):
-        return {"id": 1}
-
-
-class _Session:
-    closed = False
-
-    def __init__(self, *statuses):
-        self.statuses = list(statuses)
-
-    @contextlib.asynccontextmanager
-    async def get(self, url, **kwargs):
-        yield _Response(self.statuses.pop(0))
+def _Session(*statuses):
+    return FakeHTTPSession(*((status, {"id": 1}) for status in statuses))
 
 
 def test_a_missing_title_isnt_an_outage(caplog):
