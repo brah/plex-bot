@@ -11,7 +11,7 @@ from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
 from plexbot.slash_commands import plex
-from plexbot.ui.cards import episode_code, plex_web_link
+from plexbot.ui.cards import episode_air_date, episode_code, plex_web_link
 from plexbot.ui.embeds import ErrorKind, Reply, card, empty_state, error_state, service_down
 from plexbot.ui.format import day_label, join
 from plexbot.ui.theme import Limits, brand_colour
@@ -26,13 +26,6 @@ _WHOLE_LIBRARY = 100_000  # get_items needs a limit; this means "all of them"
 _MIN_REQUEST_SECONDS = 0.5
 
 
-def _air_date(episode: Optional[dict]) -> Optional[date]:
-    try:
-        return datetime.strptime(str((episode or {}).get("air_date")), "%Y-%m-%d").date()
-    except ValueError:
-        return None
-
-
 def upcoming_rows(shows: list, entries: dict, today: date, days: int = UPCOMING_DAYS) -> list:
     """(air date, cached show, TMDB episode) for episodes airing in the next `days` days, soonest first."""
     # shortcut: next_episode_to_air is one episode per show, so a multi-episode drop lists the first;
@@ -43,7 +36,7 @@ def upcoming_rows(shows: list, entries: dict, today: date, days: int = UPCOMING_
             continue
         seen.add(show.get("tmdb_id"))
         episode = (entries.get(show.get("tmdb_id")) or {}).get("next")
-        day = _air_date(episode)
+        day = episode_air_date(episode)
         if day and today <= day < today + timedelta(days=days):
             rows.append((day, show, episode))
     return sorted(rows, key=lambda row: (row[0], (row[1].get("title") or "").lower()))

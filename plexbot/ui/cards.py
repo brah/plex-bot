@@ -318,13 +318,18 @@ def episode_code(episode: dict) -> str:
     return f"S{to_int(episode.get('season_number')):02d}E{to_int(episode.get('episode_number')):02d}"
 
 
-def next_episode_line(episode: Optional[dict], today: date) -> Optional[str]:
-    """"Next episode: S02E05 · Tomorrow" from TMDB's next_episode_to_air; None if unknown or past."""
+def episode_air_date(episode: Optional[dict]) -> Optional[date]:
+    """A TMDB episode's air date; None when it has none yet."""
     try:
-        day = datetime.strptime(str((episode or {}).get("air_date")), "%Y-%m-%d").date()
+        return datetime.strptime(str((episode or {}).get("air_date")), "%Y-%m-%d").date()
     except ValueError:
         return None
-    if day < today:
+
+
+def next_episode_line(episode: Optional[dict], today: date) -> Optional[str]:
+    """"Next episode: S02E05 · Tomorrow" from TMDB's next_episode_to_air; None if unknown or past."""
+    day = episode_air_date(episode)
+    if day is None or day < today:
         return None
     return f"Next episode: {episode_code(episode)} · {day_label(day, today)}"
 

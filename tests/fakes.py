@@ -294,11 +294,10 @@ def build_bot(tautulli):
     return bot, cog
 
 
-def build_media_bot(tautulli, items=(), tmdb=None):
-    """A PlexBot with MediaCommands loaded and a fresh media cache holding `items`."""
+def _library_bot(cog_class, tautulli, items, tmdb):
+    """A PlexBot with `cog_class` loaded, a fresh media cache holding `items`, and `tmdb` (or None)."""
     from datetime import datetime
 
-    from plexbot.cogs.media_commands import MediaCommands
     from plexbot.media_cache import MediaCache
     from plexbot.bot import PlexBot, install_slash_groups
 
@@ -310,30 +309,23 @@ def build_media_bot(tautulli, items=(), tmdb=None):
     bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb}
     bot._connection.application_id = 999
     install_slash_groups(bot)
-    cog = MediaCommands(bot)
+    cog = cog_class(bot)
     bot.add_cog(cog)
     return bot, cog
+
+
+def build_media_bot(tautulli, items=(), tmdb=None):
+    """A PlexBot with MediaCommands loaded."""
+    from plexbot.cogs.media_commands import MediaCommands
+
+    return _library_bot(MediaCommands, tautulli, items, tmdb)
 
 
 def build_upcoming_bot(tautulli, tmdb, items=()):
-    """A PlexBot with Upcoming loaded and a fresh media cache holding `items`."""
-    from datetime import datetime
-
+    """A PlexBot with Upcoming loaded."""
     from plexbot.cogs.upcoming import Upcoming
-    from plexbot.media_cache import MediaCache
-    from plexbot.bot import PlexBot, install_slash_groups
 
-    cache = MediaCache(tautulli)
-    cache.media_items = {str(item["rating_key"]): item for item in items}
-    cache.last_updated = datetime.now()
-    bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
-                  default_guild_ids=[GUILD_ID])
-    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb}
-    bot._connection.application_id = 999
-    install_slash_groups(bot)
-    cog = Upcoming(bot)
-    bot.add_cog(cog)
-    return bot, cog
+    return _library_bot(Upcoming, tautulli, items, tmdb)
 
 
 def build_stats_bot(tautulli):
