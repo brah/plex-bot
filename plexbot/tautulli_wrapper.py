@@ -123,14 +123,17 @@ class Tautulli:
         """Get the Tautulli history."""
         return await self.api_call("get_history", params)
 
-    async def get_history_rows(self, params: Dict[str, Any], page: int = 1000) -> Optional[list]:
+    async def get_history_rows(self, params: Dict[str, Any], page: int = 1000,
+                               fields: Optional[tuple] = None) -> Optional[list]:
         """Every history row matching params, a page at a time; None when Tautulli didn't answer.
 
         get_history returns at most `length` rows, newest first, so one call over a long window on a
         busy server would silently lose the oldest plays. Bound the rows with params (e.g. "after").
+        fields: keep only these keys, trimmed per page to save memory.
         """
         return await self._all_rows(
-            lambda start: self.get_history({**params, "start": start, "length": page}), page, key="row_id"
+            lambda start: self.get_history({**params, "start": start, "length": page}), page, key="row_id",
+            fields=fields,
         )
 
     async def get_library_media_rows(self, section_id, page: int = 1000) -> Optional[list]:
@@ -140,7 +143,7 @@ class Tautulli:
             key="rating_key",
         )
 
-    async def _all_rows(self, fetch, page: int, key: str) -> Optional[list]:
+    async def _all_rows(self, fetch, page: int, key: str, fields: Optional[tuple] = None) -> Optional[list]:
         """Call fetch(start) for successive pages of a paged Tautulli table until one comes back short.
 
         A row added while paging pushes the rest down a place, so the next page starts with a row
@@ -159,7 +162,7 @@ class Tautulli:
                 row_key = row.get(key)
                 if row_key is None or row_key not in seen:
                     seen.add(row_key)
-                    rows.append(row)
+                    rows.append({name: row[name] for name in fields if name in row} if fields else row)
             if len(batch) < page:
                 return rows
 

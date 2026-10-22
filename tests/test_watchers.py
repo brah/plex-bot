@@ -290,6 +290,19 @@ def test_history_rows_drop_a_play_pushed_onto_the_next_page():
     assert [row["row_id"] for row in rows] == [5, 4, 3, 2, 1]  # 4 came back on page two
 
 
+def test_history_rows_keep_only_the_fields_asked_for():
+    """Trimmed per page; duplicates still dropped."""
+    client = Tautulli(api_key="k", tautulli_ip="host:8181")
+    plays = [{"row_id": n, "user": "alice", "ip_address": "10.0.0.5"} for n in range(3)]
+
+    async def get_history(params=None):
+        page = plays[params["start"]:params["start"] + params["length"]]
+        return {"response": {"result": "success", "data": {"data": page}}}
+
+    client.get_history = get_history
+    assert asyncio.run(client.get_history_rows({}, page=2, fields=("user",))) == [{"user": "alice"}] * 3
+
+
 def test_history_rows_is_none_when_tautulli_fails_midway():
     client = Tautulli(api_key="k", tautulli_ip="host:8181")
     answers = [{"response": {"result": "success", "data": {"data": [{}, {}]}}}, None]

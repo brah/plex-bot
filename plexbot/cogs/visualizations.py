@@ -311,7 +311,7 @@ class Visualizations(commands.Cog):
             "after": (since.date() - timedelta(days=1)).isoformat(),
             "order_column": "date", "order_dir": "desc",
         }
-        rows = await self.tautulli.get_history_rows(params)
+        rows = await self.tautulli.get_history_rows(params, fields=(*_PLAY_FIELDS, "started", "date"))
         if rows is None:
             logger.error("Failed to retrieve watch history from Tautulli.")
             return None
