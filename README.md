@@ -64,7 +64,7 @@ A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautu
 
 ## Install
 
-Run exactly one instance, near Tautulli. It needs no open ports. You need a working Tautulli, a Discord server you can add bots to, and either Docker or Python 3.12+. qBittorrent, Sonarr and a TMDB API key are optional.
+Run exactly one instance, near Tautulli. It needs no open ports. You need a working Tautulli, a Discord server you can add bots to, and either Docker or Python 3.12+. qBittorrent, Sonarr, Radarr and a TMDB API key are optional.
 
 ### 1. Discord
 
@@ -211,6 +211,8 @@ Set options as environment variables or in `config.json`, starting from [`.env.e
 | `tmdb.apikey` | `PLEXBOT_TMDB_APIKEY` | [TMDB API key](https://www.themoviedb.org/settings/api), for trailers, More like this, next episodes and `/plex upcoming` |
 | `sonarr.url` | `PLEXBOT_SONARR_URL` | Sonarr's address, like `http://192.168.1.10:8989`. `/plex upcoming` then reads Sonarr's calendar |
 | `sonarr.apikey` | `PLEXBOT_SONARR_APIKEY` | Sonarr's API key, under **Settings → General** |
+| `radarr.url` | `PLEXBOT_RADARR_URL` | Radarr's address, like `http://192.168.1.10:7878`. `/plex upcoming` then lists its monitored movies coming out that week |
+| `radarr.apikey` | `PLEXBOT_RADARR_APIKEY` | Radarr's API key, under **Settings → General** |
 | `core.legacy_text_commands` | `PLEXBOT_CORE_LEGACY_TEXT_COMMANDS` | Point old text commands like `plex status` at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
 | `core.log_level` | `PLEXBOT_CORE_LOG_LEVEL` | `DEBUG` to `ERROR` |
 
@@ -249,7 +251,7 @@ Everything is under `/plex`, plus `/plexadmin` for admins.
 | `/plex movie`, `/plex tv` | Look up a title: details, cast, who's watched it |
 | `/plex random` | A random pick, optionally by type and genre |
 | `/plex recent` | Recently added |
-| `/plex upcoming` | New episodes this week for shows on the server |
+| `/plex upcoming` | New episodes and movie releases this week |
 | `/plex recommend` | Unwatched picks from someone's favourite genres |
 | `/plex top` | Top watchers; also hands out the top-three roles |
 | `/plex stats` | Server stats across five pages |

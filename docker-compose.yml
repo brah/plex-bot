@@ -20,7 +20,7 @@ services:
       # Prefer a config file to .env? Uncomment; environment variables still win.
       # - ./config.json:/data/config.json:ro
 
-    # Reaching Tautulli / qBittorrent / Sonarr:
+    # Reaching Tautulli / qBittorrent / Sonarr / Radarr:
     #  - Both in this Docker network: use the service name, e.g. "tautulli:8181".
     #  - Tautulli native on the host: use the host's LAN IP, OR uncomment the
     #    mapping below and use "host.docker.internal:8181".

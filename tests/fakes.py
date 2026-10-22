@@ -210,16 +210,30 @@ class FakeTMDB:
 class FakeSonarr:
     """Stands in for tautulli_wrapper.Sonarr: the calendar's episodes, or None when it's down."""
 
-    def __init__(self, episodes=None, reachable=True):
-        self.episodes, self.reachable = list(episodes or []), reachable
+    def __init__(self, items=None, reachable=True):
+        self.items, self.reachable = list(items or []), reachable
         self.calls = []
 
     async def calendar(self, start, end):
         self.calls.append((start, end))
-        return self.episodes if self.reachable else None
+        return self.items if self.reachable else None
 
     async def close(self):
         pass
+
+
+class FakeRadarr(FakeSonarr):
+    """Stands in for tautulli_wrapper.Radarr: like Radarr, only movies with a release from start to end."""
+
+    async def calendar(self, start, end):
+        from datetime import datetime
+
+        movies = await super().calendar(start, end)
+        if movies is None:
+            return None
+        return [movie for movie in movies
+                if any(start <= datetime.fromisoformat(movie[field]) <= end
+                       for field in ("inCinemas", "digitalRelease", "physicalRelease") if movie.get(field))]
 
 
 class FakeHTTPSession:
@@ -338,8 +352,8 @@ def build_bot(tautulli):
     return bot, cog
 
 
-def _library_bot(cog_class, tautulli, items, tmdb, sonarr=None):
-    """A PlexBot with `cog_class` loaded, a fresh media cache holding `items`, and `tmdb` and `sonarr`."""
+def _library_bot(cog_class, tautulli, items, tmdb, sonarr=None, radarr=None):
+    """A PlexBot with `cog_class` loaded, a fresh media cache holding `items`, and these API clients."""
     from datetime import datetime
 
     from plexbot.media_cache import MediaCache
@@ -350,7 +364,8 @@ def _library_bot(cog_class, tautulli, items, tmdb, sonarr=None):
     cache.last_updated = datetime.now()
     bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
-    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb, "sonarr": sonarr}
+    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb, "sonarr": sonarr,
+                            "radarr": radarr}
     bot._connection.application_id = 999
     install_slash_groups(bot)
     cog = cog_class(bot)
@@ -365,11 +380,11 @@ def build_media_bot(tautulli, items=(), tmdb=None):
     return _library_bot(MediaCommands, tautulli, items, tmdb)
 
 
-def build_upcoming_bot(tautulli, tmdb, items=(), sonarr=None):
+def build_upcoming_bot(tautulli, tmdb, items=(), sonarr=None, radarr=None):
     """A PlexBot with Upcoming loaded."""
     from plexbot.cogs.upcoming import Upcoming
 
-    return _library_bot(Upcoming, tautulli, items, tmdb, sonarr)
+    return _library_bot(Upcoming, tautulli, items, tmdb, sonarr, radarr)
 
 
 def build_stats_bot(tautulli):

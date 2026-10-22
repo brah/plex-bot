@@ -8,6 +8,7 @@ What changed in each release, newest first. Releases are also on
 ### New features
 
 - `/plex upcoming` can read Sonarr's calendar: every episode, on the day it airs in your timezone, with the downloaded ones marked. Set `sonarr.url` and `sonarr.apikey` ([how](https://github.com/brah/plex-bot#configuration)).
+- `/plex upcoming` lists movies coming out this week that Radarr is monitoring and hasn't downloaded yet. Set `radarr.url` and `radarr.apikey`.
 
 ## 1.3.1 - 2026-10-22
 

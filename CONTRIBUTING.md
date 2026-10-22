@@ -24,9 +24,9 @@ The bot is the `plexbot` package; `python -m plexbot` runs it.
 | --- | --- |
 | `plexbot/bot.py` | Startup. `setup_hook` creates the shared Tautulli client and media cache once, then loads every cog. nextcord never calls `setup_hook` itself; `PlexBot.start()` does. |
 | `plexbot/slash_commands.py` | The `/plex` and `/plexadmin` command groups. `/plexadmin` is admin-only, through `admin_check`. |
-| `plexbot/cogs/` | The commands, one module per area: server, media, stats, charts, recommendations, upcoming episodes, user management, help. |
+| `plexbot/cogs/` | The commands, one module per area: server, media, stats, charts, recommendations, upcoming episodes and movies, user management, help. |
 | `plexbot/ui/` | Everything users see: colours, text formatting, images, charts, and the `Reply` builder. |
-| `plexbot/tautulli_wrapper.py` | The Tautulli, TMDB and Sonarr API clients. |
+| `plexbot/tautulli_wrapper.py` | The Tautulli, TMDB, Sonarr and Radarr API clients. |
 | `plexbot/media_cache.py` | A local copy of the library for autocomplete, random picks and recommendations. |
 | `plexbot/utilities.py` | Links between Plex users and Discord members (`map.json`), viewer names and avatars, log redaction. |
 | `plexbot/config.py` | Every setting with its default. |

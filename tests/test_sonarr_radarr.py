@@ -1,4 +1,4 @@
-"""The Sonarr client: the calendar request, and failures."""
+"""The Sonarr and Radarr clients: the calendar request, and failures."""
 
 import asyncio
 import logging
@@ -43,3 +43,25 @@ def test_an_address_without_a_scheme_gets_http():
     # Like tautulli.ip, or a Docker service name.
     assert Sonarr("sonarr:8989", "key").api_url == "http://sonarr:8989/api/v3/"
     assert Sonarr("https://sonarr.example.com", "key").api_url == "https://sonarr.example.com/api/v3/"
+
+
+def test_radarr_calendar_asks_for_movies():
+    from plexbot.tautulli_wrapper import Radarr
+
+    radarr = Radarr("radarr:7878", "secret")
+    radarr.session = FakeHTTPSession((200, [{"title": "Dune: Part Three"}]))
+    assert asyncio.run(radarr.calendar(START, END)) == [{"title": "Dune: Part Three"}]
+    url, kwargs = radarr.session.requests[0]
+    assert url == "http://radarr:7878/api/v3/calendar"
+    assert kwargs["headers"] == {"X-Api-Key": "secret"}
+    assert kwargs["params"] == {"start": "2026-10-21T22:00:00Z", "end": "2026-10-28T22:00:00Z"}
+
+
+def test_radarr_names_its_own_setting(caplog):
+    from plexbot.tautulli_wrapper import Radarr
+
+    radarr = Radarr("http://radarr:7878", "wrong")
+    radarr.session = FakeHTTPSession((401, {}))
+    with caplog.at_level(logging.ERROR, logger="plexbot.tautulli_wrapper"):
+        assert asyncio.run(radarr.calendar(START, END)) is None
+    assert "Radarr refused" in caplog.text and "radarr.apikey" in caplog.text

@@ -38,6 +38,7 @@ def config_secrets() -> list:
         config.get("tautulli", "apikey"),
         config.get("tmdb", "apikey"),
         config.get("sonarr", "apikey"),
+        config.get("radarr", "apikey"),
         config.get("qbittorrent", "password"),
     ]
 

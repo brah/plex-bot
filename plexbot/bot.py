@@ -14,7 +14,7 @@ from plexbot.config import config
 from plexbot.errors import ErrorHandler
 from plexbot.slash_commands import SlashGroups, admin_check
 
-from plexbot.tautulli_wrapper import Sonarr, Tautulli, TMDB
+from plexbot.tautulli_wrapper import Radarr, Sonarr, Tautulli, TMDB
 from plexbot.media_cache import MediaCache
 from plexbot.ui.format import is_truthy
 from plexbot.ui.theme import Emoji
@@ -69,10 +69,13 @@ async def initialize_resources():
         resources["tmdb"] = None
         logger.info("No TMDB API key provided, TMDB features will be disabled.")
 
-    sonarr_url, sonarr_key = config.get("sonarr", "url"), config.get("sonarr", "apikey")
-    resources["sonarr"] = Sonarr(sonarr_url, sonarr_key) if sonarr_url and sonarr_key else None
-    if bool(sonarr_url) != bool(sonarr_key):
-        logger.warning("Sonarr needs both sonarr.url and sonarr.apikey; /plex upcoming won't use it.")
+    for client in (Sonarr, Radarr):
+        name = client.__name__.lower()
+        url, key = config.get(name, "url"), config.get(name, "apikey")
+        resources[name] = client(url, key) if url and key else None
+        if bool(url) != bool(key):
+            logger.warning(f"{client.__name__} needs both {name}.url and {name}.apikey; "
+                           "/plex upcoming won't use it.")
 
     # Initialize media cache
     logger.info("Initializing media cache...")
@@ -190,7 +193,7 @@ class PlexBot(commands.Bot):
 
             logger.info("Closing shared resources...")
             resources = getattr(self, "shared_resources", None) or {}
-            for name in ("media_cache", "tautulli", "tmdb", "sonarr"):
+            for name in ("media_cache", "tautulli", "tmdb", "sonarr", "radarr"):
                 client = resources.get(name)
                 if client is not None:
                     try:

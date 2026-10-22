@@ -1,4 +1,4 @@
-"""Async clients for Tautulli's API (every call goes through Tautulli.api_call), TMDB's and Sonarr's."""
+"""Async clients for Tautulli's API (every call goes through Tautulli.api_call), TMDB, Sonarr and Radarr."""
 
 import asyncio
 import ipaddress
@@ -385,27 +385,28 @@ def _utc(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-class Sonarr(_HTTPClient):
-    """Sonarr's API, for /plex upcoming. Created when sonarr.url and sonarr.apikey are set.
-
-    Sonarr v4 and v5 both serve it at /api/v3.
-    """
+class _Calendar(_HTTPClient):
+    """Sonarr's or Radarr's calendar, for /plex upcoming. Both serve it at /api/v3 (Sonarr v4 and v5,
+    Radarr v5 and v6). Created when <name>.url and <name>.apikey are set."""
 
     TIMEOUT = 10  # seconds
+    params: dict = {}  # added to every calendar request
 
     def __init__(self, url: str, api_key: str) -> None:
+        self.name = type(self).__name__  # "Sonarr", and "sonarr" in its setting names
         url = url if "://" in url else f"http://{url}"  # written like tautulli.ip: "sonarr:8989"
         self.api_url = url.rstrip("/") + "/api/v3/"
         self.api_key = api_key
         parts = urlsplit(url)
         if parts.scheme == "http" and on_the_internet(parts.netloc):
-            logger.warning(f"Sonarr at {parts.netloc} is reached over the internet using HTTP, so the API "
-                           "key is sent in plaintext. Set sonarr.url to an https:// address.")
+            logger.warning(f"{self.name} at {parts.netloc} is reached over the internet using HTTP, so "
+                           f"the API key is sent in plaintext. Set {self.name.lower()}.url to an https:// "
+                           "address.")
 
     async def calendar(self, start: datetime, end: datetime) -> Optional[list]:
-        """Monitored episodes from start to end, with their series; None when Sonarr didn't answer."""
+        """What's monitored and dated from start to end; None when it didn't answer."""
         self._ensure_session()
-        params = {"start": _utc(start), "end": _utc(end), "includeSeries": "true"}
+        params = {"start": _utc(start), "end": _utc(end), **self.params}
         try:
             async with self.session.get(
                 self.api_url + "calendar", params=params, headers={"X-Api-Key": self.api_key},
@@ -414,8 +415,18 @@ class Sonarr(_HTTPClient):
                 response.raise_for_status()
                 return await response.json()
         except aiohttp.ClientResponseError as exc:
-            hint = " Check sonarr.apikey." if exc.status == 401 else ""
-            logger.error(f"Sonarr refused the calendar request (HTTP {exc.status}).{hint}")
+            hint = f" Check {self.name.lower()}.apikey." if exc.status == 401 else ""
+            logger.error(f"{self.name} refused the calendar request (HTTP {exc.status}).{hint}")
         except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError) as exc:
-            logger.error(f"Couldn't reach Sonarr: {exc!r}")
+            logger.error(f"Couldn't reach {self.name}: {exc!r}")
         return None
+
+
+class Sonarr(_Calendar):
+    """Episodes, each with its series."""
+
+    params = {"includeSeries": "true"}
+
+
+class Radarr(_Calendar):
+    """Movies with a cinema, digital or disc release in the range."""

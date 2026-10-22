@@ -1,4 +1,4 @@
-"""/plex upcoming: next episodes from Sonarr's calendar, or TMDB, for shows on the server."""
+"""/plex upcoming: episodes from Sonarr's calendar or TMDB, and movies from Radarr's calendar."""
 
 import asyncio
 import time
@@ -7,8 +7,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from fakes import FakeSonarr, FakeTautulli, FakeTMDB, Recorder, build_upcoming_bot, interaction
-from plexbot.cogs.upcoming import Upcoming, sonarr_rows, upcoming_card, upcoming_rows
+from fakes import FakeRadarr, FakeSonarr, FakeTautulli, FakeTMDB, Recorder, build_upcoming_bot, interaction
+from plexbot.cogs.upcoming import (
+    Upcoming, _row_order, radarr_rows, sonarr_rows, upcoming_card, upcoming_rows,
+)
 from plexbot.ui.theme import Limits
 
 TODAY = date(2026, 10, 22)
@@ -51,7 +53,7 @@ def test_upcoming_card_groups_by_day():
     ]
     embed = upcoming_card(rows, TODAY, "srv1").embeds[0]
     text = embed.description
-    assert embed.title == "📅 Airing this week"
+    assert embed.title == "📅 Coming up this week"
     assert text.index("**Today**") < text.index("**Tomorrow**")
     assert "[Severance](https://app.plex.tv/desktop/#!/server/srv1/details" in text
     assert "S02E05 · Trojan's Horse" in text
@@ -99,9 +101,9 @@ def test_refresh_skips_finished_and_fresh():
     assert cog.entries[1]["next"] == {"air_date": "2026-10-23"}  # kept from the last answer
 
 
-def _command(tmdb, items, sonarr=None):
+def _command(tmdb, items, sonarr=None, radarr=None):
     async def run():
-        bot, cog = build_upcoming_bot(FakeTautulli([]), tmdb, items, sonarr)
+        bot, cog = build_upcoming_bot(FakeTautulli([]), tmdb, items, sonarr, radarr)
         await Upcoming.upcoming.callback(cog, interaction(bot))
 
     asyncio.run(run())
@@ -113,7 +115,7 @@ def test_command_without_tmdb_or_sonarr(monkeypatch):
     sent = recorder.last("send_message")
     assert sent["ephemeral"] is True
     assert sent["embeds"][0].description == (
-        "Neither Sonarr nor TMDB is set up.\n-# An admin can add either in config.json or .env.")
+        "Sonarr, Radarr and TMDB aren't set up.\n-# An admin can add any of them in config.json or .env.")
 
 
 def test_command_tmdb_down_first_time(monkeypatch):
@@ -129,7 +131,7 @@ def test_command_nothing_airing(monkeypatch):
     _command(FakeTMDB(shows={1: {"status": "Ended"}}), [_show("1", "Severance", 1)])
     sent = recorder.last("followup")
     assert sent["ephemeral"] is False
-    assert sent["embeds"][0].description.startswith("Nothing's airing in the next week.")
+    assert sent["embeds"][0].description.startswith("Nothing's coming up in the next week.")
 
 
 def test_command_lists_this_weeks_episodes(monkeypatch):
@@ -322,3 +324,58 @@ def test_sonarr_answers_without_waiting_for_an_empty_media_cache(monkeypatch):
 
     assert asyncio.run(run()) == []
     assert "**Severance**" in recorder.last("followup")["embeds"][0].description
+
+
+def _movie(title, year=2026, has_file=False, **dates):
+    return {"title": title, "year": year, "hasFile": has_file, **dates}
+
+
+def test_radarr_rows_list_each_release_in_the_week():
+    movies = [
+        _movie("Dune: Part Three", inCinemas="2026-10-22T00:00:00Z", digitalRelease="2026-10-25T00:00:00Z"),
+        _movie("On disc", physicalRelease="2026-10-24T00:00:00Z"),
+        _movie("Already downloaded", has_file=True, digitalRelease="2026-10-23T00:00:00Z"),
+        _movie("Next week", digitalRelease="2026-10-29T00:00:00Z"),
+        _movie("Yesterday", inCinemas="2026-10-21T00:00:00Z"),
+        _movie("No dates yet"),
+    ]
+    rows = radarr_rows(movies, TODAY)
+    assert [(day.isoformat(), movie["title"], release["release"]) for day, movie, release in rows] == [
+        ("2026-10-22", "Dune: Part Three", "In cinemas"),
+        ("2026-10-24", "On disc", "Disc release"),
+        ("2026-10-25", "Dune: Part Three", "Digital release"),
+    ]
+
+
+def test_movies_follow_the_days_episodes():
+    rows = [(TODAY, {"title": "Dune: Part Three", "year": 2026}, {"release": "In cinemas"}),
+            (TODAY, _show("200", "Zorro", 1), {"season_number": 1, "episode_number": 2})]
+    rows.sort(key=_row_order)
+    text = upcoming_card(rows, TODAY, "srv1").embeds[0].description
+    assert text.index("Zorro") < text.index("Dune")
+    assert "🎬 **Dune: Part Three (2026)** · In cinemas" in text
+
+
+def test_command_lists_radarr_movies_on_their_date_behind_utc(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    tautulli = FakeTautulli([])
+    tautulli.settings = {"default_timezone": "America/New_York"}
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    # Radarr keeps a release as midnight UTC on its date: in New York that's the evening before.
+    radarr = FakeRadarr([_movie("Dune: Part Three", inCinemas=f"{today.isoformat()}T00:00:00Z")])
+
+    async def run():
+        bot, cog = build_upcoming_bot(tautulli, None, [], None, radarr)
+        await Upcoming.upcoming.callback(cog, interaction(bot))
+
+    asyncio.run(run())
+    text = recorder.last("followup")["embeds"][0].description
+    assert "**Today**" in text and "Dune: Part Three (2026)** · In cinemas" in text
+
+
+def test_command_radarr_down(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    _command(None, [], FakeSonarr([]), FakeRadarr(reachable=False))
+    sent = recorder.last("followup")
+    assert sent["ephemeral"] is True
+    assert "Couldn't reach **Radarr**." in sent["embeds"][0].description

@@ -181,6 +181,10 @@ def setup_default_config():
     sonarr.add("url", "", 'Sonarr\'s address, like "http://192.168.1.10:8989"')
     sonarr.add("apikey", "", "Sonarr API key (Settings > General)")
 
+    radarr = config.add_section("radarr", "Radarr settings, for /plex upcoming")
+    radarr.add("url", "", 'Radarr\'s address, like "http://192.168.1.10:7878"')
+    radarr.add("apikey", "", "Radarr API key (Settings > General)")
+
     ui = config.add_section("ui", "User interface settings")
     ui.add("plex_embed_color", 0xE5A00D, 'Embed color: a number (15040013) or hex text ("#E5A00D")')
 
