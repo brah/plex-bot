@@ -102,6 +102,11 @@ class MediaCache:
         if self._refresh is None or self._refresh.done():
             self._refresh = asyncio.create_task(self.update_cache())
 
+    async def wait_for_refresh(self) -> None:
+        """Wait for a background refresh under way (like the startup fill), if there is one."""
+        if self._refresh is not None and not self._refresh.done():
+            await asyncio.wait({self._refresh})
+
     async def close(self) -> None:
         """Stop any update (in the background, or Refresh now), so it doesn't outlive the Tautulli
         session it uses: a late call would open a new session that's never closed."""
@@ -352,7 +357,8 @@ class MediaCache:
             for row in media_items:
                 key = str(row["rating_key"])
                 cached = None if full else self.media_items.get(key)
-                if cached:
+                # Titles cached before TMDB ids are read again, in case the startup refresh failed.
+                if cached and "tmdb_id" in cached:
                     library_items.append({**cached, "section_id": section_id})
                 elif full or now - self._unreadable.get(key, float("-inf")) > _RETRY_UNREADABLE:
                     rating_keys.append(key)

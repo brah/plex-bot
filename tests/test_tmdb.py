@@ -1,4 +1,10 @@
-"""The TMDB client's pure helpers: ids from Plex guids, trailer choice, suggestion order and auth."""
+"""The TMDB client: ids from Plex guids, trailer choice, suggestion order, auth and failures."""
+
+import asyncio
+import contextlib
+import logging
+
+import aiohttp
 
 from plexbot.tautulli_wrapper import TMDB
 
@@ -37,3 +43,53 @@ def test_suggestion_ids_order_and_dedupe():
 def test_api_key_or_read_access_token():
     assert TMDB("abc123")._auth() == ({}, {"api_key": "abc123"})
     assert TMDB("eyJhbGciOi.x.y")._auth() == ({"Authorization": "Bearer eyJhbGciOi.x.y"}, {})
+
+
+class _Response:
+    def __init__(self, status):
+        self.status = status
+
+    def raise_for_status(self):
+        if self.status >= 400:
+            raise aiohttp.ClientResponseError(None, (), status=self.status)
+
+    async def json(self):
+        return {"id": 1}
+
+
+class _Session:
+    closed = False
+
+    def __init__(self, *statuses):
+        self.statuses = list(statuses)
+
+    @contextlib.asynccontextmanager
+    async def get(self, url, **kwargs):
+        yield _Response(self.statuses.pop(0))
+
+
+def test_a_missing_title_isnt_an_outage(caplog):
+    tmdb = TMDB("key")
+    tmdb.session = _Session(404, 200)
+
+    async def run():
+        return await tmdb.show(1), await tmdb.show(2)
+
+    with caplog.at_level(logging.DEBUG, logger="plexbot.tautulli_wrapper"):
+        assert asyncio.run(run()) == (None, {"id": 1})
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert "answering again" not in caplog.text
+
+
+def test_an_outage_is_logged_once(caplog):
+    tmdb = TMDB("key")
+    tmdb.session = _Session(503, 503, 200)
+
+    async def run():
+        for tmdb_id in (1, 2, 3):
+            await tmdb.show(tmdb_id)
+
+    with caplog.at_level(logging.DEBUG, logger="plexbot.tautulli_wrapper"):
+        asyncio.run(run())
+    assert len([r for r in caplog.records if r.levelno == logging.ERROR]) == 1
+    assert "TMDB is answering again." in caplog.text

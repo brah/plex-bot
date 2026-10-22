@@ -328,16 +328,23 @@ class TMDB:
             ) as response:
                 response.raise_for_status()
                 body = await response.json()
+        except aiohttp.ClientResponseError as exc:
+            if exc.status == 404:  # a title TMDB doesn't have, not an outage
+                logger.debug(f"TMDB has nothing at '{path}'")
+                return None
+            return self._failed(path, exc)
         except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError) as exc:
-            # Log the first failure of an outage as an error, the rest at DEBUG until TMDB answers.
-            log = logger.debug if self._unreachable else logger.error
-            log(f"TMDB request '{path}' failed: {exc!r}")
-            self._unreachable = True
-            return None
+            return self._failed(path, exc)
         if self._unreachable:
             self._unreachable = False
             logger.info("TMDB is answering again.")
         return body
+
+    def _failed(self, path: str, exc: Exception) -> None:
+        """Log the first failure of an outage as an error, the rest at DEBUG until TMDB answers."""
+        log = logger.debug if self._unreachable else logger.error
+        log(f"TMDB request '{path}' failed: {exc!r}")
+        self._unreachable = True
 
     async def title(self, kind: str, tmdb_id: int) -> Optional[dict]:
         """A movie's or show's details, with its recommendations, similar titles and videos."""

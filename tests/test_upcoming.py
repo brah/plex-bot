@@ -144,3 +144,59 @@ def test_registered_in_help():
         return {entry.usage: entry.category for entry in collect_help_entries(bot)}
 
     assert asyncio.run(run())["/plex upcoming"] == "library"
+
+
+def test_a_show_in_two_libraries_is_listed_once():
+    shows = [_show("1", "Severance", 7), _show("2", "Severance", 7)]  # an HD and a 4K library
+    assert len(upcoming_rows(shows, {7: _entry("2026-10-22")}, TODAY)) == 1
+
+
+def test_known_episodes_answer_at_once_and_refresh_in_the_background(monkeypatch):
+    recorder = Recorder(monkeypatch)
+    today = datetime.now(timezone.utc).date()
+    tmdb = FakeTMDB(shows={1: {"status": "Returning Series", "next_episode_to_air": {
+        "air_date": (today + timedelta(days=1)).isoformat(), "season_number": 1, "episode_number": 2}}})
+
+    async def run():
+        bot, cog = build_upcoming_bot(FakeTautulli([]), tmdb, [_show("1", "Severance", 1)])
+        cog.entries = {1: dict(_entry(today.isoformat()), fetched=time.monotonic() - 13 * 3600)}
+        await Upcoming.upcoming.callback(cog, interaction(bot))
+        await cog._refreshing
+        return cog.entries[1]["next"]["episode_number"]
+
+    assert asyncio.run(run()) == 2  # updated for next time
+    assert "S01E01" in recorder.last("followup")["embeds"][0].description  # answered with what it knew
+
+
+def test_warm_up_waits_for_the_media_cache_then_asks_tmdb():
+    tmdb = FakeTMDB(shows={1: {"status": "Ended"}})
+
+    async def run():
+        bot, cog = build_upcoming_bot(FakeTautulli([]), tmdb, [_show("1", "Severance", 1)])
+        filled = asyncio.Event()
+        cog.media_cache._refresh = asyncio.create_task(filled.wait())  # the startup fill, still running
+        cog.start_warm_up()
+        await asyncio.sleep(0.01)
+        asked_early = list(tmdb.calls)
+        filled.set()
+        await cog._refreshing
+        return asked_early, list(tmdb.calls)
+
+    assert asyncio.run(run()) == ([], [("show", 1)])
+
+
+def test_unloading_stops_a_refresh():
+    class SlowTMDB(FakeTMDB):
+        async def show(self, tmdb_id):
+            await asyncio.sleep(60)
+
+    async def run():
+        bot, cog = build_upcoming_bot(FakeTautulli([]), SlowTMDB(), [_show("1", "Severance", 1)])
+        cog.start_warm_up()
+        await asyncio.sleep(0.01)
+        task = cog._refreshing
+        cog.cog_unload()
+        await asyncio.wait({task})
+        return task
+
+    assert asyncio.run(run()).cancelled()

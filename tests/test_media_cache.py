@@ -28,6 +28,11 @@ class LibraryTautulli(FakeTautulli):
 
 
 def _item(key, title):
+    return {"rating_key": key, "title": title, "media_type": "movie", "genres": ["drama"], "tmdb_id": None}
+
+
+def _old_item(key, title):
+    """A title cached before the cache kept TMDB ids."""
     return {"rating_key": key, "title": title, "media_type": "movie", "genres": ["drama"]}
 
 
@@ -313,9 +318,18 @@ def _cache_on_disk(tmp_path, items, monkeypatch):
 
 
 def test_old_cache_refreshes_fully_once(tmp_path, monkeypatch):
-    assert _cache_on_disk(tmp_path, [_item("1", "Cached before TMDB ids")], monkeypatch) == [True]
+    assert _cache_on_disk(tmp_path, [_old_item("1", "Cached before TMDB ids")], monkeypatch) == [True]
 
 
 def test_cache_with_tmdb_ids_doesnt_refresh(tmp_path, monkeypatch):
     items = [dict(_item("1", "Has one"), tmdb_id=5), dict(_item("2", "Has none"), tmdb_id=None)]
     assert _cache_on_disk(tmp_path, items, monkeypatch) == []
+
+
+def test_an_update_adds_tmdb_ids_the_startup_refresh_missed(tmp_path):
+    # Tautulli was down when the bot started, so the one full refresh failed.
+    tautulli = LibraryTautulli({"1": "Spirited Away"})
+    tautulli.metadata["1"]["guids"] = ["tmdb://129"]
+    cache = _stale_cache(tautulli, tmp_path, [_old_item("1", "Spirited Away")])
+    assert asyncio.run(cache.update_cache()) is True
+    assert cache.media_items["1"]["tmdb_id"] == 129

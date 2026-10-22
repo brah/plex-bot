@@ -35,8 +35,11 @@ def upcoming_rows(shows: list, entries: dict, today: date, days: int = UPCOMING_
     """(air date, cached show, TMDB episode) for episodes airing in the next `days` days, soonest first."""
     # shortcut: next_episode_to_air is one episode per show, so a multi-episode drop lists the first;
     # read the season's episodes if that matters.
-    rows = []
+    rows, seen = [], set()
     for show in shows:
+        if show.get("tmdb_id") in seen:  # the same show in two libraries (HD and 4K)
+            continue
+        seen.add(show.get("tmdb_id"))
         episode = (entries.get(show.get("tmdb_id")) or {}).get("next")
         day = _air_date(episode)
         if day and today <= day < today + timedelta(days=days):
@@ -81,7 +84,30 @@ class Upcoming(commands.Cog):
         # TMDB id -> {"status": TMDB's, "next": its next_episode_to_air, "fetched": time.monotonic()}
         self.entries: dict = {}
         self._lock = asyncio.Lock()  # concurrent commands share one refresh
-        self._semaphore = asyncio.Semaphore(8)
+        # TMDB takes ~0.6 s a request from some hosts, so ~370 shows take ~15 s even 16 at a time.
+        self._semaphore = asyncio.Semaphore(16)
+        self._refreshing: Optional[asyncio.Task] = None  # the warm-up or a background refresh
+
+    def cog_unload(self) -> None:
+        if self._refreshing is not None:
+            self._refreshing.cancel()
+
+    @staticmethod
+    def _shows(items) -> list:
+        return [item for item in items if item.get("media_type") == "show" and item.get("tmdb_id")]
+
+    def start_warm_up(self) -> None:
+        """Ask TMDB about every show in the background at startup, so /plex upcoming answers at once."""
+        if self.tmdb is not None and self.media_cache is not None:
+            self._refreshing = asyncio.create_task(self.warm_up())
+
+    async def warm_up(self) -> None:
+        await self.media_cache.wait_for_refresh()  # the startup fill can add shows and their TMDB ids
+        await self.refresh(self._shows(self.media_cache.media_items.values()))
+
+    def _refresh_in_background(self, shows: list) -> None:
+        if self._refreshing is None or self._refreshing.done():
+            self._refreshing = asyncio.create_task(self.refresh(shows))
 
     def _due(self, tmdb_id: int, now: float) -> bool:
         entry = self.entries.get(tmdb_id)
@@ -118,8 +144,10 @@ class Upcoming(commands.Cog):
         cached = []
         if self.media_cache:
             cached = await self.media_cache.get_items(media_type="show", limit=_WHOLE_LIBRARY)
-        shows = [show for show in cached if show.get("tmdb_id")]
-        if not await self.refresh(shows):
+        shows = self._shows(cached)
+        if self.entries:
+            self._refresh_in_background(shows)  # answer with what's known; due shows update for next time
+        elif not await self.refresh(shows):
             await service_down("TMDB").send(interaction, ephemeral=True, replace_placeholder=True)
             return
         today = datetime.now(await self.tautulli.server_timezone()).date()
@@ -131,4 +159,6 @@ class Upcoming(commands.Cog):
 
 
 def setup(bot):
-    bot.add_cog(Upcoming(bot))
+    cog = Upcoming(bot)
+    bot.add_cog(cog)
+    cog.start_warm_up()
