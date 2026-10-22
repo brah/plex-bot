@@ -4,11 +4,18 @@ import asyncio
 import time
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+
 from fakes import FakeTautulli, FakeTMDB, Recorder, build_upcoming_bot, interaction
 from plexbot.cogs.upcoming import Upcoming, upcoming_card, upcoming_rows
 from plexbot.ui.theme import Limits
 
 TODAY = date(2026, 10, 22)
+
+
+@pytest.fixture(autouse=True)
+def no_rate_wait(monkeypatch):
+    monkeypatch.setattr("plexbot.cogs.upcoming._MIN_REQUEST_SECONDS", 0)
 
 
 def _show(key, title, tmdb_id):
@@ -200,3 +207,18 @@ def test_unloading_stops_a_refresh():
         return task
 
     assert asyncio.run(run()).cancelled()
+
+
+def test_lookups_stay_under_tmdbs_rate_limit(monkeypatch):
+    import plexbot.cogs.upcoming as upcoming
+
+    monkeypatch.setattr(upcoming, "_MIN_REQUEST_SECONDS", 0.05)
+    tmdb = FakeTMDB(shows={i: {"status": "Ended"} for i in range(32)})  # answers at once, like a fast host
+    cog = _cog(tmdb)
+
+    async def run():
+        started = time.monotonic()
+        await cog.refresh([_show(str(i), f"Show {i}", i) for i in range(32)])
+        return time.monotonic() - started
+
+    assert asyncio.run(run()) >= 0.1  # 32 lookups, 16 at a time, each holding its slot 0.05 s

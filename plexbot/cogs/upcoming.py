@@ -22,6 +22,8 @@ UPCOMING_DAYS = 7
 _STALE = 12 * 3600  # seconds before a show's next episode is asked about again
 _FINISHED = {"Ended", "Canceled"}  # TMDB statuses not asked about again until the bot restarts
 _WHOLE_LIBRARY = 100_000  # get_items needs a limit; this means "all of them"
+# Each of the 16 lookups at a time holds its slot this long: at most 32 a second, under TMDB's ~40.
+_MIN_REQUEST_SECONDS = 0.5
 
 
 def _air_date(episode: Optional[dict]) -> Optional[date]:
@@ -117,7 +119,8 @@ class Upcoming(commands.Cog):
 
     async def _ask(self, tmdb_id: int) -> Optional[dict]:
         async with self._semaphore:
-            return await self.tmdb.show(tmdb_id)
+            answer, _ = await asyncio.gather(self.tmdb.show(tmdb_id), asyncio.sleep(_MIN_REQUEST_SECONDS))
+            return answer
 
     async def refresh(self, shows: list) -> bool:
         """Ask TMDB about shows not asked lately; False when it answered nothing and nothing is known."""
