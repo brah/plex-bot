@@ -13,7 +13,7 @@ qbittorrent-api==2026.10.0
 # Charts (/plex chart)
 matplotlib==3.11.2
 # Image composition (poster strips, poster tint); also a matplotlib dependency.
-pillow==12.3.0
+pillow==13.0.0
 
 # Timezones: zone lookups use stdlib zoneinfo, which needs an IANA database —
 # tzdata supplies it on platforms without a system copy (Windows, slim containers);
