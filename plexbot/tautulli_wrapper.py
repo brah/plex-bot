@@ -1,4 +1,4 @@
-"""Async client for Tautulli's API (every call goes through Tautulli.api_call), plus an unused TMDB client."""
+"""Async clients for Tautulli's API (every call goes through Tautulli.api_call) and TMDB's."""
 
 import asyncio
 import ipaddress
@@ -268,118 +268,97 @@ class Tautulli:
             params["search"] = search
         return await self.api_call("get_library_media_info", params)
 
+# Plex media type -> TMDB's name for it in API paths.
+TMDB_KINDS = {"movie": "movie", "show": "tv"}
+
+
 class TMDB:
-    """Work in progress: a TMDB client for richer metadata. It's created when tmdb.apikey is set, but
-    no command uses it yet."""
+    """TMDB's API, for trailers, More like this and next episodes. Created when tmdb.apikey is set.
+
+    Every call returns None when TMDB doesn't answer, so a card never waits on it for long.
+    """
+
+    TIMEOUT = 5  # seconds
 
     def __init__(self, api_key: str) -> None:
-        logger.info("Initializing TMDB wrapper.")
         self.api_key = api_key
-        self.tmdb_api_url = "https://api.themoviedb.org/3/"
+        self.api_url = "https://api.themoviedb.org/3/"
         self.session: Optional[aiohttp.ClientSession] = None
-        logger.info("TMDB API URL set.")
+        self._unreachable = False  # while True, failures are logged at DEBUG
 
     def _ensure_session(self) -> None:
-        """Create an HTTP session if one is not already available."""
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
-            logger.info("aiohttp ClientSession initialized for TMDB.")
 
     async def close(self) -> None:
-        """Close the aiohttp ClientSession."""
         if self.session and not self.session.closed:
             await self.session.close()
-            logger.info("aiohttp ClientSession closed for TMDB.")
 
-    async def search(self, query: str) -> Optional[list]:
-        """Search for movies and TV shows."""
-        if not query:
-            error_msg = "Query string is required for search."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+    def _auth(self) -> tuple:
+        """(headers, params): TMDB's settings offer an API key and a longer Read Access Token (a JWT)."""
+        if self.api_key.startswith("eyJ"):
+            return {"Authorization": f"Bearer {self.api_key}"}, {}
+        return {}, {"api_key": self.api_key}
 
+    async def _get(self, path: str, params: Optional[dict] = None) -> Optional[dict]:
         self._ensure_session()
-
-        params = {
-            "api_key": self.api_key,
-            "query": query,
-            "include_adult": False,
-        }
-        movie_url = self.tmdb_api_url + "search/movie"
-        tv_url = self.tmdb_api_url + "search/tv"
-        combined_results = []
-
-        # Use a shared method to avoid code duplication
-        async def fetch_results(url: str, media_type: str):
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    results = (await response.json()).get("results", [])
-                    for result in results:
-                        result["media_type"] = media_type
-                    return results
-                else:
-                    logger.error(f"Failed to get {media_type} search results: {response.status}")
-                    return []
-
-        movie_results = await fetch_results(movie_url, "movie")
-        tv_results = await fetch_results(tv_url, "tv_show")
-        combined_results.extend(movie_results + tv_results)
-
-        # Sort results by popularity
-        combined_results.sort(key=lambda x: x.get("popularity", 0), reverse=True)
-        return combined_results
-
-    async def get_movie_details(self, movie_id: int) -> Optional[dict]:
-        if movie_id is None:
-            error_msg = "movie_id is required; see TMDB API Reference."
-            logger.error(error_msg)
+        headers, auth = self._auth()
+        try:
+            async with self.session.get(
+                self.api_url + path, params={**auth, "language": "en-US", **(params or {})},
+                headers=headers, timeout=aiohttp.ClientTimeout(total=self.TIMEOUT),
+            ) as response:
+                response.raise_for_status()
+                body = await response.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError) as exc:
+            # Log the first failure of an outage as an error, the rest at DEBUG until TMDB answers.
+            log = logger.debug if self._unreachable else logger.error
+            log(f"TMDB request '{path}' failed: {exc!r}")
+            self._unreachable = True
             return None
-        self._ensure_session()
-        url = self.tmdb_api_url + f"movie/{movie_id}"
-        params = {"api_key": self.api_key}
-        async with self.session.get(url=url, params=params) as response:
-            if response.status == 200:
-                response_json = await response.json()
-                return response_json
-            else:
-                logger.error(f"Failed to get movie details: {response.status}")
-                return None
+        if self._unreachable:
+            self._unreachable = False
+            logger.info("TMDB is answering again.")
+        return body
 
-    async def get_genre_id(self, genre_name: str) -> Optional[int]:
-        """Get the TMDB genre ID for a given genre name."""
-        self._ensure_session()
-        url = self.tmdb_api_url + "genre/movie/list"
-        params = {"api_key": self.api_key, "language": "en-US"}
-        async with self.session.get(url=url, params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                genres = data.get("genres", [])
-                for genre in genres:
-                    if genre["name"].lower() == genre_name.lower():
-                        return genre["id"]
-            else:
-                logger.error(f"Failed to get genre list: {response.status}")
+    async def title(self, kind: str, tmdb_id: int) -> Optional[dict]:
+        """A movie's or show's details, with its recommendations, similar titles and videos."""
+        return await self._get(f"{kind}/{tmdb_id}",
+                               {"append_to_response": "recommendations,similar,videos"})
+
+    async def recommendations(self, kind: str, tmdb_id: int, page: int = 2) -> Optional[list]:
+        """One more page of recommendations (title() includes the first)."""
+        body = await self._get(f"{kind}/{tmdb_id}/recommendations", {"page": page})
+        return None if body is None else body.get("results") or []
+
+    async def show(self, tmdb_id: int) -> Optional[dict]:
+        """A show's details: its status and next_episode_to_air."""
+        return await self._get(f"tv/{tmdb_id}")
+
+    @staticmethod
+    def id_from_guids(guids) -> Optional[int]:
+        """The TMDB id from Plex guids like ["imdb://tt0312004", "tmdb://533"]."""
+        for guid in guids or []:
+            if str(guid).startswith("tmdb://") and str(guid)[7:].isdigit():
+                return int(str(guid)[7:])
         return None
 
-    async def get_popular_items(self, genre_id: int) -> Optional[list]:
-        """Get popular movies or shows for a given genre ID."""
-        self._ensure_session()
-        recommendations = []
-        for media_type in ["movie", "tv"]:
-            url = self.tmdb_api_url + f"discover/{media_type}"
-            params = {
-                "api_key": self.api_key,
-                "language": "en-US",
-                "sort_by": "popularity.desc",
-                "with_genres": genre_id,
-                "include_adult": "false",  # Convert boolean to string
-            }
-            async with self.session.get(url=url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    for item in data.get("results", []):
-                        item["media_type"] = media_type
-                        recommendations.append(item)
-                else:
-                    logger.error(f"Failed to get popular items for {media_type}: {response.status}")
-        return recommendations
+    @staticmethod
+    def trailer_url(videos: list) -> Optional[str]:
+        """The newest official YouTube trailer, else the newest YouTube trailer."""
+        trailers = [v for v in videos or []
+                    if v.get("site") == "YouTube" and v.get("type") == "Trailer" and v.get("key")]
+        if not trailers:
+            return None
+        best = max(trailers, key=lambda v: (bool(v.get("official")), v.get("published_at") or ""))
+        return f"https://www.youtube.com/watch?v={best['key']}"
+
+    @staticmethod
+    def suggestion_ids(details: dict, more: Optional[list]) -> list:
+        """TMDB ids to suggest, best first: recommendations, the extra page of them, then similar titles."""
+        results = [
+            *((details.get("recommendations") or {}).get("results") or []),
+            *(more or []),
+            *((details.get("similar") or {}).get("results") or []),
+        ]
+        return list(dict.fromkeys(r["id"] for r in results if isinstance(r.get("id"), int)))
