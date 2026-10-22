@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.2.1 - 2026-10-22
+
 ### Bug fixes
 
 - A title deleted from Plex no longer shows "Couldn't reach Tautulli": `/plex random` picks another, and lookups say it's gone.
