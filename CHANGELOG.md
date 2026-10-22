@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.4.0 - 2026-10-23
+
 ### New features
 
 - `/plex upcoming` can read Sonarr's calendar: every episode, on the day it airs in your timezone, with the downloaded ones marked. Set `sonarr.url` and `sonarr.apikey` ([how](https://github.com/brah/plex-bot#configuration)).
