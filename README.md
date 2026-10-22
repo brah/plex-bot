@@ -208,7 +208,7 @@ Set options as environment variables or in `config.json`, starting from [`.env.e
 | `discord.show_recent_viewers` | `PLEXBOT_DISCORD_SHOW_RECENT_VIEWERS` | Show the last few viewers when nobody's watching (public, so off by default) |
 | `qbittorrent.ip`, `port` | `PLEXBOT_QBITTORRENT_IP`, `PLEXBOT_QBITTORRENT_PORT` | qBittorrent Web UI address, for `/plex downloading` |
 | `qbittorrent.username`, `password` | `PLEXBOT_QBITTORRENT_USERNAME`, `PLEXBOT_QBITTORRENT_PASSWORD` | qBittorrent Web UI login; blank if it doesn't ask for one |
-| `tmdb.apikey` | `PLEXBOT_TMDB_APIKEY` | [TMDB API key](https://www.themoviedb.org/settings/api), for trailers, More like this and next episodes |
+| `tmdb.apikey` | `PLEXBOT_TMDB_APIKEY` | [TMDB API key](https://www.themoviedb.org/settings/api), for trailers, More like this, next episodes and `/plex upcoming` |
 | `core.legacy_text_commands` | `PLEXBOT_CORE_LEGACY_TEXT_COMMANDS` | Point old text commands like `plex status` at their slash version. Needs **Message Content Intent**, so it's off; `@PlexBot top` works either way |
 | `core.log_level` | `PLEXBOT_CORE_LOG_LEVEL` | `DEBUG` to `ERROR` |
 
@@ -247,6 +247,7 @@ Everything is under `/plex`, plus `/plexadmin` for admins.
 | `/plex movie`, `/plex tv` | Look up a title: details, cast, who's watched it |
 | `/plex random` | A random pick, optionally by type and genre |
 | `/plex recent` | Recently added |
+| `/plex upcoming` | New episodes this week for shows on the server |
 | `/plex recommend` | Unwatched picks from someone's favourite genres |
 | `/plex top` | Top watchers; also hands out the top-three roles |
 | `/plex stats` | Server stats across five pages |

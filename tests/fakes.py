@@ -315,6 +315,27 @@ def build_media_bot(tautulli, items=(), tmdb=None):
     return bot, cog
 
 
+def build_upcoming_bot(tautulli, tmdb, items=()):
+    """A PlexBot with Upcoming loaded and a fresh media cache holding `items`."""
+    from datetime import datetime
+
+    from plexbot.cogs.upcoming import Upcoming
+    from plexbot.media_cache import MediaCache
+    from plexbot.bot import PlexBot, install_slash_groups
+
+    cache = MediaCache(tautulli)
+    cache.media_items = {str(item["rating_key"]): item for item in items}
+    cache.last_updated = datetime.now()
+    bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
+                  default_guild_ids=[GUILD_ID])
+    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb}
+    bot._connection.application_id = 999
+    install_slash_groups(bot)
+    cog = Upcoming(bot)
+    bot.add_cog(cog)
+    return bot, cog
+
+
 def build_stats_bot(tautulli):
     """A PlexBot with PlexStats loaded."""
     from plexbot.cogs.plex_stats import PlexStats

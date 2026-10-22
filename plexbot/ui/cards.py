@@ -313,6 +313,11 @@ def item_choices(entries) -> dict:
     return choices
 
 
+def episode_code(episode: dict) -> str:
+    """"S02E05" from a TMDB episode."""
+    return f"S{to_int(episode.get('season_number')):02d}E{to_int(episode.get('episode_number')):02d}"
+
+
 def next_episode_line(episode: Optional[dict], today: date) -> Optional[str]:
     """"Next episode: S02E05 · Tomorrow" from TMDB's next_episode_to_air; None if unknown or past."""
     try:
@@ -321,8 +326,7 @@ def next_episode_line(episode: Optional[dict], today: date) -> Optional[str]:
         return None
     if day < today:
         return None
-    code = f"S{to_int(episode.get('season_number')):02d}E{to_int(episode.get('episode_number')):02d}"
-    return f"Next episode: {code} · {day_label(day, today)}"
+    return f"Next episode: {episode_code(episode)} · {day_label(day, today)}"
 
 
 def media_card(item: dict, *, poster: Optional[Attachment] = None, art: Optional[Attachment] = None,
