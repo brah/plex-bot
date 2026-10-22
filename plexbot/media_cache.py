@@ -10,9 +10,9 @@ import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set
 
-from plexbot.tautulli_wrapper import Tautulli
+from plexbot.tautulli_wrapper import TMDB, Tautulli
 from plexbot.ui.format import plural
 
 # Configure logging
@@ -63,6 +63,10 @@ class MediaCache:
 
         if self.media_items:
             logger.info(f"Media cache loaded with {len(self.media_items)} items")
+            if any("tmdb_id" not in item for item in self.media_items.values()):
+                # Cached titles keep their metadata between updates, so only a full one adds the ids.
+                logger.info("Reading every title again once, to add TMDB ids")
+                self._refresh = asyncio.create_task(self.update_cache(full=True))
         else:
             # A first fill reads the whole library (minutes on a big one): don't hold up the Discord login.
             logger.info("Cache is empty, filling it in the background")
@@ -388,6 +392,12 @@ class MediaCache:
             return set()
         return {"tv": {"show", "episode"}, "movie": {"movie"}}.get(media_type.lower(), {media_type.lower()})
 
+    def by_tmdb_ids(self, media_type: str, tmdb_ids: Iterable[int]) -> List[Dict]:
+        """Cached titles of one media type with these TMDB ids, in the ids' order, each once."""
+        by_id = {item["tmdb_id"]: item for item in self.media_items.values()
+                 if item.get("media_type") == media_type and item.get("tmdb_id") is not None}
+        return [by_id[tmdb_id] for tmdb_id in dict.fromkeys(tmdb_ids) if tmdb_id in by_id]
+
     def suggest(self, query: str, media_type: Optional[str] = None, limit: int = 25) -> List[Dict]:
         """Titles for autocomplete: prefix matches first, then titles containing the query.
 
@@ -461,6 +471,7 @@ class MediaCache:
                         "rating": metadata.get("rating", ""),
                         "parent_rating_key": metadata.get("parent_rating_key"),
                         "grandparent_rating_key": metadata.get("grandparent_rating_key"),
+                        "tmdb_id": TMDB.id_from_guids(metadata.get("guids")),
                     }
                     return item_data
                 else:

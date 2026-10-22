@@ -264,3 +264,58 @@ def test_close_stops_refresh_now_and_any_later_update(tmp_path):
     click = asyncio.run(run())
     assert click.cancelled()
     assert asked_server == []  # nothing reopened the Tautulli session after close
+
+
+def test_metadata_keeps_tmdb_id():
+    tautulli = LibraryTautulli({"1": "Spirited Away", "2": "Home video"})
+    tautulli.metadata["1"]["guids"] = ["imdb://tt0245429", "tmdb://129"]
+    cache = MediaCache(tautulli)
+
+    async def run():
+        return await cache._fetch_item_metadata("1"), await cache._fetch_item_metadata("2")
+
+    with_id, without = asyncio.run(run())
+    assert with_id["tmdb_id"] == 129
+    assert without["tmdb_id"] is None
+
+
+def test_by_tmdb_ids():
+    cache = MediaCache(LibraryTautulli({}))
+    cache.media_items = {
+        "1": dict(_item("1", "Ten"), tmdb_id=10),
+        "2": dict(_item("2", "Twenty"), tmdb_id=20),
+        "3": dict(_item("3", "Ten, the show"), media_type="show", tmdb_id=10),
+        "4": dict(_item("4", "No id"), tmdb_id=None),
+    }
+    found = cache.by_tmdb_ids("movie", [20, 10, 20, 99])
+    assert [item["rating_key"] for item in found] == ["2", "1"]
+
+
+def _cache_on_disk(tmp_path, items, monkeypatch):
+    (tmp_path / "cache.json").write_text(
+        json.dumps({"updated_at": datetime.now().isoformat(), "items": items}), encoding="utf-8")
+    fulls = []
+
+    async def update_cache(self, full=False):
+        fulls.append(full)
+        return True
+
+    monkeypatch.setattr(MediaCache, "update_cache", update_cache)
+    cache = MediaCache(LibraryTautulli({}), cache_file_path=str(tmp_path / "cache.json"))
+
+    async def run():
+        await cache.initialize()
+        if cache._refresh is not None:
+            await cache._refresh
+
+    asyncio.run(run())
+    return fulls
+
+
+def test_old_cache_refreshes_fully_once(tmp_path, monkeypatch):
+    assert _cache_on_disk(tmp_path, [_item("1", "Cached before TMDB ids")], monkeypatch) == [True]
+
+
+def test_cache_with_tmdb_ids_doesnt_refresh(tmp_path, monkeypatch):
+    items = [dict(_item("1", "Has one"), tmdb_id=5), dict(_item("2", "Has none"), tmdb_id=None)]
+    assert _cache_on_disk(tmp_path, items, monkeypatch) == []
