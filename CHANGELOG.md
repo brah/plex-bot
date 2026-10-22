@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.3.0 - 2026-10-22
+
 ### New features
 
 - Movie and TV cards get a **Trailer** button and **More like this** from your library.
