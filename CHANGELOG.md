@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.3.1 - 2026-10-22
+
 ### Security
 
 - Patch 28 Pillow advisories ([list](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html)) - Update Pillow to 13.0.0 to fix crashes and memory bugs from crafted images.
