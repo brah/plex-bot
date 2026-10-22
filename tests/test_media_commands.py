@@ -10,6 +10,7 @@ from plexbot import utilities
 from plexbot.cogs.media_commands import (
     CacheView, DownloadsView, MediaCommands, RandomView, RecentDetailsSelect, RecentView,
 )
+from plexbot.media_details import TautulliUnavailable
 from fakes import (
     FakeTautulli, Recorder, build_media_bot, component_payload, interaction, member_payload, patch_images,
     settle, MESSAGE_ID,
@@ -146,6 +147,28 @@ class TestRandom:
         assert "Only <@42> can re-roll" in recorder.calls[0][1]["embeds"][0].description
         assert [k for k, _ in recorder.calls[1:]] == ["defer", "edit_original_message"]
         assert recorder.last("edit_original_message")["embeds"][0].footer.text.startswith("🎲 Random pick")
+
+    def test_a_pick_plex_removed_is_skipped(self):
+        async def run(bot, cog):
+            view = RandomView(cog, 42, [CACHE[0], CACHE[3]])
+            view._unseen = [CACHE[0], CACHE[3]]  # Mad Max, which Tautulli refuses, comes up first
+            return await cog.render_pick(view)
+
+        assert _run(run).embeds[0].title == "The Matrix (1999)"
+
+    def test_a_refusal_while_plex_is_down_reads_as_down(self):
+        tautulli = _tautulli()
+
+        async def plex_down():
+            return None
+
+        tautulli.get_server_info = plex_down
+
+        async def run(bot, cog):
+            with pytest.raises(TautulliUnavailable):
+                await cog.render_item("103")
+
+        _run(run, tautulli)
 
     def test_pick_does_not_repeat_until_the_pool_is_used(self):
         view = SimpleNamespace(pool=[1, 2, 3], _unseen=[])
@@ -289,13 +312,15 @@ class TestDownloading:
 
 
 class TestCacheAdmin:
-    def test_status_and_refresh(self, monkeypatch):
+    @pytest.mark.parametrize("worked, note", [(True, "✅ Refreshed"), (False, "⚠️ The refresh failed")])
+    def test_status_and_refresh(self, monkeypatch, worked, note):
         recorder = Recorder(monkeypatch)
         refreshed = []
 
         async def run(bot, cog):
             async def refresh():
                 refreshed.append(True)
+                return worked
 
             cog.media_cache.refresh = refresh
             await MediaCommands.cache.callback(cog, interaction(bot))
@@ -313,7 +338,7 @@ class TestCacheAdmin:
         assert "new titles every 1h" in status["embeds"][0].description
         assert refreshed == [True]
         assert "Refreshing" in recorder.last("edit_message")["embeds"][0].description
-        assert "✅ Refreshed" in recorder.last("edit_original_message")["embeds"][0].description
+        assert note in recorder.last("edit_original_message")["embeds"][0].description
 
 
 def test_media_commands_registered_and_in_help():

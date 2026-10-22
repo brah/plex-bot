@@ -327,6 +327,8 @@ class _Request:
 
 
 class _Answer:
+    status, content_type = 200, "application/json"
+
     def raise_for_status(self):
         pass
 
@@ -348,6 +350,25 @@ def test_a_tautulli_outage_logs_one_error_then_its_end(caplog):
     assert [answer is not None for answer in answers] == [False, False, False, True, False]
     # The presence loop asks every 15 seconds: one error per outage, the repeats only at DEBUG.
     assert [r.levelname for r in caplog.records] == ["ERROR", "DEBUG", "DEBUG", "INFO", "ERROR"]
+
+
+class _Refusal(_Answer):
+    status = 400
+
+    def raise_for_status(self):
+        raise AssertionError("a JSON refusal is returned, not raised")
+
+    async def json(self):
+        return {"response": {"result": "error", "message": "Unable to retrieve metadata.", "data": {}}}
+
+
+def test_a_refusal_comes_back_as_tautullis_answer(caplog):
+    client = Tautulli(api_key="k", tautulli_ip="host:8181", use_https=True)
+    client.session = _Session([_Refusal()])
+    response = asyncio.run(client.get_metadata("1"))
+    assert response is not None and not Tautulli.check_response(response)
+    assert not client._unreachable
+    assert "'get_metadata' refused (HTTP 400): Unable to retrieve metadata." in caplog.text
 
 
 @pytest.mark.parametrize("address, public", [

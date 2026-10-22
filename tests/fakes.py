@@ -130,7 +130,9 @@ class FakeTautulli:
     recent_calls: list = []
 
     async def get_metadata(self, rating_key):
-        return self._ok(self.metadata.get(str(rating_key), {}))
+        if self.reachable and str(rating_key) not in self.metadata:  # Tautulli's answer for a removed title
+            return {"response": {"result": "error", "message": "Unable to retrieve metadata.", "data": {}}}
+        return self._ok(self.metadata.get(str(rating_key)))
 
     async def get_item_user_stats(self, rating_key, params=None):
         return self._ok(self.user_stats.get(str(rating_key), []))

@@ -36,7 +36,7 @@ def brand_colour() -> int:
     JSON has no hex numbers, so hex text ("#E5A00D", "0xE5A00D") is accepted too; anything else
     falls back to Plex orange rather than breaking every embed.
     """
-    value = config.get("ui", "plex_embed_color", Colour.MOVIE)
+    value = config.get("ui", "plex_embed_color")
     if isinstance(value, str):
         try:
             value = int(value.strip().lstrip("#"), 16)

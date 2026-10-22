@@ -199,7 +199,7 @@ class Recommendations(commands.Cog):
         embed = overview_card(picks, counts, genres, strip=strip)
         embed.set_author(name=truncate(member.display_name, Limits.AUTHOR), icon_url=member.display_avatar.url)
         overview = Reply([embed], [strip] if strip else [])
-        timeout = to_int(config.get("commands", "recommendation_timeout", 180), 180)
+        timeout = to_int(config.get("commands", "recommendation_timeout"), 180)
         view = RecommendationView(self.details, interaction.user.id, picks, overview, timeout=timeout)
         overview.view = view
         view.message = bot_token_handle(interaction, await overview.send(interaction))

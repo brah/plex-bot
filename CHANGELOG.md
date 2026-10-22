@@ -5,6 +5,11 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### Bug fixes
+
+- A title deleted from Plex no longer shows "Couldn't reach Tautulli": `/plex random` picks another, and lookups say it's gone.
+- **Refresh now** on `/plexadmin cache` drops deleted titles, and says when the refresh failed.
+
 ## 1.2.0 - 2026-10-20
 
 ### New features

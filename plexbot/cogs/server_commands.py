@@ -658,7 +658,7 @@ class ServerCommands(commands.Cog):
 
     def can_manage(self, interaction: nextcord.Interaction) -> bool:
         return _can_manage_streams(interaction.user, interaction.guild_id,
-                                   config.get("discord", "stream_manager_ids", []))
+                                   config.get("discord", "stream_manager_ids"))
 
     async def fetch_activity(self) -> dict | None:
         response = await self.tautulli.get_activity()
@@ -677,7 +677,7 @@ class ServerCommands(commands.Cog):
     async def _nobody_watching(self) -> str:
         """The empty overview's text, with recent viewers when discord.show_recent_viewers is on."""
         message = "Nobody's watching right now."
-        if not is_truthy(config.get("discord", "show_recent_viewers", False)):
+        if not is_truthy(config.get("discord", "show_recent_viewers")):
             return message
         response = await self.tautulli.get_history({"length": 25, "order_column": "date", "order_dir": "desc"})
         if not Tautulli.check_response(response):

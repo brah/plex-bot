@@ -567,7 +567,7 @@ class PlexStats(commands.Cog):
         ),
     ):
         await interaction.response.defer()
-        days = days or to_int(config.get("defaults", "time_range", 30), 30)
+        days = days or to_int(config.get("defaults", "time_range"), 30)
         *responses, libraries_r = await asyncio.gather(
             *(self.tautulli.get_home_stats(params={"stat_id": stat_id, "time_range": days, **params})
               for stat_id, params in _STATS.items()),

@@ -274,10 +274,12 @@ class CacheView(LoggedView):
         busy.view = self
         await interaction.response.edit_message(**busy.edit_payload())
         self.refresh_private(interaction)
-        await self.media_cache.refresh()
-        logger.info(f"{interaction.user} refreshed the media cache")
+        logger.info(f"{interaction.user} started a full media cache refresh")
+        refreshed = await self.media_cache.refresh()
         button.disabled = False
-        done = cache_status(self.media_cache, f"✅ Refreshed {timestamp(time.time())}.")
+        note = (f"✅ Refreshed {timestamp(time.time())}." if refreshed
+                else "⚠️ The refresh failed, so nothing changed. `/plexadmin logs` says why.")
+        done = cache_status(self.media_cache, note)
         done.view = self
         await done.edit(interaction)
 
@@ -479,7 +481,7 @@ class MediaCommands(commands.Cog):
         ),
     ):
         await interaction.response.defer()
-        count = count or max(1, min(to_int(config.get("defaults", "recent_count", 10), 10), 25))
+        count = count or max(1, min(to_int(config.get("defaults", "recent_count"), 10), 25))
         response = await self.tautulli.get_recently_added(count=count, media_type=kind)
         if not Tautulli.check_response(response):
             logger.error("Failed to retrieve recent additions from Tautulli.")

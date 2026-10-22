@@ -33,7 +33,7 @@ def is_admin(user, guild_id) -> bool:
     Administrator of any other server doesn't count: anyone can invite a public bot to their own
     server, so with no server_id set only discord.admin_ids grants admin.
     """
-    if listed(user, config.get("discord", "admin_ids", [])):
+    if listed(user, config.get("discord", "admin_ids")):
         return True
     server_id = str(config.get("discord", "server_id") or "").strip()
     permissions = getattr(user, "guild_permissions", None)

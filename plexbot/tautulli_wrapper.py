@@ -66,6 +66,13 @@ class Tautulli:
                 if self._unreachable:
                     self._unreachable = False
                     logger.info("Tautulli is answering again.")
+                if response.status >= 400 and response.content_type == "application/json":
+                    # Tautulli's refusal (a removed title, a bad key): returned so callers can tell
+                    # "no" from no answer; check_response reads it as a failure.
+                    body = await response.json()
+                    message = (body.get("response") or {}).get("message")
+                    logger.error(f"API call '{cmd}' refused (HTTP {response.status}): {message}")
+                    return body
                 response.raise_for_status()
                 return await response.json()
         except asyncio.TimeoutError:

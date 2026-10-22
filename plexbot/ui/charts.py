@@ -26,15 +26,15 @@ PEAK = "#F5C04A"  # the tallest bar, so the answer stands out
 
 
 def _accent() -> str:
-    return config.get("colors", "plex_orange", "#E5A00D")
+    return config.get("colors", "plex_orange")
 
 
 def _figure():
-    background = config.get("colors", "plex_grey_dark", "#1B1B1B")
+    background = config.get("colors", "plex_grey_dark")
     fig = Figure(
         # Discord shows an embed image about 430px wide, so a small canvas at a high dpi keeps text readable.
-        figsize=(config.get("charts", "width", 7), config.get("charts", "height", 3.5)),
-        dpi=config.get("charts", "dpi", 200),
+        figsize=(config.get("charts", "width"), config.get("charts", "height")),
+        dpi=config.get("charts", "dpi"),
         facecolor=background,
     )
     ax = fig.add_subplot()

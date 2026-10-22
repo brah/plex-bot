@@ -110,16 +110,18 @@ class MediaCache:
                 except asyncio.CancelledError:
                     pass
 
-    async def update_cache(self, full: bool = False) -> None:
+    async def update_cache(self, full: bool = False) -> bool:
         """Update the media cache from Tautulli: the title list, plus metadata for new titles.
+        Returns whether the cache is now fresh.
 
         full also fetches metadata again for every title already cached (genres or summaries
         changed in Plex), even when the cache is fresh; that's one call per title, minutes on a big library.
         """
         async with self.cache_lock:
-            if self._closed or (not full and self.is_cache_valid()):
-                # Shutting down, or another task updated the cache while this one waited for the lock
-                return
+            if self._closed:
+                return False
+            if not full and self.is_cache_valid():
+                return True  # another task updated the cache while this one waited for the lock
 
             logger.info("Updating media cache...")
             self._updating = asyncio.current_task()
@@ -128,7 +130,7 @@ class MediaCache:
                 test_response = await self.tautulli.get_server_info()
                 if not Tautulli.check_response(test_response):
                     logger.error("Tautulli connection test failed")
-                    return
+                    return False
 
                 # Fetch and process all media items
                 new_items = await self._fetch_all_media_items(full)
@@ -141,12 +143,13 @@ class MediaCache:
                     items_snapshot = list(self.media_items.values())
                     await self._write_items_to_disk(items_snapshot)
                     logger.info(f"Media cache updated with {len(self.media_items)} items")
-                else:
-                    logger.warning("No media items found during update")
+                    return True
+                logger.warning("No media items found during update")
             except Exception as e:
                 logger.error(f"Failed to update media cache: {e}")
             finally:
                 self._updating = None
+            return False
 
     async def get_items(
         self,
@@ -357,12 +360,13 @@ class MediaCache:
             # self.semaphore keeps this to 10 calls at a time, across every library.
             results = await asyncio.gather(*(self._fetch_item_metadata(key) for key in rating_keys))
             for key, result in zip(rating_keys, results):
-                if result is None and key not in self.media_items:
+                if not result and key not in self.media_items:
                     self._unreadable[key] = now
                 else:
                     self._unreadable.pop(key, None)
-                # A failed fetch keeps the title we already had rather than dropping it.
-                item = result or self.media_items.get(key)
+                # No answer keeps the title we had. A refusal drops it, unmarked, so the next update
+                # asks again and a Plex restart during this refresh loses nothing for long.
+                item = self.media_items.get(key) if result is None else result
                 if item:
                     # section_id lets a later refresh keep this library's titles if it can't be read.
                     library_items.append({**item, "section_id": section_id})
@@ -420,16 +424,16 @@ class MediaCache:
         )
         return [genre for genre, _count in counts.most_common()]
 
-    async def refresh(self) -> None:
-        """Fetch the whole library again now, even if the cache is still fresh.
+    async def refresh(self) -> bool:
+        """Fetch the whole library again now, even if the cache is still fresh; returns whether it worked.
 
         The current items stay in use until the new ones arrive. A background refresh already
         under way finishes first (it holds the lock), then every title is read again.
         """
-        await self.update_cache(full=True)
+        return await self.update_cache(full=True)
 
     async def _fetch_item_metadata(self, rating_key: str) -> Optional[Dict]:
-        """Fetch and process metadata for a single media item."""
+        """A title's cache entry; {} when Tautulli refused (Plex no longer has it), None on no answer."""
         async with self.semaphore:
             try:
                 metadata_response = await self.tautulli.get_metadata(rating_key=rating_key)
@@ -460,7 +464,7 @@ class MediaCache:
                     return item_data
                 else:
                     logger.error(f"Failed to fetch metadata for rating_key {rating_key}")
-                    return None
+                    return {}
             except Exception as e:
                 logger.error(f"Exception while fetching metadata for {rating_key}: {e}")
                 return None

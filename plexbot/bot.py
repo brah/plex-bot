@@ -47,7 +47,7 @@ async def initialize_resources():
     logger.info("Initializing Tautulli client...")
     tautulli_ip = config.get("tautulli", "ip")
     tautulli_apikey = config.get("tautulli", "apikey")
-    tautulli_https = config.get("tautulli", "use_https", False)
+    tautulli_https = config.get("tautulli", "use_https")
     # Each client opens its shared HTTP session on its first request.
     tautulli = Tautulli(api_key=tautulli_apikey, tautulli_ip=tautulli_ip, use_https=tautulli_https)
     resources["tautulli"] = tautulli
@@ -205,7 +205,7 @@ def main():
         logger.error("Failed to load the configuration; see the errors above.")
         return
 
-    log_level = str(config.get("core", "log_level", "INFO")).upper()
+    log_level = str(config.get("core", "log_level")).upper()
     if log_level not in logging.getLevelNamesMapping():
         logger.warning(f"Unknown core.log_level {log_level!r}; using INFO.")
         log_level = "INFO"
@@ -223,7 +223,7 @@ def main():
     intents.members = True
     # Message content (a privileged intent) only serves the old prefix commands' redirect. Without it,
     # Discord still sends the text of messages that mention the bot, so "@PlexBot status" is answered.
-    legacy = is_truthy(config.get("core", "legacy_text_commands", False))
+    legacy = is_truthy(config.get("core", "legacy_text_commands"))
     intents.message_content = legacy
     bot_prefix = config.get("core", "prefix")
 
@@ -236,7 +236,7 @@ def main():
     else:
         guild_ids = None
         logger.info("No discord.server_id set; slash commands register globally (may take up to an hour).")
-        if not config.get("discord", "admin_ids", []):
+        if not config.get("discord", "admin_ids"):
             logger.warning("Neither discord.server_id nor discord.admin_ids is set, so nobody can use /plexadmin.")
 
     prefix = commands.when_mentioned_or(bot_prefix, bot_prefix.title()) if legacy else commands.when_mentioned

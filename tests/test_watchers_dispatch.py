@@ -226,8 +226,8 @@ def test_stream_managers_get_stop_button(monkeypatch):
     real_get = server_commands.config.get
     monkeypatch.setattr(
         server_commands.config, "get",
-        lambda section, key, default=None: ["42"] if (section, key) == ("discord", "stream_manager_ids")
-        else real_get(section, key, default),
+        lambda section, key: ["42"] if (section, key) == ("discord", "stream_manager_ids")
+        else real_get(section, key),
     )
     patch_images(monkeypatch)
     recorder = Recorder(monkeypatch)

@@ -218,6 +218,13 @@ def _defaults(select):
     return [option.value for option in select.options if option.default]
 
 
+def test_plays_keep_only_the_fields_charts_read():
+    tautulli = FakeTautulli([])
+    tautulli.history = [dict(row, title="Heat", ip_address="10.0.0.5") for row in _history(("alice", 2, "movie"))]
+    plays = _run(lambda bot, cog: cog.plays(30), tautulli)
+    assert plays[0][1] == {"user": "alice", "friendly_name": "Alice", "media_type": "movie", "title": "Heat"}
+
+
 class TestCommands:
     def test_opens_on_plays_per_day_for_everyone(self, monkeypatch):
         recorder = Recorder(monkeypatch)

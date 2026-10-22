@@ -67,7 +67,10 @@ class MediaDetails:
             self.tautulli.server_id(),
         )
         if not Tautulli.check_response(metadata_r):
-            raise TautulliUnavailable()
+            # Tautulli refuses a title Plex removed, but also every title while Plex is down.
+            if metadata_r is None or not Tautulli.check_response(await self.tautulli.get_server_info()):
+                raise TautulliUnavailable()
+            return None
         item = Tautulli.get_response_data(metadata_r, {}) or {}
         if not item.get("title"):
             return None

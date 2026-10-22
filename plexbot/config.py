@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger("plexbot.config")
 
@@ -96,10 +96,9 @@ class Config:
         for name in sorted(n for n in environ if n.upper().startswith("PLEXBOT_") and n.upper() not in known):
             logger.warning(f"Unknown setting {name} ignored; check the spelling")
 
-    def get(self, section: str, key: str, default: Optional[Any] = None) -> Any:
-        """The user's value, else `default`, else the section's registered default."""
-        if default is None and section in self._sections and key in self._sections[section]._values:
-            default = self._sections[section]._values[key][0]
+    def get(self, section: str, key: str) -> Any:
+        """The user's value, else the registered default. A setting that isn't registered raises KeyError."""
+        default = self._sections[section]._values[key][0]
         return self._user_config.get(section, {}).get(key, default)
 
 

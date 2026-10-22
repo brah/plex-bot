@@ -72,6 +72,24 @@ def test_refresh_now_reads_every_title_again_and_drops_removed_ones(tmp_path):
     assert _titles(cache.media_items.values()) == ["Renamed in Plex"]
 
 
+def test_refresh_now_drops_a_title_tautulli_refuses_but_keeps_one_it_got_no_answer_for(tmp_path):
+    tautulli = LibraryTautulli({"1": "Kept"})
+    tautulli.library_items = {"1": [{"rating_key": key} for key in ("1", "2", "3")]}  # 2 is gone from Plex
+    tautulli.failing = {"3"}
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Kept"), _item("2", "Removed"), _item("3", "No answer")])
+    assert asyncio.run(cache.refresh())
+    assert _titles(cache.media_items.values()) == ["Kept", "No answer"]
+    assert "2" not in cache._unreadable  # so the next update asks again, in case Plex was only restarting
+
+
+def test_a_failed_update_says_so(tmp_path):
+    tautulli = LibraryTautulli({"1": "Kept"})
+    tautulli.reachable = False
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Kept")])
+    assert not asyncio.run(cache.refresh())
+    assert _titles(cache.media_items.values()) == ["Kept"]
+
+
 def test_empty_cache_waits_for_the_first_fetch(tmp_path):
     cache = _stale_cache(LibraryTautulli({"1": "Only title"}), tmp_path, [])
     assert _titles(asyncio.run(cache.get_items())) == ["Only title"]

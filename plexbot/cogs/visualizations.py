@@ -35,6 +35,12 @@ from plexbot.utilities import format_duration, ignored_usernames, plex_username,
 logger = logging.getLogger("plexbot.visualizations")
 
 Play = Tuple[datetime, dict]  # when it started (in the server's timezone), the history row
+# The history fields charts read; a play keeps only these, as a chart holds its plays for minutes.
+_PLAY_FIELDS = (
+    "user", "username", "friendly_name", "user_thumb",  # viewer names and avatars
+    "media_type", "play_duration", "duration", "rating_key", "grandparent_rating_key",
+    "title", "grandparent_title", "year", "thumb", "parent_thumb", "grandparent_thumb",  # titles and posters
+)
 Chart = Tuple[str, Callable]  # the one-line takeaway, and a no-argument renderer for a worker thread
 
 _WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -317,7 +323,7 @@ class Visualizations(commands.Cog):
                 continue
             moment = datetime.fromtimestamp(started, zone)
             if moment >= since:
-                plays.append((moment, row))
+                plays.append((moment, {key: row[key] for key in _PLAY_FIELDS if key in row}))
         return plays
 
     async def posters(self, cache: Dict[str, Optional[bytes]], rows) -> List[Optional[bytes]]:
