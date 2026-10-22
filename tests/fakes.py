@@ -181,6 +181,30 @@ class FakeTautulli:
         return self._ok({"recently_added": self.recently_added[:count]})
 
 
+class FakeTMDB:
+    """Stands in for tautulli_wrapper.TMDB: answers by (kind, tmdb id), or None when unknown or down."""
+
+    def __init__(self, titles=None, pages=None, shows=None, reachable=True):
+        self.titles, self.pages, self.shows = titles or {}, pages or {}, shows or {}
+        self.reachable = reachable
+        self.calls = []
+
+    async def title(self, kind, tmdb_id):
+        self.calls.append(("title", kind, tmdb_id))
+        return self.titles.get((kind, tmdb_id)) if self.reachable else None
+
+    async def recommendations(self, kind, tmdb_id, page=2):
+        self.calls.append(("recommendations", kind, tmdb_id))
+        return self.pages.get((kind, tmdb_id), []) if self.reachable else None
+
+    async def show(self, tmdb_id):
+        self.calls.append(("show", tmdb_id))
+        return self.shows.get(tmdb_id) if self.reachable else None
+
+    async def close(self):
+        pass
+
+
 def patch_images(monkeypatch):
     """Make every Plex image fetch return a tiny valid PNG instead of hitting the network."""
 
@@ -270,7 +294,7 @@ def build_bot(tautulli):
     return bot, cog
 
 
-def build_media_bot(tautulli, items=()):
+def build_media_bot(tautulli, items=(), tmdb=None):
     """A PlexBot with MediaCommands loaded and a fresh media cache holding `items`."""
     from datetime import datetime
 
@@ -283,7 +307,7 @@ def build_media_bot(tautulli, items=()):
     cache.last_updated = datetime.now()
     bot = PlexBot(command_prefix=commands.when_mentioned, intents=nextcord.Intents.default(), help_command=None,
                   default_guild_ids=[GUILD_ID])
-    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache}
+    bot.shared_resources = {"tautulli": tautulli, "media_cache": cache, "tmdb": tmdb}
     bot._connection.application_id = 999
     install_slash_groups(bot)
     cog = MediaCommands(bot)

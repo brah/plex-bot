@@ -2,12 +2,14 @@
 show an item: /plex movie, /plex tv, /plex random, /plex recent details and /plex recommend."""
 
 import asyncio
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
 
 from nextcord.utils import escape_markdown
 
-from plexbot.tautulli_wrapper import Tautulli
-from plexbot.ui.cards import media_card, plex_web_link
+from plexbot.tautulli_wrapper import TMDB, TMDB_KINDS, Tautulli
+from plexbot.ui.cards import media_card, next_episode_line, plex_web_link
 from plexbot.ui.embeds import Reply
 from plexbot.ui.format import join, plural, to_int
 from plexbot.ui.images import plex_image, poster_key
@@ -48,12 +50,61 @@ def watch_stats(user_rows, time_rows, display_name, ignored: set) -> str:
     return "\n".join(lines)
 
 
+MORE_LIKE_THIS = 10  # titles offered under a card
+
+
+@dataclass
+class TmdbExtras:
+    """What TMDB adds to a card; empty without a TMDB key, a TMDB id or an answer."""
+
+    trailer: Optional[str] = None  # YouTube URL
+    similar: list = field(default_factory=list)  # media cache items, best first
+    next_episode: Optional[dict] = None  # TMDB's next_episode_to_air
+
+
 class MediaDetails:
-    """Renders an item's card from Tautulli."""
+    """Renders an item's card from Tautulli, with TMDB's extras when there's a TMDB key."""
 
     def __init__(self, bot, tautulli):
         self.bot = bot
         self.tautulli = tautulli
+        self.tmdb: Optional[TMDB] = bot.shared_resources.get("tmdb")
+        self.media_cache = bot.shared_resources.get("media_cache")
+
+    def _tmdb_title(self, item: dict) -> tuple:
+        """(TMDB kind, TMDB id, rating key) of the movie or show a card is about; Nones if unknown.
+
+        Seasons and episodes have TMDB ids of their own, so they use their cached show's instead.
+        """
+        media_type = item.get("media_type")
+        if media_type in TMDB_KINDS:
+            tmdb_id = TMDB.id_from_guids(item.get("guids"))
+            return TMDB_KINDS[media_type], tmdb_id, str(item.get("rating_key"))
+        show_key = {"season": "parent_rating_key", "episode": "grandparent_rating_key"}.get(media_type)
+        if not show_key or self.media_cache is None:
+            return None, None, None
+        show = self.media_cache.media_items.get(str(item.get(show_key)))
+        if not show:
+            return None, None, None
+        return "tv", show.get("tmdb_id"), str(show["rating_key"])
+
+    async def tmdb_extras(self, item: dict) -> TmdbExtras:
+        """The card's trailer, More like this titles on the server and, for shows, the next episode."""
+        kind, tmdb_id, own_key = self._tmdb_title(item)
+        if self.tmdb is None or tmdb_id is None:
+            return TmdbExtras()
+        details, more = await asyncio.gather(self.tmdb.title(kind, tmdb_id),
+                                             self.tmdb.recommendations(kind, tmdb_id))
+        if details is None:
+            return TmdbExtras()
+        library_type = next(plex for plex, tmdb in TMDB_KINDS.items() if tmdb == kind)
+        ids = TMDB.suggestion_ids(details, more)
+        similar = self.media_cache.by_tmdb_ids(library_type, ids) if self.media_cache else []
+        return TmdbExtras(
+            trailer=TMDB.trailer_url((details.get("videos") or {}).get("results")),
+            similar=[i for i in similar if str(i.get("rating_key")) != own_key][:MORE_LIKE_THIS],
+            next_episode=details.get("next_episode_to_air") if kind == "tv" else None,
+        )
 
     async def render(self, rating_key: str, footer: Optional[str] = None) -> Optional[Reply]:
         """The item's card with its watch stats; None when Tautulli has no such item.
@@ -77,12 +128,18 @@ class MediaDetails:
 
         stats = watch_stats(Tautulli.data(users_r, []), Tautulli.data(time_r, []),
                             lambda row: viewer_name(self.bot, row), ignored_usernames())
-        poster, art = await asyncio.gather(
+        poster, art, extras = await asyncio.gather(
             plex_image(self.tautulli, poster_key(item), filename="poster.jpg"),
             plex_image(self.tautulli, item.get("art") or item.get("grandparent_art"), filename="art.jpg",
                        width=640, height=360),
+            self.tmdb_extras(item),
         )
-        embed = media_card(item, poster=poster, art=art, url=plex_web_link(server_id, rating_key), stats=stats)
+        next_episode = None
+        if extras.next_episode:
+            today = datetime.now(await self.tautulli.server_timezone()).date()
+            next_episode = next_episode_line(extras.next_episode, today)
+        embed = media_card(item, poster=poster, art=art, url=plex_web_link(server_id, rating_key),
+                           stats=stats, next_episode=next_episode)
         if footer:
             embed.set_footer(text=footer)
         return Reply([embed], [a for a in (poster, art) if a])
