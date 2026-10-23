@@ -22,7 +22,6 @@ logger = logging.getLogger("plexbot.upcoming")
 UPCOMING_DAYS = 7
 _STALE = 12 * 3600  # seconds before a show's next episode is asked about again
 _FINISHED = {"Ended", "Canceled"}  # TMDB statuses not asked about again until the bot restarts
-_WHOLE_LIBRARY = 100_000  # get_items needs a limit; this means "all of them"
 # Each of the 16 lookups at a time holds its slot this long: at most 32 a second, under TMDB's ~40.
 _MIN_REQUEST_SECONDS = 0.5
 
@@ -247,7 +246,7 @@ class Upcoming(commands.Cog):
         """The week's rows from what TMDB said; None when it has said nothing."""
         cached = []
         if self.media_cache:
-            cached = await self.media_cache.get_items(media_type="show", limit=_WHOLE_LIBRARY)
+            cached = await self.media_cache.get_items(media_type="show")
         shows = self._shows(cached)
         if self.entries:
             self._refresh_in_background(shows)  # answer with what's known; due shows update for next time

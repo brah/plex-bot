@@ -165,7 +165,7 @@ class MediaCache:
         media_type: Optional[str] = None,
         genres: Optional[List[str]] = None,
         exclude_rating_keys: Optional[Set[str]] = None,
-        limit: int = 100,
+        limit: Optional[int] = None,
         random_sort: bool = False,
     ) -> List[Dict]:
         """
@@ -175,7 +175,7 @@ class MediaCache:
             media_type: Filter by media type (movie, show, episode)
             genres: Filter by genres (case-insensitive)
             exclude_rating_keys: Set of rating keys to exclude
-            limit: Maximum number of items to return
+            limit: Maximum number of items to return (default: all)
             random_sort: Whether to randomly shuffle results
 
         Returns:

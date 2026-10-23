@@ -106,9 +106,6 @@ class RecentView(LoggedView):
 
 # --- /plex random ----------------------------------------------------------------
 
-_WHOLE_POOL = 100_000  # get_items needs a limit; this means "all of them"
-
-
 class RandomView(LoggedView):
     """Roll again on a public random pick; only the person who ran the command can re-roll."""
 
@@ -407,9 +404,7 @@ class MediaCommands(commands.Cog):
     ):
         await interaction.response.defer()
         genre = (genre or "").strip() or None
-        pool = await self.media_cache.get_items(
-            media_type=kind, genres=[genre] if genre else None, limit=_WHOLE_POOL,
-        )
+        pool = await self.media_cache.get_items(media_type=kind, genres=[genre] if genre else None)
         if not pool:
             if kind or genre:
                 what = {"movie": "movies", "tv": "TV shows"}.get(kind, "titles")
