@@ -9,6 +9,11 @@ What changed in each release, newest first. Releases are also on
 
 - Settings written in quotes in config.json, like `"use_https": "false"` or `"update_interval": "3600"`, work instead of breaking the bot.
 - `/plex hot` and `/plex chart` no longer give different play counts for the same number of days.
+- A name typed into `/plex history` or `/plex chart` finds the person with that Plex name, not someone whose Discord name matches it.
+
+### Changes
+
+- `/plexadmin link` and `/plexadmin ignore` find a Plex user by their Discord name too, as `/plex history` does.
 
 ## 1.4.0 - 2026-10-23
 

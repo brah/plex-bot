@@ -679,3 +679,13 @@ def test_a_picked_username_wins_over_someone_elses_discord_name():
     plex_users.name = lambda row: "alex" if row["username"] == "sam" else row["friendly_name"]  # Sam is "alex" on Discord
     assert plex_users.match(users, "alex")["username"] == "alex"  # what picking Alex's suggestion sends
     assert plex_users.match(users, "SAM")["username"] == "sam"  # typed names still match in any case
+
+
+def test_a_plex_name_wins_over_someone_elses_discord_name():
+    from plexbot.plex_users import PlexUsers
+
+    users = [{"username": "sam", "friendly_name": "Sam"}, {"username": "alex2", "friendly_name": "Alex"}]
+    plex_users = PlexUsers(bot=None, tautulli=None)
+    plex_users.name = lambda row: "Alex" if row["username"] == "sam" else row["friendly_name"]  # Sam is "Alex" on Discord
+    assert plex_users.match(users, "alex")["username"] == "alex2"
+    assert plex_users.match(users, " ") is None  # blank text matches nobody

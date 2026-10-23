@@ -126,6 +126,17 @@ def test_ignore_toggles_and_works_for_users_who_left(monkeypatch):
     assert "**gone** is now ignored" in _sent(recorder)
 
 
+def test_ignore_finds_a_plex_user_by_their_discord_name(monkeypatch):
+    recorder = Recorder(monkeypatch)
+
+    async def run(bot, cog):
+        cog.users.name = lambda row: "Ali" if row["username"] == "alice" else row["friendly_name"]
+        await UserManagement.ignore.callback(cog, interaction(bot), plex_user="ali")
+
+    _run(run)
+    assert _sent(recorder) == "✅ **Alice (alice)** is now ignored: left out of stats, charts and lists."
+
+
 def test_tautulli_down(monkeypatch):
     recorder = Recorder(monkeypatch)
     _run(lambda bot, cog: UserManagement.ignore.callback(cog, interaction(bot), plex_user="bob"),

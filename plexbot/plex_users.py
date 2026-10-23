@@ -53,17 +53,17 @@ class PlexUsers:
 
     def match(self, users: list, wanted: str) -> Optional[dict]:
         """The user whose Plex username is `wanted` (what the suggestions send), else the one whose
-        Plex username, Plex name or Discord name is `wanted` in any case."""
+        Plex username or Plex name is `wanted` in any case, else the one whose Discord name is."""
         wanted = wanted.strip()
         exact = next((row for row in users if row["username"] == wanted), None)
-        if exact:  # first, or one user's Discord name could shadow another's username
+        if exact:
             return exact
         wanted = wanted.lower()
+        # Plex names first: one user's Discord name can be another user's Plex name.
         for row in users:
-            names = {row["username"], row.get("friendly_name") or "", self.name(row)}
-            if wanted in {n.lower() for n in names if n}:
+            if wanted in {name.lower() for name in (row["username"], row.get("friendly_name")) if name}:
                 return row
-        return None
+        return next((row for row in users if self.name(row).lower() == wanted), None)
 
     async def choices(self, typed: str) -> dict:
         """Autocomplete choices: {label: username}."""

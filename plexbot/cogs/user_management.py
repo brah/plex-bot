@@ -97,10 +97,7 @@ class UserManagement(commands.Cog):
             await service_down("Tautulli").send(interaction, ephemeral=True)
             return None
         wanted = wanted.strip()
-        row = next((r for r in users if r["username"] == wanted), None) or next(
-            (r for r in users if wanted.lower() in {r["username"].lower(), (r.get("friendly_name") or "").lower()}),
-            None,
-        )
+        row = self.users.match(users, wanted)  # everyone(): ignored users too, so they can be un-ignored
         if row is None and UserMappings.get_mapping_by_plex_username(wanted):
             row = {"username": wanted}  # in map.json only (left the server): still manageable
         if row is None:
