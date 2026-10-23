@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -194,6 +195,17 @@ def _run(fn, tautulli):
         return await fn(bot, cog)
 
     return asyncio.run(run())
+
+
+def _run_hot(tautulli, days=None):
+    """/plex hot, with the charts cog it reads plays from."""
+    from plexbot.cogs.visualizations import Visualizations
+
+    async def run(bot, cog):
+        bot.add_cog(Visualizations(bot))
+        await PlexStats.hot.callback(cog, interaction(bot), days=days)
+
+    _run(run, tautulli)
 
 
 class TestCommands:
@@ -428,9 +440,22 @@ class TestCommands:
         recorder = Recorder(monkeypatch)
         tautulli = FakeTautulli([])
         tautulli.history = [_play("alice", "Old", key="x", date=NOW - 30 * 86400)]
-        _run(lambda bot, cog: PlexStats.hot.callback(cog, interaction(bot), days=None), tautulli)
+        _run_hot(tautulli)
         assert tautulli.history_calls[-1]["after"]
         assert "Nobody's watched anything in the last 7 days." in recorder.last("followup")["embeds"][0].description
+
+    def test_hot_counts_the_same_days_as_chart(self, monkeypatch):
+        recorder = Recorder(monkeypatch)
+        first_day = datetime.now(timezone.utc).date() - timedelta(days=6)  # the fake server is on UTC
+        midnight = int(datetime.combine(first_day, datetime.min.time(), tzinfo=timezone.utc).timestamp())
+        tautulli = FakeTautulli([])
+        tautulli.history = [
+            _play("alice", "Heat", key="m1", media_type="movie", date=midnight + 60),
+            # Within 7 x 24 hours, but on the day before /plex chart's 7 days begin.
+            _play("bob", "Alien", key="m2", media_type="movie", date=midnight - 1),
+        ]
+        _run_hot(tautulli)
+        assert "**1 play** · 1 person" in recorder.last("followup")["embeds"][0].description
 
 
 def test_stats_commands_registered_in_help():

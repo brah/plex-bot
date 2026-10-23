@@ -8,6 +8,7 @@ What changed in each release, newest first. Releases are also on
 ### Bug fixes
 
 - Settings written in quotes in config.json, like `"use_https": "false"` or `"update_interval": "3600"`, work instead of breaking the bot.
+- `/plex hot` and `/plex chart` no longer give different play counts for the same number of days.
 
 ## 1.4.0 - 2026-10-23
 

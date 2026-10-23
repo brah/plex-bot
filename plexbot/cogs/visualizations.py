@@ -2,7 +2,7 @@
 
 One command opens on plays over time; dropdowns under the chart switch to another chart (or to the
 library's growth) or one viewer, and buttons change the window and whether plays or watch time are
-counted. /plex stats borrows the plays-over-time chart for its Activity page.
+counted. /plex stats borrows the plays-over-time chart for its Activity page, and /plex hot its plays.
 """
 
 import asyncio
@@ -283,12 +283,19 @@ class Visualizations(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.users = PlexUsers(bot, self.tautulli)
 
+    async def window_start(self, days: int) -> datetime:
+        """When the last `days` days begin: midnight, `days - 1` days before today, in the server's timezone.
+
+        Whole days, as the per-day and per-month bars count them, so the header's play count is what the
+        bars add up to. /plex hot uses the same window.
+        """
+        zone = await self.tautulli.server_timezone()
+        return datetime.combine(datetime.now(zone).date() - timedelta(days=days - 1), time.min, tzinfo=zone)
+
     async def plays(self, days: int) -> Optional[List[Play]]:
         """Everyone's plays in the last `days` days, but ignored users'; None if Tautulli didn't answer."""
-        zone = await self.tautulli.server_timezone()
-        # Whole days, today included, as the per-day and per-month bars count them: the header's
-        # play count is then what the bars add up to.
-        since = datetime.combine(datetime.now(zone).date() - timedelta(days=days - 1), time.min, tzinfo=zone)
+        since = await self.window_start(days)
+        zone = since.tzinfo
         params = {
             # Tautulli's "after" is a whole date; the exact cutoff is applied below.
             "after": (since.date() - timedelta(days=1)).isoformat(),

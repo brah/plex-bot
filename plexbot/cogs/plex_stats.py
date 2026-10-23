@@ -3,7 +3,6 @@
 import asyncio
 import logging
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
 from functools import partial
 from typing import Awaitable, Callable, Optional
 
@@ -373,7 +372,7 @@ def hot_summary(history, recent_items, *, days: int, name: Callable[[dict], str]
     for row in history:
         user = plex_username(row)
         key = str(row.get("grandparent_rating_key") or row.get("rating_key"))
-        title = row.get("grandparent_title") or row.get("full_title") or row.get("title")
+        title = row.get("grandparent_title") or row.get("title")
         entry = titles.setdefault(key, {"title": title, "users": set(), "plays": 0, "row": row})
         entry["users"].add(user)
         entry["plays"] += 1
@@ -675,24 +674,16 @@ class PlexStats(commands.Cog):
     ):
         await interaction.response.defer()
         days = days or 7
-        since = datetime.now() - timedelta(days=days)
-        rows, recent_r = await asyncio.gather(
-            self.tautulli.get_history_rows({
-                # Tautulli reads "after" as a date in its own timezone: start a day early, then cut
-                # off exactly below (as /plex chart does).
-                "after": (since.date() - timedelta(days=1)).isoformat(),
-                "order_column": "date", "order_dir": "desc",
-            }),
-            self.tautulli.get_recently_added(count=50),
-        )
-        if rows is None:
+        charts = self.bot.get_cog("Visualizations")  # /plex chart's plays, so both count the same days
+        plays, recent_r = await asyncio.gather(charts.plays(days), self.tautulli.get_recently_added(count=50))
+        if plays is None:
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
-        cutoff, ignored = since.timestamp(), ignored_usernames()
-        history = [row for row in rows if to_int(row.get("date")) >= cutoff and plex_username(row) not in ignored]
+        history = [row for _started, row in plays]
         if not history:
             await empty_state(f"Nobody's watched anything in the last {plural(days, 'day')}.").send(interaction)
             return
+        cutoff = (await charts.window_start(days)).timestamp()
         recent = []
         if Tautulli.check_response(recent_r):
             recent = [item for item in (Tautulli.get_response_data(recent_r, {}) or {}).get("recently_added") or []
