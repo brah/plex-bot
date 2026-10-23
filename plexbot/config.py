@@ -58,6 +58,7 @@ class Config:
         else:
             logger.info(f"No {config_file}; using environment variables and defaults")
 
+        self._type_file_values(config_file)
         self._apply_environment(os.environ)
 
         missing_required = [
@@ -72,6 +73,24 @@ class Config:
 
         self._initialized = True
         return True
+
+    def _type_file_values(self, config_file: str) -> None:
+        """Text in config.json for a setting that isn't text ("false", "3600") is read as the environment's is."""
+        for section_name, section in self._sections.items():
+            values = self._user_config.get(section_name)
+            if not isinstance(values, dict):
+                continue
+            for key, (default, _description, _required) in section._values.items():
+                raw = values.get(key)
+                if not isinstance(raw, str) or isinstance(default, str):
+                    continue
+                del values[key]  # blank or unreadable text counts as unset, as in the environment
+                if raw.strip():
+                    try:
+                        values[key] = parse_env_value(raw.strip(), default)
+                    except ValueError:
+                        logger.error(f"Ignoring {section_name}.{key} in {config_file}: {raw!r} isn't a valid "
+                                     f"{type(default).__name__}")
 
     def _apply_environment(self, environ) -> None:
         """PLEXBOT_<SECTION>_<KEY> variables override config.json. Empty ones count as unset."""

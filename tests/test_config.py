@@ -47,6 +47,24 @@ def test_environment_alone_is_enough(monkeypatch, tmp_path):
     assert cfg.get("discord", "admin_ids") == ["1", "2"]
 
 
+def test_text_in_the_file_is_read_as_the_settings_type(monkeypatch, tmp_path, caplog):
+    cfg = fresh_config(monkeypatch)
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "core": {"token": "t"},
+        "tautulli": {"ip": "h:8181", "apikey": "k", "use_https": "false"},
+        "cache": {"update_interval": "3600"},
+        "discord": {"top_role_id": "", "admin_ids": "1, 2"},
+        "charts": {"dpi": "lots"},
+    }))
+    assert cfg.initialize(str(path))
+    assert cfg.get("tautulli", "use_https") is False  # the text "false" isn't empty, so it read as true
+    assert cfg.get("cache", "update_interval") == 3600
+    assert cfg.get("discord", "top_role_id") == 0  # blank counts as unset
+    assert cfg.get("discord", "admin_ids") == ["1", "2"]
+    assert cfg.get("charts", "dpi") == 200 and "charts.dpi" in caplog.text
+
+
 def test_environment_overrides_file_and_empty_means_unset(monkeypatch, tmp_path):
     cfg = fresh_config(monkeypatch)
     path = tmp_path / "config.json"

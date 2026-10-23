@@ -5,6 +5,10 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### Bug fixes
+
+- Settings written in quotes in config.json, like `"use_https": "false"` or `"update_interval": "3600"`, work instead of breaking the bot.
+
 ## 1.4.0 - 2026-10-23
 
 ### New features
