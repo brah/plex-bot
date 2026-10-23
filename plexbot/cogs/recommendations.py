@@ -27,12 +27,12 @@ logger = logging.getLogger("plexbot.recommendations")
 _PICKS = 3
 _TOP_GENRES = 3
 _SUMMARY = 150
+_KEYS = ("rating_key", "parent_rating_key", "grandparent_rating_key")  # all a history row is read for
 
 
 def watched_keys(history: list) -> set:
     """Every item a history touches: episodes bring their season and show along."""
-    return {str(entry[key]) for entry in history
-            for key in ("rating_key", "parent_rating_key", "grandparent_rating_key") if entry.get(key)}
+    return {str(entry[key]) for entry in history for key in _KEYS if entry.get(key)}
 
 
 def favourite_genres(history: list, item_for) -> List[str]:
@@ -175,7 +175,7 @@ class Recommendations(commands.Cog):
         # Every play, not just the latest page: anything left out could be recommended as unwatched.
         history = await self.tautulli.get_history_rows({
             "user": mapping["plex_username"], "order_column": "date", "order_dir": "desc",
-        })
+        }, fields=_KEYS)
         if history is None:
             logger.error("Failed to retrieve watch history from Tautulli.")
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
