@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # 3.14.9+ for GHSA-6q48-6c7w-9gw2; pinned so a stale cached base can't be reused.
-FROM python:3.14.9-slim
+FROM python:3.15.0-slim
 
 # Unbuffered stdout/stderr so `docker logs` is live; no .pyc clutter in layers.
 # PYTHONPATH finds the plexbot package in /app while the bot runs from /data.
