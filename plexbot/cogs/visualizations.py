@@ -291,13 +291,19 @@ class Visualizations(commands.Cog):
 
     async def plays(self, days: int) -> Optional[List[Play]]:
         """Everyone's plays in the last `days` days, but ignored users'; None if Tautulli didn't answer."""
-        since = await self.window_start(days)
+        return await self.plays_between(await self.window_start(days))
+
+    async def plays_between(self, since: datetime, until: Optional[datetime] = None) -> Optional[List[Play]]:
+        """Everyone's plays starting from `since` until before `until`, but ignored users'; None if Tautulli
+        didn't answer."""
         zone = since.tzinfo
         params = {
-            # Tautulli's "after" is a whole date; the exact cutoff is applied below.
+            # Tautulli's "after" and "before" are whole dates; the exact cutoffs are applied below.
             "after": (since.date() - timedelta(days=1)).isoformat(),
             "order_column": "date", "order_dir": "desc",
         }
+        if until:
+            params["before"] = (until.date() + timedelta(days=1)).isoformat()
         rows = await self.tautulli.get_history_rows(params, fields=(*_PLAY_FIELDS, "started", "date"))
         if rows is None:
             logger.error("Failed to retrieve watch history from Tautulli.")
@@ -309,7 +315,7 @@ class Visualizations(commands.Cog):
             if not started or plex_username(row) in ignored:
                 continue
             moment = datetime.fromtimestamp(started, zone)
-            if moment >= since:
+            if moment >= since and (until is None or moment < until):
                 plays.append((moment, {key: row[key] for key in _PLAY_FIELDS if key in row}))
         return plays
 

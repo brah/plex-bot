@@ -689,3 +689,21 @@ def test_a_plex_name_wins_over_someone_elses_discord_name():
     plex_users.name = lambda row: "Alex" if row["username"] == "sam" else row["friendly_name"]  # Sam is "Alex" on Discord
     assert plex_users.match(users, "alex")["username"] == "alex2"
     assert plex_users.match(users, " ") is None  # blank text matches nobody
+
+
+def test_plays_between_keeps_only_that_window():
+    """/plex wrapped asks for one calendar year: plays on either side of it are dropped."""
+    tautulli = FakeTautulli()
+    tautulli.history = [
+        {"user": "alice", "media_type": "movie", "started": int(datetime(*moment, tzinfo=timezone.utc).timestamp())}
+        for moment in ((2025, 12, 31, 23, 59, 59), (2026, 1, 1), (2026, 12, 31, 23, 59, 59), (2027, 1, 1))
+    ]
+    since, until = datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2027, 1, 1, tzinfo=timezone.utc)
+
+    async def run(bot, cog):
+        return await cog.plays_between(since, until)
+
+    plays = _run(run, tautulli)
+    assert sorted(p[0].isoformat() for p in plays) == ["2026-01-01T00:00:00+00:00", "2026-12-31T23:59:59+00:00"]
+    assert tautulli.history_calls[0]["after"] == "2025-12-31"
+    assert tautulli.history_calls[0]["before"] == "2027-01-02"
