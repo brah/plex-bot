@@ -1,4 +1,4 @@
-"""/plex top, stats, shows, history and hot: renderers and commands against fakes."""
+"""/plex top, stats, history and hot: renderers and commands against fakes."""
 
 import asyncio
 import time
@@ -13,7 +13,7 @@ from plexbot import utilities
 from plexbot.cogs import plex_stats
 from plexbot.cogs.plex_stats import (
     _ALL_TIME, _STATS, PlexStats, hot_summary, library_line, media_card, overview_card, peak_line, popular_lines,
-    tautulli_duration, top_card, tv_watchers, users_card,
+    tautulli_duration, top_card, users_card,
 )
 from fakes import FakeTautulli, Recorder, build_stats_bot, interaction, patch_images
 
@@ -141,19 +141,6 @@ class TestRenderers:
         popular = popular_lines([{"title": "The Matrix", "year": "1999", "media_type": "movie",
                                   "total_plays": 12, "users_watched": 1}])
         assert popular == "`1.` **The Matrix (1999)** · 12 plays · 1 person"
-
-    def test_tv_watchers_sum_libraries_and_skip_ignored(self):
-        libraries = [{"section_name": "TV"}, {"section_name": "Anime"}]
-        ok = lambda rows: {"response": {"result": "success", "data": rows}}  # noqa: E731
-        responses = [
-            ok([{"username": "alice", "total_time": 100}, {"username": "mallory", "total_time": 999}]),
-            ok([{"username": "alice", "total_time": 50}, {"username": "bob", "total_time": 120},
-                {"username": "zed", "total_time": 0}]),
-        ]
-        ranked = tv_watchers(libraries, responses, {"mallory"})
-        assert [(row["username"], seconds, libs) for row, seconds, libs in ranked] == [
-            ("alice", 150, ["TV", "Anime"]), ("bob", 120, ["Anime"]),
-        ]
 
 
 def _play(user, title, *, show=None, key, media_type="episode", date=NOW):
@@ -384,16 +371,6 @@ class TestCommands:
              FakeTautulli([], reachable=False))
         assert recorder.last("followup")["ephemeral"] is True
 
-    def test_shows(self, monkeypatch):
-        recorder = Recorder(monkeypatch)
-        tautulli = FakeTautulli([])
-        tautulli.libraries = [{"section_id": "2", "section_type": "show", "section_name": "TV"},
-                              {"section_id": "1", "section_type": "movie"}]
-        tautulli.library_user_stats = {"2": [{"username": "alice", "friendly_name": "Alice", "total_time": 7200}]}
-        _run(lambda bot, cog: PlexStats.shows.callback(cog, interaction(bot)), tautulli)
-        assert recorder.last("followup")["embeds"][0].description == (
-            "-# All time, by TV watch time\n🥇 **Alice** · 2h")
-
     def test_history_for_a_user_filters_in_tautulli(self, monkeypatch):
         recorder = Recorder(monkeypatch)
         tautulli = FakeTautulli([])
@@ -467,6 +444,6 @@ def test_stats_commands_registered_in_help():
     entries = _run(run, FakeTautulli([]))
     stats = {e.usage for e in entries if e.category == "stats"}
     assert stats == {
-        "/plex top [days]", "/plex stats [days]", "/plex shows", "/plex history [user]", "/plex hot [days]",
+        "/plex top [days]", "/plex stats [days]", "/plex history [user]", "/plex hot [days]",
     }
     assert not any(e.usage.startswith("plex ") for e in entries)  # no prefix stats commands left

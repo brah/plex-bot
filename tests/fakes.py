@@ -157,7 +157,6 @@ class FakeTautulli:
     home_stats: dict = {}
     home_stats_calls: list = []
     libraries_table: list = []
-    library_user_stats: dict = {}  # section_id -> rows
     users: list = []
 
     async def get_home_stats(self, params=None):
@@ -166,9 +165,6 @@ class FakeTautulli:
 
     async def get_libraries_table(self):
         return self._ok({"data": self.libraries_table})
-
-    async def get_library_user_stats(self, section_id=None):
-        return self._ok(self.library_user_stats.get(str(section_id), []))
 
     async def get_users(self):
         return self._ok(self.users)

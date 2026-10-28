@@ -1,4 +1,4 @@
-"""Stats commands: /plex top, /plex stats, /plex shows, /plex history and /plex hot."""
+"""Stats commands: /plex top, /plex stats, /plex history and /plex hot."""
 
 import asyncio
 import logging
@@ -316,34 +316,6 @@ class StatsView(LoggedView):
         return self.pages[label]
 
 
-# --- /plex shows -----------------------------------------------------------------
-
-
-def tv_watchers(libraries, responses, ignored: set) -> list:
-    """[(row, seconds, library names)] across TV libraries, most watched first."""
-    totals: dict = {}
-    for library, response in zip(libraries, responses):
-        if not Tautulli.check_response(response):
-            continue
-        for row in Tautulli.get_response_data(response, []) or []:
-            username = plex_username(row)
-            if not username or username in ignored or not to_int(row.get("total_time")):
-                continue
-            entry = totals.setdefault(username, [row, 0, []])
-            entry[1] += to_int(row.get("total_time"))
-            entry[2].append(library.get("section_name") or "TV")
-    return sorted((tuple(v) for v in totals.values()), key=lambda v: v[1], reverse=True)
-
-
-def shows_card(ranked, *, name: Callable[[dict], str], several_libraries: bool) -> nextcord.Embed:
-    lines = ["-# All time, by TV watch time"]
-    for rank, (row, seconds, libraries) in enumerate(ranked[:_RANKED], 1):
-        lines.append(f"{rank_prefix(rank)} **{name(row)}** · {format_duration(seconds)}")
-        if several_libraries:
-            lines.append(f"-# {escape_markdown(', '.join(libraries))}")
-    return card(title="📺 Top TV watchers", description="\n".join(lines), colour=Colour.GOLD)
-
-
 # --- /plex history ---------------------------------------------------------------
 
 _HISTORY_ROWS = 15
@@ -599,28 +571,6 @@ class PlexStats(commands.Cog):
                                  avatar=viewer_avatar(self.bot, users[0]) if users else None), None),
         }, lazy={"Activity": partial(charts.activity_page, days)} if charts else None)
         view.message = bot_token_handle(interaction, await view.show("Overview").send(interaction))
-
-    # --- /plex shows -------------------------------------------------------------
-
-    @plex.subcommand(description="Top TV watchers of all time")
-    async def shows(self, interaction: nextcord.Interaction):
-        await interaction.response.defer()
-        libraries = self._rows(await self.tautulli.get_libraries(), [])
-        if libraries is None:
-            await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
-            return
-        tv = [lib for lib in libraries if lib.get("section_type") == "show"]
-        responses = await asyncio.gather(*(self.tautulli.get_library_user_stats(section_id=lib["section_id"])
-                                           for lib in tv))
-        ranked = tv_watchers(tv, responses, ignored_usernames())
-        if not ranked:
-            await empty_state("Nobody's watched any TV yet.").send(interaction)
-            return
-        embed = shows_card(ranked, name=self._mention, several_libraries=len(tv) > 1)
-        avatar = viewer_avatar(self.bot, ranked[0][0])
-        if avatar:
-            embed.set_thumbnail(url=avatar)
-        await Reply([embed]).send(interaction)
 
     # --- /plex history -----------------------------------------------------------
 

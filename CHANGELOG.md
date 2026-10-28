@@ -13,6 +13,7 @@ What changed in each release, newest first. Releases are also on
 
 ### Changes
 
+- `/plex shows` is gone. `/plex top` and the Users page of `/plex stats` still rank watchers.
 - `/plexadmin link` and `/plexadmin ignore` find a Plex user by their Discord name too, as `/plex history` does.
 
 ## 1.4.0 - 2026-10-23

@@ -266,10 +266,6 @@ class Tautulli(_HTTPClient):
         response = await self.api_call("terminate_session", params)
         return 200 if self.check_response(response) else 400
 
-    async def get_library_user_stats(self, section_id: str) -> Optional[Dict[str, Any]]:
-        """Get user stats for a library."""
-        return await self.api_call("get_library_user_stats", {"section_id": section_id})
-
     async def get_libraries_table(self) -> Optional[Dict[str, Any]]:
         """Get the data on the Tautulli libraries table."""
         return await self.api_call("get_libraries_table")

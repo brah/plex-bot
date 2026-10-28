@@ -51,12 +51,11 @@ A Discord bot for your Plex server. It reads [Tautulli](https://github.com/Tautu
 <td><img src="docs/screenshots/chart-hours.webp" alt="/plex chart, by hour" width="420"></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/shows.webp" alt="/plex shows" width="420"></td>
-<td><img src="docs/screenshots/help.webp" alt="/plex help" width="420"></td>
-</tr>
-<tr>
 <td><img src="docs/screenshots/admin-users.webp" alt="/plexadmin users" width="420"></td>
 <td><img src="docs/screenshots/admin-cache.webp" alt="/plexadmin cache" width="420"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/help.webp" alt="/plex help" width="420"></td>
 </tr>
 </table>
 
@@ -257,7 +256,6 @@ Everything is under `/plex`, plus `/plexadmin` for admins.
 | `/plex stats` | Server stats across five pages |
 | `/plex hot` | Trending titles, binges and new hits |
 | `/plex history` | Recent plays, everyone's or one person's |
-| `/plex shows` | Top TV watchers of all time |
 | `/plex chart` | Charts by day, hour, weekday, viewer, show or movie |
 | `/plex downloading` | qBittorrent progress |
 | `/plex help` | What the bot can do |
