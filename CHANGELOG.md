@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.6.0 - 2026-10-29
+
 ### New features
 
 - `/plex wrapped`: your year on Plex as a story of slides, with a card to share in the channel.
