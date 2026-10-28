@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.5.0 - 2026-10-28
+
 ### New features
 
 - `/plex hot` hands out awards: most rewatched movie, night owl, longest day and explorer.
