@@ -23,6 +23,7 @@ venv/
 .ruff_cache/
 
 # Not needed at runtime
+requirements-dev.txt
 tests/
 .github/
 deploy/

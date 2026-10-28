@@ -8,7 +8,7 @@ the rules that keep a public repo about a private Plex server safe to share.
 ```bash
 git clone https://github.com/brah/plex-bot.git && cd plex-bot
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt pytest "ruff==0.17.0"
+pip install -r requirements.txt -r requirements-dev.txt
 pytest -q        # needs neither Discord nor Tautulli
 ruff check .
 ```

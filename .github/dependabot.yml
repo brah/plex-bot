@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
 
   # Workflow actions in .github/workflows/.
   - package-ecosystem: "github-actions"

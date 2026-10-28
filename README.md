@@ -280,7 +280,7 @@ Logs go to `plexbot.log`; admins can also fetch them with `/plexadmin logs`, wit
 ## Development
 
 ```bash
-pip install -r requirements.txt pytest "ruff==0.17.0"
+pip install -r requirements.txt -r requirements-dev.txt
 pytest -q && ruff check .
 ```
 
