@@ -8,6 +8,9 @@ some replies as a small thumbnail, so you can tell at a glance what kind of repl
 | <img src="mascot-wave.png" width="72" alt=""> | `mascot-wave` | `/plex help`, and the README banner |
 | <img src="mascot-server.png" width="72" alt=""> | `mascot-server` | `/plex status` |
 | <img src="mascot-downloading.png" width="72" alt=""> | `mascot-downloading` | `/plex downloading` |
+| <img src="mascot-party.png" width="72" alt=""> | `mascot-party` | `/plex wrapped`'s first slide |
+| <img src="mascot-trophy.png" width="72" alt=""> | `mascot-trophy` | `/plex wrapped`'s personality slide |
+| <img src="mascot-gift.png" width="72" alt=""> | `mascot-gift` | `/plex wrapped` while it loads |
 | <img src="mascot-sleepy.png" width="72" alt=""> | `mascot-sleepy` | Nothing to show, like nobody watching |
 | <img src="mascot-unplugged.png" width="72" alt=""> | `mascot-unplugged` | Tautulli or qBittorrent can't be reached |
 | <img src="mascot-oops.png" width="72" alt=""> | `mascot-oops` | Something broke on the bot's side |

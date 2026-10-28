@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512"
+     height="512" viewBox="0 0 512 512">
+  <defs>
+    <filter id="soft" x="-50%" y="-200%" width="200%" height="500%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <clipPath id="bucket">
+      <path d="M120 222 L392 222 L362 448 L150 448 Z"/>
+    </clipPath>
+    <!-- one popcorn piece: lumpy union of four puffs, outlined as a single shape -->
+    <g id="pop">
+      <g fill="#2B2D31">
+        <circle cx="-17" cy="6" r="36"/>
+        <circle cx="8" cy="-15" r="36"/>
+        <circle cx="19" cy="11" r="34"/>
+        <circle cx="-9" cy="-19" r="30"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- the same piece, buttered -->
+    <g id="pop-butter">
+      <use xlink:href="#pop"/>
+      <g fill="#FFE39A">
+        <circle cx="-17" cy="6" r="24"/>
+        <circle cx="19" cy="11" r="22"/>
+      </g>
+      <g fill="#FFF8E6">
+        <circle cx="8" cy="-15" r="24"/>
+        <circle cx="-9" cy="-19" r="18"/>
+      </g>
+    </g>
+    <!-- Kernel without a face: popcorn heap over the striped bucket (bottom centre 256,448) -->
+    <g id="kernel">
+      <use xlink:href="#pop-butter" transform="translate(150 196) rotate(-20)"/>
+      <use xlink:href="#pop" transform="translate(362 196) rotate(150)"/>
+      <use xlink:href="#pop" transform="translate(204 148) rotate(40)"/>
+      <use xlink:href="#pop-butter" transform="translate(310 150) rotate(-60)"/>
+      <use xlink:href="#pop" transform="translate(258 104) rotate(10)"/>
+      <use xlink:href="#pop" transform="translate(218 200) rotate(100)"/>
+      <use xlink:href="#pop-butter" transform="translate(298 202) rotate(-130)"/>
+      <g clip-path="url(#bucket)">
+        <rect x="100" y="210" width="320" height="260" fill="#FFF4DC"/>
+        <g fill="#E5A00D">
+          <path d="M120 222 L174.4 222 L192.4 448 L150 448 Z"/>
+          <path d="M228.8 222 L283.2 222 L277.2 448 L234.8 448 Z"/>
+          <path d="M337.6 222 L392 222 L362 448 L319.6 448 Z"/>
+        </g>
+        <path d="M366 222 L400 222 L370 448 L340 448 Z" fill="#2B2D31" opacity="0.12"/>
+      </g>
+      <path d="M120 222 L392 222 L362 448 L150 448 Z" fill="none" stroke="#2B2D31" stroke-width="15"
+            stroke-linejoin="round"/>
+      <rect x="104" y="206" width="304" height="38" rx="18" fill="#E5A00D" stroke="#2B2D31"
+            stroke-width="15" stroke-linejoin="round"/>
+      <path d="M128 218 L240 218" stroke="#F5C04A" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <defs>
+    <clipPath id="hat">
+      <path d="M210 94 Q262 112 314 94 L266 -36 Z"/>
+    </clipPath>
+  </defs>
+  <ellipse cx="256" cy="478" rx="150" ry="15" fill="#2B2D31" opacity="0.28" filter="url(#soft)"/>
+  <!-- confetti and streamers -->
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#F2836B" stroke="#2B2D31"
+        stroke-width="7" transform="translate(70 70) rotate(-25)"/>
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#7CC8F4" stroke="#2B2D31"
+        stroke-width="7" transform="translate(170 40) rotate(30)"/>
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#3FDB78" stroke="#2B2D31"
+        stroke-width="7" transform="translate(400 46) rotate(-40)"/>
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#F5C04A" stroke="#2B2D31"
+        stroke-width="7" transform="translate(470 132) rotate(20)"/>
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#FFE39A" stroke="#2B2D31"
+        stroke-width="7" transform="translate(44 188) rotate(50)"/>
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#F2836B" stroke="#2B2D31"
+        stroke-width="7" transform="translate(468 236) rotate(-15)"/>
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#F5C04A" stroke="#2B2D31"
+        stroke-width="7" transform="translate(52 400) rotate(15)"/>
+  <rect x="-8.0" y="-15.0" width="16" height="30" rx="5" fill="#7CC8F4" stroke="#2B2D31"
+        stroke-width="7" transform="translate(470 410) rotate(-35)"/>
+  <circle cx="122" cy="128" r="10" fill="#3FDB78" stroke="#2B2D31" stroke-width="7"/>
+  <circle cx="352" cy="78" r="10" fill="#F2836B" stroke="#2B2D31" stroke-width="7"/>
+  <circle cx="214" cy="72" r="8" fill="#FFE39A" stroke="#2B2D31" stroke-width="7"/>
+  <circle cx="440" cy="180" r="8" fill="#7CC8F4" stroke="#2B2D31" stroke-width="7"/>
+  <circle cx="36" cy="300" r="8" fill="#F2836B" stroke="#2B2D31" stroke-width="7"/>
+  <circle cx="484" cy="330" r="8" fill="#3FDB78" stroke="#2B2D31" stroke-width="7"/>
+  <path d="M96 150 Q118 120 104 96 Q90 72 112 48" fill="none" stroke="#2B2D31" stroke-width="20" stroke-linecap="round"/>
+  <path d="M96 150 Q118 120 104 96 Q90 72 112 48" fill="none" stroke="#7CC8F4" stroke-width="8" stroke-linecap="round"/>
+  <path d="M428 104 Q404 82 420 58 Q436 34 414 14" fill="none" stroke="#2B2D31" stroke-width="20" stroke-linecap="round"/>
+  <path d="M428 104 Q404 82 420 58 Q436 34 414 14" fill="none" stroke="#F2836B" stroke-width="8" stroke-linecap="round"/>
+  <g transform="translate(256 470) scale(0.74) translate(-256 -448)">
+    <!-- both arms raised, cheering -->
+    <path d="M362 330 L436 292 L460 214" fill="none" stroke="#2B2D31" stroke-width="52"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M362 330 L436 292 L460 214" fill="none" stroke="#E5A00D" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M150 330 L76 292 L52 214" fill="none" stroke="#2B2D31" stroke-width="52"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M150 330 L76 292 L52 214" fill="none" stroke="#E5A00D" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <use xlink:href="#kernel"/>
+    <!-- party hat, tipped to one side -->
+    <g transform="rotate(14 262 90)">
+      <g clip-path="url(#hat)">
+        <rect x="190" y="-70" width="150" height="190" fill="#F2836B"/>
+        <path d="M180 76 L344 26 M180 22 L344 -28 M180 128 L344 78" stroke="#FFF4DC" stroke-width="20"/>
+      </g>
+      <path d="M210 94 Q262 112 314 94 L266 -36 Z" fill="none" stroke="#2B2D31" stroke-width="15"
+            stroke-linejoin="round"/>
+      <circle cx="266" cy="-44" r="24" fill="#FFE39A" stroke="#2B2D31" stroke-width="13"/>
+    </g>
+    <path d="M186 318 Q210 290 234 318" fill="none" stroke="#2B2D31" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M278 318 Q302 290 326 318" fill="none" stroke="#2B2D31" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <ellipse cx="176" cy="356" rx="19" ry="11" fill="#F2836B" opacity="0.8"/>
+    <ellipse cx="336" cy="356" rx="19" ry="11" fill="#F2836B" opacity="0.8"/>
+    <path d="M222 350 Q256 404 290 350 Z" fill="#2B2D31" stroke="#2B2D31" stroke-width="10"
+          stroke-linejoin="round"/>
+    <path d="M238 374 Q256 362 274 374 Q256 390 238 374 Z" fill="#F2836B"/>
+    <circle cx="460" cy="200" r="31" fill="#FFF4DC" stroke="#2B2D31" stroke-width="13"/>
+    <circle cx="52" cy="200" r="31" fill="#FFF4DC" stroke="#2B2D31" stroke-width="13"/>
+  </g>
+</svg>

@@ -127,3 +127,57 @@ then adds the pose.
 > download arrow, with a thin light-green highlight down its shaft, points straight down into the
 > bucket. Two popcorn pieces fall in on either side, each with two short vertical motion marks
 > above it.
+
+## mascot-party
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the character, no gradients, no text. Transparent background. Centred,
+> square 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big friendly face
+> on the stripes with coral blush cheeks; short chunky amber arms with round cream mitten hands.
+> Pose: celebrating. Kernel stands centred with both arms raised in a cheer. A cone party hat
+> with diagonal coral and cream stripes and a butter-yellow pom-pom sits tipped to one side on
+> top of the popcorn. Eyes squeezed into happy upward arcs and a wide open grin with a coral
+> tongue. Confetti fills the space around it: small rounded rectangles and dots in coral, amber,
+> butter yellow, light blue (#7CC8F4) and green (#3FDB78), all outlined, plus two curly streamers,
+> one light blue and one coral.
+
+## mascot-trophy
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the character, no gradients, no text. Transparent background. Centred,
+> square 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big friendly face
+> on the stripes with glossy oval black eyes, white highlight dots, coral blush cheeks and a small
+> open smile; short chunky amber arms with round cream mitten hands.
+> Pose: a proud winner. Kernel stands a little left of centre with its left arm raised in a cheer,
+> and holds a gold trophy cup high in its right hand. The cup has a light amber (#F5C04A) bowl
+> with a butter-yellow shine down one side, an amber rim, two looped amber handles, a short amber
+> stem and an amber plinth resting in the hand, and a cream five-point star on the bowl. Three
+> amber four-point sparkles around the trophy.
+
+## mascot-gift
+
+> Flat vector illustration of a cute mascot character, sticker style. Thick, rounded, uniform
+> dark charcoal outlines (#2B2D31) around every shape, including limbs and props; no thin line
+> art. Limited warm palette: Plex amber (#E5A00D), cream (#FFF4DC, #FFF8E6), butter yellow
+> (#FFE39A), coral blush (#F2836B), light amber highlight (#F5C04A). Flat fills, a single soft
+> shadow ellipse under the scene, no gradients, no text. Transparent background. Centred, square
+> 1:1, big simple silhouette, readable at 80 px.
+> The character, Kernel: a tapered popcorn bucket with vertical amber-and-cream stripes and a
+> rounded amber rim, overflowing with lumpy cream and buttered-yellow popcorn; a big friendly face
+> on the stripes with glossy oval black eyes, white highlight dots, coral blush cheeks and a small
+> open smile; short chunky amber arms with round cream mitten hands.
+> Pose: excited about a present. Kernel stands on the left and reaches one hand to a wrapped gift
+> box on the right, about as tall as the bucket. The box is coral (#F2836B) with cream polka dots,
+> under a slightly wider lid in a lighter coral (#EC8466); an amber ribbon runs down the front and
+> over the lid, tied on top in a two-loop amber bow with a light amber knot. Two amber four-point
+> sparkles above the box.
