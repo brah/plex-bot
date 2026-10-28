@@ -160,12 +160,17 @@ def _hero(draw: ImageDraw.ImageDraw, text: str, y: int, width: int, size: int, m
     return y
 
 
+def body_lines(text: str, width: int, size: int) -> List[str]:
+    """Body text wrapped to `width` on up to three lines, the last ending in "…" when text is left over."""
+    return fit_lines(text, width, size, size, lines=3, font=lambda _text, points: _body(points))[1]
+
+
 def _lines(draw: ImageDraw.ImageDraw, rows: Sequence[Tuple[str, tuple]], y: int, width: int,
            size: int = 34, x: int = _X) -> int:
     """Body text, each row wrapped to `width` in its own colour; returns the y below it."""
     font = _body(size)
     for text, fill in rows:
-        for row in _wrap(text, font, width)[:3]:
+        for row in body_lines(text, width, size):
             draw.text((x, y), row, font=font, fill=fill)
             y += round(size * 1.4)
     return y
@@ -225,8 +230,16 @@ def _day(day) -> str:
     return f"{day:%a} {day.day} {day:%b}"  # "14 Mar" never splits across lines
 
 
-def _hours(seconds: int) -> int:
-    return round(seconds / 3600)
+def duration_words(seconds: int) -> str:
+    """"20 minutes" under an hour, else whole hours: "1 hour", "32 hours"."""
+    minutes = round(seconds / 60)
+    return plural(max(1, minutes), "minute") if minutes < 60 else plural(round(seconds / 3600), "hour")
+
+
+def hours_headline(seconds: int) -> str:
+    """"1 HR", "312 HRS"."""
+    hours = round(seconds / 3600)
+    return f"{hours:,} HR" if hours == 1 else f"{hours:,} HRS"
 
 
 def _tint(data: Optional[bytes]) -> Optional[int]:
@@ -254,7 +267,7 @@ def _watch_time(year: WrappedYear, **_) -> Image.Image:
     image = _canvas()
     draw = ImageDraw.Draw(image)
     _label(draw, "YOU WATCHED")
-    y = _hero(draw, f"{_hours(year.seconds):,} HRS", 130, W - 2 * _X, 330, 150, lines=1)
+    y = _hero(draw, hours_headline(year.seconds), 130, W - 2 * _X, 330, 150, lines=1)
     rows = []
     if year.seconds >= 2 * 86400:
         rows.append((f"That's {round(year.seconds / 86400)} days nonstop.", BODY))
@@ -283,7 +296,7 @@ def _top_show(year: WrappedYear, posters, **_) -> Optional[Image.Image]:
     top = year.top_show
     if not top:
         return None
-    rows = [(f"{plural(top.episodes, 'episode')} · {plural(_hours(top.show.seconds), 'hour')}", BODY)]
+    rows = [(f"{plural(top.episodes, 'episode')} · {duration_words(top.show.seconds)}", BODY)]
     if top.binge_episodes >= 2:
         rows.append((f"Biggest night: {top.binge_episodes} episodes on {_day(top.binge_day)}.", GOLD_LIGHT))
     return _poster_slide("YOUR #1 SHOW", top.show, rows, posters)
@@ -353,7 +366,7 @@ def _firsts(year: WrappedYear, posters, **_) -> Image.Image:
     _moment(image, draw, "FIRST", year.first, _X, posters)
     _moment(image, draw, "LATEST", year.last, 620, posters)
     month = calendar.month_name[year.busiest_month]
-    _lines(draw, [(f"Busiest month: {month}, {plural(_hours(year.busiest_month_seconds), 'hour')}.",
+    _lines(draw, [(f"Busiest month: {month}, {duration_words(year.busiest_month_seconds)}.",
                    GOLD_LIGHT)], H - 130, W - 2 * _X, size=36)
     return image
 
@@ -395,7 +408,7 @@ def _summary(year: WrappedYear, name: str, avatar: Optional[bytes], posters, **_
         title = pick.title if small.getlength(pick.title) <= 165 else _ellipsize(pick.title, small, 165)
         draw.text((x + 30, 500), title, font=small, fill=BODY)
     columns = (
-        ("WATCHED", f"{_hours(year.seconds):,} HRS · #{year.rank} OF {year.viewers}"),
+        ("WATCHED", f"{hours_headline(year.seconds)} · #{year.rank} OF {year.viewers}"),
         ("TOP GENRE", genre_label(year.genres[0]) if year.genres else "—"),
         ("PERSONALITY", year.personality[0]),
     )

@@ -6,7 +6,7 @@ from datetime import date
 
 from PIL import Image
 
-from plexbot.ui.wrapped import SIZE, fit_lines, headline_font, story
+from plexbot.ui.wrapped import SIZE, body_lines, duration_words, fit_lines, headline_font, hours_headline, story
 from plexbot.wrapped_year import Moment, Pick, TopMovie, TopShow, WrappedYear
 from fakes import _png
 
@@ -82,3 +82,15 @@ def test_fit_lines():
 def test_headline_font_falls_back():
     assert headline_font("SEVERANCE", 80).path.endswith("BebasNeue-Regular.ttf")
     assert headline_font("進撃", 80).path.endswith("DejaVuSans-Bold.ttf")
+
+
+def test_body_lines_end_with_an_ellipsis_when_cut():
+    rows = body_lines("Steady and dependable " * 20, 600, 36)
+    assert len(rows) == 3
+    assert rows[-1].endswith("…")
+    assert body_lines("Watched 3 times.", 600, 36) == ["Watched 3 times."]
+
+
+def test_durations_read_naturally():
+    assert [duration_words(s) for s in (20 * 60, 3600, 32 * 3600)] == ["20 minutes", "1 hour", "32 hours"]
+    assert [hours_headline(s) for s in (5000, 312 * 3600)] == ["1 HR", "312 HRS"]

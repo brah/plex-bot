@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from collections import Counter
 from typing import List
 
 import nextcord
@@ -20,31 +19,12 @@ from plexbot.ui.embeds import ErrorKind, Reply, bot_token_handle, card, empty_st
 from plexbot.ui.format import join, plural, to_int, truncate
 from plexbot.ui.images import fetch_poster_strip, poster_key
 from plexbot.ui.theme import Limits, brand_colour
-from plexbot.utilities import UserMappings, ignored_usernames
+from plexbot.utilities import ITEM_KEYS, UserMappings, favourite_genres, ignored_usernames, watched_keys
 
 logger = logging.getLogger("plexbot.recommendations")
 
 _PICKS = 3
-_TOP_GENRES = 3
 _SUMMARY = 150
-_KEYS = ("rating_key", "parent_rating_key", "grandparent_rating_key")  # all a history row is read for
-
-
-def watched_keys(history: list) -> set:
-    """Every item a history touches: episodes bring their season and show along."""
-    return {str(entry[key]) for entry in history for key in _KEYS if entry.get(key)}
-
-
-def favourite_genres(history: list, item_for) -> List[str]:
-    """The top genres (lower-case, most first), counted once per watched item, show or season.
-
-    item_for(rating_key) returns the media cache item or None.
-    """
-    counts = Counter()
-    for key in sorted(watched_keys(history)):  # sorted, so ties break the same way every time
-        for genre in (item_for(key) or {}).get("genres") or []:
-            counts[genre.lower()] += 1
-    return [genre for genre, _count in counts.most_common(_TOP_GENRES)]
 
 
 def overview_card(picks: list, counts: list, genres: List[str], *, strip) -> nextcord.Embed:
@@ -175,7 +155,7 @@ class Recommendations(commands.Cog):
         # Every play, not just the latest page: anything left out could be recommended as unwatched.
         history = await self.tautulli.get_history_rows({
             "user": mapping["plex_username"], "order_column": "date", "order_dir": "desc",
-        }, fields=_KEYS)
+        }, fields=ITEM_KEYS)
         if history is None:
             logger.error("Failed to retrieve watch history from Tautulli.")
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)

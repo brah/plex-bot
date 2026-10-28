@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, tzinfo
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from plexbot.cogs.recommendations import favourite_genres
 from plexbot.ui.format import hour_label, plural
 from plexbot.ui.images import poster_key
-from plexbot.utilities import play_seconds, plex_username
+from plexbot.utilities import favourite_genres, play_seconds, plex_username
 
 MIN_PLAYS, MIN_SECONDS = 5, 3600  # less than this is "not enough to wrap"
 _FINISHED = 45 * 60  # as /plex hot's awards: resuming a movie's last minutes isn't watching it again

@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Union
 
+import aiohttp
 import nextcord
 from nextcord.ext import commands
 
@@ -14,15 +15,17 @@ from plexbot.plex_users import PlexUsers, unknown_user
 from plexbot.slash_commands import plex
 from plexbot.tautulli_wrapper import Tautulli
 from plexbot.ui.embeds import ErrorKind, Reply, card, empty_state, error_state, service_down, set_thumbnail
-from plexbot.ui.images import Attachment, mascot, plex_image
+from plexbot.ui.images import IMAGE_TIMEOUT, Attachment, mascot, plex_image
 from plexbot.ui.theme import brand_colour
 from plexbot.ui.wrapped import story
-from plexbot.utilities import UserMappings, mapped_discord_user, viewer_mention, viewer_name
+from plexbot.utilities import UserMappings, ignored_usernames, mapped_discord_user, viewer_mention, viewer_name
 from plexbot.wrapped_year import WrappedYear, default_year, wrap_year, year_window
 
 logger = logging.getLogger("plexbot.wrapped")
 
-_TIMEOUT = 900  # a private message can only be edited through an interaction token, which lasts 15 minutes
+# A private message is only edited through an interaction token, which lasts 15 minutes from the click (or
+# command) and the timer starts later, once the slides are drawn: time out well before, so the buttons go.
+_TIMEOUT = 600
 
 
 class WrappedView(LoggedView):
@@ -141,7 +144,9 @@ class Wrapped(commands.Cog):
         if not username:
             return error_state(ErrorKind.INPUT, "You aren't linked to a Plex account.",
                                hint="Pick a user, or ask an admin to link you with /plexadmin link.")
-        # An ignored user isn't in `users`; their plays are left out too, so they get "not enough".
+        if username in ignored_usernames():  # their plays are left out of every stat, so there's no year to wrap
+            return error_state(ErrorKind.INPUT, "You're hidden from stats, so there's no Wrapped for you.",
+                               hint="An admin can unhide you with /plexadmin ignore.")
         return next((row for row in users if row["username"] == username), {"username": username})
 
     async def _posters(self, year: WrappedYear) -> Dict[str, bytes]:
@@ -161,8 +166,8 @@ class Wrapped(commands.Cog):
         if not member:
             return None
         try:
-            return await member.display_avatar.read()
-        except nextcord.DiscordException as e:
+            return await asyncio.wait_for(member.display_avatar.read(), timeout=IMAGE_TIMEOUT)
+        except (nextcord.DiscordException, aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.warning(f"Couldn't fetch the avatar for /plex wrapped: {e}")
             return None
 

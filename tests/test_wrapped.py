@@ -2,11 +2,13 @@
 
 import asyncio
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from plexbot import utilities
 from plexbot.cogs.wrapped import Wrapped, WrappedView
+from plexbot.ui.images import Attachment
 from fakes import (
     MESSAGE_ID, FakeTautulli, Recorder, build_wrapped_bot, component_payload, interaction, patch_images, settle,
 )
@@ -157,3 +159,37 @@ def test_tautulli_down(monkeypatch):
     tautulli.history_reachable = False
     _run(_open(), tautulli)
     assert "Couldn't reach **Tautulli**" in _edited_text(recorder)
+
+
+def test_view_times_out_while_its_message_can_still_be_edited():
+    """The command's token lasts 15 minutes from the command, and the view starts after the year is drawn."""
+    async def build():
+        return WrappedView([Attachment("wrapped-1.png", b"x")], "x")
+
+    assert asyncio.run(build()).timeout <= 600
+
+
+def test_hidden_caller_is_told_so(monkeypatch):
+    monkeypatch.setattr(utilities.UserMappings, "load_user_mappings",
+                        staticmethod(lambda: [{"discord_id": "42", "plex_username": "sam", "ignore": True}]))
+    recorder = Recorder(monkeypatch)
+    _run(_open(), _tautulli())
+    assert "hidden from stats" in _edited_text(recorder)
+
+
+@pytest.mark.parametrize("failure", ["error", "hang"])
+def test_avatar_failures_fall_back_to_the_initial(monkeypatch, failure):
+    import aiohttp
+    from plexbot.cogs import wrapped
+
+    async def read():
+        if failure == "error":
+            raise aiohttp.ClientConnectionError("cdn down")
+        await asyncio.sleep(3600)
+
+    member = SimpleNamespace(display_avatar=SimpleNamespace(read=read))
+    monkeypatch.setattr(wrapped, "mapped_discord_user", lambda bot, username: member)
+    monkeypatch.setattr(wrapped, "IMAGE_TIMEOUT", 0.05)
+    recorder = Recorder(monkeypatch)
+    _run(_open(), _tautulli())
+    assert isinstance(recorder.last("edit_original_message")["view"], WrappedView)

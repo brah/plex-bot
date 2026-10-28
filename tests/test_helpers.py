@@ -68,3 +68,20 @@ class TestFormatMs:
     def test_over_an_hour(self):
         assert _format_ms(5025000) == "1:23:45"
 
+
+
+def test_modules_outside_cogs_dont_import_cogs():
+    """Every plexbot/cogs/ module loads as an extension, which runs it again, so helpers live outside it."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "plexbot"
+    offenders = []
+    for path in root.rglob("*.py"):
+        if "cogs" in path.relative_to(root).parts:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            names = [node.module or ""] if isinstance(node, ast.ImportFrom) else (
+                [alias.name for alias in node.names] if isinstance(node, ast.Import) else [])
+            offenders += [f"{path.name}: {name}" for name in names if name.startswith("plexbot.cogs")]
+    assert offenders == []

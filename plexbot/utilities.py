@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -237,6 +238,27 @@ def plex_username(row: Dict[str, Any]) -> Optional[str]:
 def play_seconds(row: Dict[str, Any]) -> int:
     """How long a play ran, pauses left out (Tautulli's play_duration; older versions only send duration)."""
     return to_int(row.get("play_duration")) or to_int(row.get("duration"))
+
+
+ITEM_KEYS = ("rating_key", "parent_rating_key", "grandparent_rating_key")  # the items a history row touches
+_TOP_GENRES = 3
+
+
+def watched_keys(history: list) -> set:
+    """Every item a history touches: episodes bring their season and show along."""
+    return {str(entry[key]) for entry in history for key in ITEM_KEYS if entry.get(key)}
+
+
+def favourite_genres(history: list, item_for) -> List[str]:
+    """The top genres (lower-case, most first), counted once per watched item, show or season.
+
+    item_for(rating_key) returns the media cache item or None.
+    """
+    counts = Counter()
+    for key in sorted(watched_keys(history)):  # sorted, so ties break the same way every time
+        for genre in (item_for(key) or {}).get("genres") or []:
+            counts[genre.lower()] += 1
+    return [genre for genre, _count in counts.most_common(_TOP_GENRES)]
 
 
 def ignored_usernames() -> set:
