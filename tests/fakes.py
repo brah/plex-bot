@@ -383,6 +383,16 @@ def build_upcoming_bot(tautulli, tmdb, items=(), sonarr=None, radarr=None):
     return _library_bot(Upcoming, tautulli, items, tmdb, sonarr, radarr)
 
 
+def build_wrapped_bot(tautulli, items=()):
+    """A PlexBot with Wrapped loaded, and Visualizations, whose plays it reads."""
+    from plexbot.cogs.visualizations import Visualizations
+    from plexbot.cogs.wrapped import Wrapped
+
+    bot, cog = _library_bot(Wrapped, tautulli, items, tmdb=None)
+    bot.add_cog(Visualizations(bot))
+    return bot, cog
+
+
 def build_stats_bot(tautulli):
     """A PlexBot with PlexStats loaded."""
     from plexbot.cogs.plex_stats import PlexStats

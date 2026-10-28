@@ -40,6 +40,7 @@ EXAMPLES = {
     "/plex history": "/plex history user:alice",
     "/plex hot": "/plex hot days:14",
     "/plex chart": "/plex chart user:alice days:90",
+    "/plex wrapped": "/plex wrapped user:alice year:2025",
 }
 
 

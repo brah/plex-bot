@@ -257,6 +257,7 @@ Everything is under `/plex`, plus `/plexadmin` for admins.
 | `/plex hot` | Trending titles, binges, new hits and awards |
 | `/plex history` | Recent plays, everyone's or one person's |
 | `/plex chart` | Charts by day, hour, weekday, viewer, show or movie |
+| `/plex wrapped` | Someone's year on Plex as a story, with a card to share |
 | `/plex downloading` | qBittorrent progress |
 | `/plex help` | What the bot can do |
 | `/plexadmin users`, `link`, `unlink`, `ignore` | Link Plex users to Discord members, or hide them from stats |

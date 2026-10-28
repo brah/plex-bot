@@ -86,9 +86,12 @@ class PlexUsers:
             return None, False
         person = self.match(users, wanted)
         if person is None:
-            await error_state(
-                ErrorKind.INPUT, f"No Plex user called **{escape_markdown(truncate(wanted, 80))}**.",
-                hint="Pick one from the suggestions as you type.",
-            ).send(interaction, ephemeral=True, replace_placeholder=True)
+            await unknown_user(wanted).send(interaction, ephemeral=True, replace_placeholder=True)
             return None, False
         return person, True
+
+
+def unknown_user(wanted: str):
+    """The error for a `user` option that names nobody."""
+    return error_state(ErrorKind.INPUT, f"No Plex user called **{escape_markdown(truncate(wanted, 80))}**.",
+                       hint="Pick one from the suggestions as you type.")
