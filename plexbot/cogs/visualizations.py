@@ -25,7 +25,7 @@ from plexbot.slash_commands import plex
 from plexbot.tautulli_wrapper import Tautulli
 from plexbot.ui.charts import POSTER_SLOTS, bar_chart, line_chart, poster_chart, stacked_day_chart
 from plexbot.ui.embeds import Reply, bot_token_handle, card, empty_state, service_down, set_image
-from plexbot.ui.format import join, plural, to_int, truncate
+from plexbot.ui.format import hour_label, join, plural, to_int, truncate
 from plexbot.ui.images import Attachment, plex_image, poster_key
 from plexbot.ui.theme import Colour, Limits, brand_colour
 from plexbot.utilities import (
@@ -73,10 +73,6 @@ def _short_hours(seconds: int) -> str:
 PLAY_COUNT = Measure("Plays", "▶️", "Plays", lambda row: 1, 1, lambda total: plural(total, "play"),
                      lambda total: f"{total:,}")
 WATCH_TIME = Measure("Watch time", "⏱️", "Hours", play_seconds, 3600, format_duration, _short_hours)
-
-
-def hour_label(hour: int) -> str:
-    return f"{hour % 12 or 12}{'am' if hour < 12 else 'pm'}"
 
 
 def utc_offset(zone: tzinfo, now: Optional[datetime] = None) -> str:

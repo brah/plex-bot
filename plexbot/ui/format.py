@@ -61,6 +61,10 @@ def day_label(day: date, today: date) -> str:
     return f"{day:%A} {day.day} {day:%b}"
 
 
+def hour_label(hour: int) -> str:
+    return f"{hour % 12 or 12}{'am' if hour < 12 else 'pm'}"
+
+
 def plural(count: int, singular: str, plural_form: Optional[str] = None) -> str:
     word = singular if count == 1 else (plural_form or singular + "s")
     return f"{count:,} {word}"
