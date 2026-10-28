@@ -14,7 +14,7 @@ ruff check .
 ```
 
 To run the bot itself you need a Discord token and Tautulli; see [Install](README.md#install). CI runs
-ruff and pytest on Python 3.12 and 3.14, and builds the Docker image and checks it starts.
+ruff and pytest on Python 3.12 and the Docker image's Python, and builds the image and checks it starts.
 
 ## Where things live
 
@@ -102,8 +102,8 @@ pytest-asyncio: run coroutines with `asyncio.run`.
 1. On a `main` whose CI passed, rename `## Unreleased` in CHANGELOG.md to `## X.Y.Z - YYYY-MM-DD`,
    add an empty `## Unreleased` above it, and commit.
 2. `git tag vX.Y.Z && git push origin main vX.Y.Z`.
-3. The Release workflow publishes the Docker image and the GitHub Release. If it fails, fix the
-   problem, delete the tag (`git push origin :refs/tags/vX.Y.Z` and `git tag -d vX.Y.Z`) and tag again.
+3. The Release workflow runs CI, then publishes the Docker image and the GitHub Release. If it fails,
+   fix the problem, delete the tag (`git push origin :refs/tags/vX.Y.Z` and `git tag -d vX.Y.Z`) and tag again.
 
 Version numbers: the last goes up for fixes, the middle for new features, and the first for changes
 people must act on, like a renamed setting or a different start command.

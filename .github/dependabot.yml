@@ -11,7 +11,7 @@ updates:
     schedule:
       interval: "weekly"
 
-  # Base image in the Dockerfile. On a minor-version bump, update CI's test matrix too.
+  # Base image in the Dockerfile. CI tests on whichever Python it names.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

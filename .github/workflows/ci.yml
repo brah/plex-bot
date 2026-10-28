@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:  # the Release workflow runs CI before publishing
 
 # CI only reads the code.
 permissions:
@@ -29,13 +30,30 @@ jobs:
       - name: Compile all sources (syntax smoke test)
         run: python -m compileall -q .
 
+  image-python:
+    name: Docker image's Python version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: read
+        # From the Dockerfile, so a Dependabot bump of the base image is tested on its new Python.
+        run: |
+          version=$(sed -nE 's/^FROM python:([0-9]+\.[0-9]+).*/\1/p' Dockerfile)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   test:
     name: Unit tests (Python ${{ matrix.python }})
+    needs: image-python
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false  # a failure on one version still shows the other's result
       matrix:
         # The oldest supported version, and the one the Docker image runs.
-        python: ["3.12", "3.14"]
+        python: ["3.12", "${{ needs.image-python.outputs.version }}"]
     steps:
       - uses: actions/checkout@v7
 

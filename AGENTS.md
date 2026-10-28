@@ -13,7 +13,7 @@ fits together, tests, and the rules for changes.
 .venv/Scripts/python -m plexbot        # needs config.json or PLEXBOT_* variables
 ```
 
-CI tests Python 3.12 and 3.14; the Docker image runs 3.14.
+CI tests Python 3.12, the oldest supported, and the version the Dockerfile's base image names.
 
 ## Notes for agents
 
