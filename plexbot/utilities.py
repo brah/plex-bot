@@ -234,6 +234,11 @@ def plex_username(row: Dict[str, Any]) -> Optional[str]:
     return row.get("username") or row.get("user")
 
 
+def play_seconds(row: Dict[str, Any]) -> int:
+    """How long a play ran, pauses left out (Tautulli's play_duration; older versions only send duration)."""
+    return to_int(row.get("play_duration")) or to_int(row.get("duration"))
+
+
 def ignored_usernames() -> set:
     """Plex users an admin marked as ignored (plex ignore): left out of stats and lists."""
     return {m["plex_username"] for m in UserMappings.load_user_mappings() if m.get("ignore", False)}

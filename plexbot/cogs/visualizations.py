@@ -28,15 +28,17 @@ from plexbot.ui.embeds import Reply, bot_token_handle, card, empty_state, servic
 from plexbot.ui.format import join, plural, to_int, truncate
 from plexbot.ui.images import Attachment, plex_image, poster_key
 from plexbot.ui.theme import Colour, Limits, brand_colour
-from plexbot.utilities import format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_name
+from plexbot.utilities import (
+    format_duration, ignored_usernames, play_seconds, plex_username, viewer_avatar, viewer_name,
+)
 
 logger = logging.getLogger("plexbot.visualizations")
 
 Play = Tuple[datetime, dict]  # when it started (in the server's timezone), the history row
-# The history fields charts read; a play keeps only these, as a chart holds its plays for minutes.
+# The history fields charts and /plex hot read; a play keeps only these, as a chart holds its plays for minutes.
 _PLAY_FIELDS = (
     "user", "username", "friendly_name", "user_thumb",  # viewer names and avatars
-    "media_type", "play_duration", "duration", "rating_key", "grandparent_rating_key",
+    "media_type", "play_duration", "duration", "rating_key", "grandparent_rating_key", "watched_status",
     "title", "grandparent_title", "year", "thumb", "parent_thumb", "grandparent_thumb",  # titles and posters
 )
 Chart = Tuple[str, Callable]  # the one-line takeaway, and a no-argument renderer for a worker thread
@@ -46,11 +48,6 @@ _KINDS = {"movie": "Movie", "episode": "TV"}  # anything else counts as "Other"
 _MEDIA_COLOURS = {"Movie": f"#{Colour.MOVIE:06X}", "TV": f"#{Colour.TV:06X}", "Other": f"#{Colour.MUSIC:06X}"}
 _TOP_USERS = 10
 _WEEKLY_AFTER = 90  # days: longer windows count plays per week, or the bars are hairlines
-
-
-def _seconds(row: dict) -> int:
-    """How long a play ran, pauses left out (Tautulli's play_duration; older versions only send duration)."""
-    return to_int(row.get("play_duration")) or to_int(row.get("duration"))
 
 
 @dataclass(frozen=True)
@@ -75,7 +72,7 @@ def _short_hours(seconds: int) -> str:
 
 PLAY_COUNT = Measure("Plays", "▶️", "Plays", lambda row: 1, 1, lambda total: plural(total, "play"),
                      lambda total: f"{total:,}")
-WATCH_TIME = Measure("Watch time", "⏱️", "Hours", _seconds, 3600, format_duration, _short_hours)
+WATCH_TIME = Measure("Watch time", "⏱️", "Hours", play_seconds, 3600, format_duration, _short_hours)
 
 
 def hour_label(hour: int) -> str:
@@ -394,7 +391,7 @@ class Visualizations(commands.Cog):
         context = join([
             f"Last {plural(days, 'day')}",
             plural(len(plays), "play"),
-            f"{format_duration(sum(map(_seconds, (row for _started, row in plays))))} watched"
+            f"{format_duration(sum(map(play_seconds, (row for _started, row in plays))))} watched"
             if measure is WATCH_TIME else None,
             f"times in {zone} ({utc_offset(zone)})" if _CHARTS[kind][3] else None,
         ])

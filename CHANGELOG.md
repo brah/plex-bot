@@ -5,6 +5,10 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### New features
+
+- `/plex hot` hands out awards: most rewatched movie, night owl, longest day and explorer.
+
 ### Bug fixes
 
 - Settings written in quotes in config.json, like `"use_https": "false"` or `"update_interval": "3600"`, work instead of breaking the bot.

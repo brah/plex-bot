@@ -22,7 +22,7 @@ from plexbot.ui.images import fetch_poster_strip, fetch_sectioned_strip, poster_
 from plexbot.ui.theme import Colour, Limits, brand_colour
 from plexbot.utilities import (
     library_totals,
-    UserMappings, format_duration, ignored_usernames, plex_username, viewer_avatar, viewer_mention,
+    UserMappings, format_duration, ignored_usernames, play_seconds, plex_username, viewer_avatar, viewer_mention,
     viewer_name,
 )
 
@@ -335,8 +335,52 @@ def history_card(rows, *, name: Callable[[dict], str], person: Optional[str], st
 # --- /plex hot -------------------------------------------------------------------
 
 
-def hot_summary(history, recent_items, *, days: int, name: Callable[[dict], str]) -> dict:
-    """What's been popular: totals, then each section's lines (empty sections are left out)."""
+def _awards(plays, per_user: dict, name: Callable[[dict], str]) -> list:
+    """One line per award someone earned: most rewatched, night owl, longest day, explorer.
+
+    Only movie and TV plays count, as every song is a play; explorer counts titles as Most active does.
+    """
+    rewatches = Counter()  # (user, movie) -> plays watched to the end
+    night = Counter()  # user -> plays started midnight to 5am, server time
+    day_seconds = Counter()  # (user, server date) -> watch time
+    items = {}
+    for started, row in plays:
+        if row.get("media_type") not in ("movie", "episode"):
+            continue
+        user = plex_username(row)
+        # Tautulli marks a play watched by where it ended, so resuming a watched movie's last minutes counts again.
+        # shortcut: history rows have no runtime, so movies under 45 minutes never count; use the media cache's.
+        if row["media_type"] == "movie" and row.get("watched_status") == 1 and play_seconds(row) >= 45 * 60:
+            key = str(row.get("rating_key"))
+            rewatches[user, key] += 1
+            items.setdefault(key, row)
+        if started.hour < 5:
+            night[user] += 1
+        day_seconds[user, started.date()] += play_seconds(row)
+
+    lines = []
+    if rewatches and (top := rewatches.most_common(1)[0])[1] >= 2:
+        (user, key), count = top
+        lines.append(f"🔁 Most rewatched · **{name(per_user[user]['row'])}** watched "
+                     f"**{_escaped(session_title(items[key]))}** {count} times")
+    if night and (top := night.most_common(1)[0])[1] >= 2:
+        lines.append(f"🦉 Night owl · **{name(per_user[top[0]]['row'])}**, {top[1]} plays after midnight")
+    if day_seconds and (top := day_seconds.most_common(1)[0])[1] >= 3 * 3600:
+        (user, day), seconds = top
+        lines.append(f"🛋️ Longest day · **{name(per_user[user]['row'])}**, {format_duration(seconds)} "
+                     f"on {day:%a} {day.day} {day:%b}")
+    explorer = max(per_user.values(), key=lambda s: len(s["titles"]), default=None)
+    if explorer and len(explorer["titles"]) >= 3:
+        lines.append(f"🗺️ Explorer · **{name(explorer['row'])}**, {len(explorer['titles'])} titles")
+    return lines
+
+
+def hot_summary(plays, recent_items, *, days: int, name: Callable[[dict], str]) -> dict:
+    """What's been popular: totals, then each section's lines (empty sections are left out).
+
+    plays: (start in the server's timezone, history row) pairs, as /plex chart's plays give them.
+    """
+    history = [row for _started, row in plays]
     plays_by_key = Counter(str(row.get("rating_key")) for row in history)
     titles: dict = {}  # show (or movie) key -> {"title", "users", "plays", "row"}
     per_user: dict = defaultdict(lambda: {"plays": 0, "titles": set(), "row": None})
@@ -395,6 +439,9 @@ def hot_summary(history, recent_items, *, days: int, name: Callable[[dict], str]
         sections.append(("🧭 First to check out", [
             f"**{name(t['row'])}** tried **{_escaped(t['title'])}**" for t in discoveries
         ]))
+    awards = _awards(plays, per_user, name)
+    if awards:
+        sections.append(("🏅 Awards", awards))
 
     kinds = Counter(row.get("media_type") for row in history)
     movies, shows = kinds.get("movie", 0), kinds.get("episode", 0)
@@ -614,7 +661,7 @@ class PlexStats(commands.Cog):
 
     # --- /plex hot ---------------------------------------------------------------
 
-    @plex.subcommand(description="What's been popular lately: trending titles, binges, new hits")
+    @plex.subcommand(description="What's been popular lately: trending titles, binges, new hits, awards")
     async def hot(
         self,
         interaction: nextcord.Interaction,
@@ -629,8 +676,7 @@ class PlexStats(commands.Cog):
         if plays is None:
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
-        history = [row for _started, row in plays]
-        if not history:
+        if not plays:
             await empty_state(f"Nobody's watched anything in the last {plural(days, 'day')}.").send(interaction)
             return
         cutoff = (await charts.window_start(days)).timestamp()
@@ -638,7 +684,7 @@ class PlexStats(commands.Cog):
         if Tautulli.check_response(recent_r):
             recent = [item for item in (Tautulli.get_response_data(recent_r, {}) or {}).get("recently_added") or []
                       if to_int(item.get("added_at")) >= cutoff]
-        summary = hot_summary(history, recent, days=days, name=self._mention)
+        summary = hot_summary(plays, recent, days=days, name=self._mention)
         strip = await _poster_strip(self.tautulli, summary["posters"])
         await Reply([hot_card(summary, days=days, strip=strip)], [strip] if strip else []).send(interaction)
 

@@ -151,6 +151,11 @@ def _play(user, title, *, show=None, key, media_type="episode", date=NOW):
     return row
 
 
+def _plays(rows):
+    """Rows as /plex chart's plays: (start, row), on a UTC server."""
+    return [(datetime.fromtimestamp(row["date"], timezone.utc), row) for row in rows]
+
+
 class TestHot:
     def test_sections(self):
         history = (
@@ -159,7 +164,7 @@ class TestHot:
             + [_play("bob", "Heat", key="m1", media_type="movie")]
         )
         recent = [{"rating_key": "m1", "title": "Heat", "year": "1995", "media_type": "movie"}]
-        summary = hot_summary(history, recent, days=7, name=name)
+        summary = hot_summary(_plays(history), recent, days=7, name=name)
         assert summary["totals"] == "**8 plays** · 2 people · 2 titles · 1.1 a day"
         sections = dict(summary["sections"])
         assert sections["🔥 Trending"] == ["**Severance** · 2 people · 7 plays"]
@@ -171,9 +176,40 @@ class TestHot:
         assert summary["leader"] == "TV leads: 7 episodes to 1 movie"
 
     def test_quiet_week_has_no_empty_sections(self):
-        summary = hot_summary([_play("alice", "Heat", key="m1", media_type="movie")], [], days=7, name=name)
+        summary = hot_summary(_plays([_play("alice", "Heat", key="m1", media_type="movie")]), [], days=7, name=name)
         assert [heading for heading, _ in summary["sections"]] == ["🏃 Most active"]
         assert summary["leader"] is None
+
+    def test_awards(self):
+        saturday = int(datetime(2026, 10, 24, tzinfo=timezone.utc).timestamp())
+        heat = {"year": "1995", "play_duration": 3000}
+
+        def finished(row):
+            return {**row, "watched_status": 1}
+
+        history = [
+            # Alice: Heat to the end twice (both after midnight), then its last 13 minutes again: Tautulli
+            # marks that watched, as it ended at the end, but it isn't a rewatch.
+            finished({**_play("alice", "Heat", key="m1", media_type="movie", date=saturday + 3600), **heat}),
+            finished({**_play("alice", "Heat", key="m1", media_type="movie", date=saturday + 3 * 3600), **heat}),
+            finished({**_play("alice", "Heat", key="m1", media_type="movie", date=saturday + 12 * 3600), **heat,
+                      "play_duration": 780}),
+            # Bob: four hours of one show in an afternoon.
+            *({**_play("bob", f"Ep {i}", show="Severance", key=f"s{i}", date=saturday + (13 + i) * 3600),
+               "play_duration": 3600} for i in range(4)),
+            # Carol: three different movies, none finished.
+            *(_play("carol", title, key=title, media_type="movie", date=saturday + 15 * 3600)
+              for title in ("Alien", "Up", "Jaws")),
+            # Dave: a playlist after midnight, every song a play. Music wins no awards.
+            *({**_play("dave", f"Song {i}", show="Bach", key=f"t{i}", media_type="track",
+                       date=saturday + 2 * 3600 + i * 200), "play_duration": 200} for i in range(6)),
+        ]
+        assert dict(hot_summary(_plays(history), [], days=7, name=name)["sections"])["🏅 Awards"] == [
+            "🔁 Most rewatched · **Alice** watched **Heat (1995)** 2 times",
+            "🦉 Night owl · **Alice**, 2 plays after midnight",
+            "🛋️ Longest day · **Bob**, 4h on Sat 24 Oct",
+            "🗺️ Explorer · **Carol**, 3 titles",
+        ]
 
 
 def _run(fn, tautulli):
@@ -433,6 +469,16 @@ class TestCommands:
         ]
         _run_hot(tautulli)
         assert "**1 play** · 1 person" in recorder.last("followup")["embeds"][0].description
+
+    def test_hot_awards_count_only_finished_plays(self, monkeypatch):
+        recorder = Recorder(monkeypatch)
+        tautulli = FakeTautulli([])
+        tautulli.history = [{**_play("alice", "Heat", key="m1", media_type="movie", date=NOW - minutes * 60),
+                             "watched_status": status, "play_duration": 6000}
+                            for minutes, status in ((1, 1), (2, 1), (3, 0.5))]
+        _run_hot(tautulli)
+        fields = {f.name: f.value for f in recorder.last("followup")["embeds"][0].fields}
+        assert "watched **Heat** 2 times" in fields["🏅 Awards"]
 
 
 def test_stats_commands_registered_in_help():

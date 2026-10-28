@@ -254,7 +254,7 @@ Everything is under `/plex`, plus `/plexadmin` for admins.
 | `/plex recommend` | Unwatched picks from someone's favourite genres |
 | `/plex top` | Top watchers; also hands out the top-three roles |
 | `/plex stats` | Server stats across five pages |
-| `/plex hot` | Trending titles, binges and new hits |
+| `/plex hot` | Trending titles, binges, new hits and awards |
 | `/plex history` | Recent plays, everyone's or one person's |
 | `/plex chart` | Charts by day, hour, weekday, viewer, show or movie |
 | `/plex downloading` | qBittorrent progress |
