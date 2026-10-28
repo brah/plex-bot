@@ -513,6 +513,12 @@ class StatusView(LoggedView):
         await services_card(self.plex_status, now=nextcord.utils.utcnow()).send(interaction, ephemeral=True)
 
 
+# The bot's status switches between stream stats and a help hint every _STATUS_TICK seconds. Only the
+# stream stats call Tautulli: each time they show while something plays, every _IDLE_CHECK seconds while nothing does.
+_STATUS_TICK = 60
+_IDLE_CHECK = 600
+
+
 class ServerCommands(commands.Cog):
     help_category = "watching"
 
@@ -521,7 +527,9 @@ class ServerCommands(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self._section_sizes: dict[str, tuple[float, int]] = {}  # section_id -> (fetched at, bytes)
         self._display_streams = True  # presence alternates between stream stats and a help hint
-        self._activity_failing = False  # so a long outage logs once, not every 15 seconds
+        self._streams_text = ""  # the stream stats last fetched, shown again until the next check
+        self._next_check = 0.0  # time.monotonic() when the stream stats are next fetched
+        self._activity_failing = False  # so a long outage logs once, not every tick
         self._startup_log: Optional[asyncio.Task] = None
         self.status_task.start()  # type: ignore[attr-defined]
 
@@ -539,27 +547,30 @@ class ServerCommands(commands.Cog):
         if self._startup_log:
             self._startup_log.cancel()
 
-    @tasks.loop(seconds=15)
+    @tasks.loop(seconds=_STATUS_TICK)
     async def status_task(self):
         """Update the bot's presence, alternating between stream stats and a help hint."""
         try:
-            response = await self.tautulli.get_activity()
-            if not Tautulli.check_response(response):
-                if not self._activity_failing:
-                    logger.error("Failed to retrieve activity from Tautulli for the bot's status; "
-                                 "not logged again until it answers.")
-                self._activity_failing = True
-                return
-            if self._activity_failing:
-                logger.info("Tautulli's activity is back; the bot's status is updating again.")
-                self._activity_failing = False
-            data = Tautulli.get_response_data(response, {})
-            # Total, not WAN, bandwidth: the same figure /plex status and /plex watchers show.
-            streams = plural(to_int(data.get("stream_count")), "stream")
-            mbps = to_int(data.get("total_bandwidth")) / 1000
+            if self._display_streams and time.monotonic() >= self._next_check:
+                response = await self.tautulli.get_activity()
+                if not Tautulli.check_response(response):
+                    if not self._activity_failing:
+                        logger.error("Failed to retrieve activity from Tautulli for the bot's status; "
+                                     "not logged again until it answers.")
+                    self._activity_failing = True
+                    return
+                if self._activity_failing:
+                    logger.info("Tautulli's activity is back; the bot's status is updating again.")
+                    self._activity_failing = False
+                data = Tautulli.get_response_data(response, {})
+                count = to_int(data.get("stream_count"))
+                # Total, not WAN, bandwidth: the same figure /plex status and /plex watchers show.
+                mbps = to_int(data.get("total_bandwidth")) / 1000
+                self._streams_text = f"{plural(count, 'stream')} at {mbps:.1f} Mbps"
+                self._next_check = time.monotonic() + (0 if count else _IDLE_CHECK)
 
             if self._display_streams:
-                activity_text = f"{streams} at {mbps:.1f} Mbps"
+                activity_text = self._streams_text
                 activity_type = nextcord.ActivityType.playing
             else:
                 activity_text = "/plex help"

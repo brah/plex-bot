@@ -265,6 +265,32 @@ def test_presence_counts_every_stream_and_their_total_bandwidth(monkeypatch):
     assert shown == ["2 streams at 20.0 Mbps", "1 stream at 12.0 Mbps"]
 
 
+def test_presence_checks_tautulli_less_often_while_nothing_plays(monkeypatch):
+    shown, calls = [], []
+
+    async def run():
+        tautulli = FakeTautulli([])
+        bot, cog = build_bot(tautulli)
+
+        async def change_presence(activity=None, **kwargs):
+            shown.append(activity.name)
+
+        async def get_activity(_real=tautulli.get_activity):
+            calls.append(len(shown))
+            return await _real()
+
+        monkeypatch.setattr(bot, "change_presence", change_presence)
+        tautulli.get_activity = get_activity
+        for _ in range(4):  # stream stats, help hint, stream stats within ten minutes, help hint
+            await cog.status_task.coro(cog)
+        cog._next_check = 0  # ten minutes on
+        await cog.status_task.coro(cog)
+
+    asyncio.run(run())
+    assert shown == ["0 streams at 0.0 Mbps", "/plex help"] * 2 + ["0 streams at 0.0 Mbps"]
+    assert calls == [0, 4]  # the first tick and the one after ten minutes; never for the help hint
+
+
 def test_presence_logs_an_activity_outage_once_and_its_end(monkeypatch, caplog):
     async def run():
         tautulli = FakeTautulli([])
@@ -275,7 +301,7 @@ def test_presence_logs_an_activity_outage_once_and_its_end(monkeypatch, caplog):
 
         monkeypatch.setattr(bot, "change_presence", change_presence)
         tautulli.reachable = False
-        for _ in range(3):  # three ticks, 45 seconds of outage
+        for _ in range(3):  # three ticks of outage
             await cog.status_task.coro(cog)
         tautulli.reachable = True
         await cog.status_task.coro(cog)

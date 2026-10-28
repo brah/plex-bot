@@ -18,6 +18,7 @@ What changed in each release, newest first. Releases are also on
 
 ### Changes
 
+- The bot's status asks Tautulli for streams every 2 minutes while something plays and every 10 minutes while nothing does, instead of every 15 seconds.
 - `/plex shows` is gone. `/plex top` and the Users page of `/plex stats` still rank watchers.
 - `/plexadmin link` and `/plexadmin ignore` find a Plex user by their Discord name too, as `/plex history` does.
 
