@@ -15,6 +15,9 @@ import tzlocal
 # Configure logging for this module
 logger = logging.getLogger("plexbot.tautulli_wrapper")
 
+# A play stopped and resumed counts once, whatever Tautulli's "Group play history" setting.
+_GROUPED = {"grouping": 1}
+
 
 def on_the_internet(address: str) -> bool:
     """Whether a "host:port" is reached over the internet, where plain HTTP would expose the API key:
@@ -126,7 +129,7 @@ class Tautulli(_HTTPClient):
 
     async def get_history(self, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Get the Tautulli history."""
-        return await self.api_call("get_history", params)
+        return await self.api_call("get_history", {**(params or {}), **_GROUPED})
 
     async def get_history_rows(self, params: Dict[str, Any], page: int = 1000,
                                fields: Optional[tuple] = None) -> Optional[list]:
@@ -207,7 +210,7 @@ class Tautulli(_HTTPClient):
 
     async def get_home_stats(self, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Get the homepage watch statistics."""
-        return await self.api_call("get_home_stats", params)
+        return await self.api_call("get_home_stats", {**(params or {}), **_GROUPED})
 
     async def get_recently_added(self, count: int, media_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get all items that were recently added to Plex (media_type: movie, show, artist)."""
@@ -218,11 +221,11 @@ class Tautulli(_HTTPClient):
 
     async def get_item_user_stats(self, rating_key: str) -> Optional[Dict[str, Any]]:
         """Get the user stats for the media item."""
-        return await self.api_call("get_item_user_stats", {"rating_key": rating_key})
+        return await self.api_call("get_item_user_stats", {"rating_key": rating_key, **_GROUPED})
 
     async def get_item_watch_time_stats(self, rating_key: str) -> Optional[Dict[str, Any]]:
         """Get the watch time stats for the media item."""
-        return await self.api_call("get_item_watch_time_stats", {"rating_key": rating_key})
+        return await self.api_call("get_item_watch_time_stats", {"rating_key": rating_key, **_GROUPED})
 
     async def get_metadata(self, rating_key: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a media item."""

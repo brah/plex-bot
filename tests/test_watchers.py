@@ -290,6 +290,32 @@ def test_history_rows_drop_a_play_pushed_onto_the_next_page():
     assert [row["row_id"] for row in rows] == [5, 4, 3, 2, 1]  # 4 came back on page two
 
 
+def test_play_counts_ask_tautulli_to_group_resumed_plays():
+    """A server with "Group play history" off would count every stop and start as a play."""
+    client = Tautulli(api_key="k", tautulli_ip="host:8181")
+    calls = {}
+
+    async def api_call(cmd, params=None):
+        calls[cmd] = params
+        return {"response": {"result": "success"}}
+
+    client.api_call = api_call
+
+    async def run():
+        await client.get_history({"after": "2026-01-01"})
+        await client.get_home_stats({"stat_id": "top_users"})
+        await client.get_item_user_stats("7")
+        await client.get_item_watch_time_stats("7")
+
+    asyncio.run(run())
+    assert calls == {
+        "get_history": {"after": "2026-01-01", "grouping": 1},
+        "get_home_stats": {"stat_id": "top_users", "grouping": 1},
+        "get_item_user_stats": {"rating_key": "7", "grouping": 1},
+        "get_item_watch_time_stats": {"rating_key": "7", "grouping": 1},
+    }
+
+
 def test_history_rows_keep_only_the_fields_asked_for():
     """Trimmed per page; duplicates still dropped."""
     client = Tautulli(api_key="k", tautulli_ip="host:8181")
