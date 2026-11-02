@@ -221,11 +221,9 @@ def _run(fn, tautulli):
 
 
 def _run_hot(tautulli, days=None):
-    """/plex hot, with the charts cog it reads plays from."""
-    from plexbot.cogs.visualizations import Visualizations
+    """/plex hot, without the charts cog: it reads plays on its own."""
 
     async def run(bot, cog):
-        bot.add_cog(Visualizations(bot))
         await PlexStats.hot.callback(cog, interaction(bot), days=days)
 
     _run(run, tautulli)

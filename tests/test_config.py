@@ -82,3 +82,12 @@ def test_missing_required_names_the_variable(monkeypatch, tmp_path, caplog):
     assert not cfg.initialize(str(tmp_path / "missing.json"))
     assert "PLEXBOT_CORE_TOKEN" in caplog.text
     assert "Unknown setting PLEXBOT_TAUTULI_IP" in caplog.text
+
+
+def test_blank_required_value_in_the_file_is_missing(monkeypatch, tmp_path, caplog):
+    cfg = fresh_config(monkeypatch)
+    path = tmp_path / "config.json"
+    # As config.example.json ships it: the key is there, its value isn't.
+    path.write_text(json.dumps({"core": {"token": "t"}, "tautulli": {"ip": "h:8181", "apikey": " "}}))
+    assert not cfg.initialize(str(path))
+    assert "tautulli.apikey (PLEXBOT_TAUTULLI_APIKEY)" in caplog.text

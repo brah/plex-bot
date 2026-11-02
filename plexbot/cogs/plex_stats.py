@@ -10,6 +10,7 @@ import nextcord
 from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
+from plexbot import plays as play_history
 from plexbot.config import config
 from plexbot.errors import LoggedView
 from plexbot.plex_users import PlexUsers
@@ -21,7 +22,7 @@ from plexbot.ui.format import join, plural, timestamp, to_int, truncate
 from plexbot.ui.images import fetch_poster_strip, fetch_sectioned_strip, poster_key
 from plexbot.ui.theme import Colour, Limits, brand_colour
 from plexbot.utilities import (
-    library_totals,
+    FINISHED_MOVIE_SECONDS, library_totals,
     UserMappings, format_duration, ignored_usernames, play_seconds, plex_username, viewer_avatar, viewer_mention,
     viewer_name,
 )
@@ -348,9 +349,8 @@ def _awards(plays, per_user: dict, name: Callable[[dict], str]) -> list:
         if row.get("media_type") not in ("movie", "episode"):
             continue
         user = plex_username(row)
-        # Tautulli marks a play watched by where it ended, so resuming a watched movie's last minutes counts again.
-        # shortcut: history rows have no runtime, so movies under 45 minutes never count; use the media cache's.
-        if row["media_type"] == "movie" and row.get("watched_status") == 1 and play_seconds(row) >= 45 * 60:
+        if (row["media_type"] == "movie" and row.get("watched_status") == 1
+                and play_seconds(row) >= FINISHED_MOVIE_SECONDS):
             key = str(row.get("rating_key"))
             rewatches[user, key] += 1
             items.setdefault(key, row)
@@ -671,15 +671,16 @@ class PlexStats(commands.Cog):
     ):
         await interaction.response.defer()
         days = days or 7
-        charts = self.bot.get_cog("Visualizations")  # /plex chart's plays, so both count the same days
-        plays, recent_r = await asyncio.gather(charts.plays(days), self.tautulli.get_recently_added(count=50))
+        # /plex chart's plays, so both count the same days.
+        plays, recent_r = await asyncio.gather(play_history.plays(self.tautulli, days),
+                                               self.tautulli.get_recently_added(count=50))
         if plays is None:
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
         if not plays:
             await empty_state(f"Nobody's watched anything in the last {plural(days, 'day')}.").send(interaction)
             return
-        cutoff = (await charts.window_start(days)).timestamp()
+        cutoff = (await play_history.window_start(self.tautulli, days)).timestamp()
         recent = []
         if Tautulli.check_response(recent_r):
             recent = [item for item in (Tautulli.get_response_data(recent_r, {}) or {}).get("recently_added") or []

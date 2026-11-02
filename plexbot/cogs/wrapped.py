@@ -11,6 +11,7 @@ from nextcord.ext import commands
 
 from plexbot.errors import LoggedView
 from plexbot.media_cache import MediaCache
+from plexbot.plays import plays_between
 from plexbot.plex_users import PlexUsers, unknown_user
 from plexbot.slash_commands import plex
 from plexbot.tautulli_wrapper import Tautulli
@@ -119,7 +120,7 @@ class Wrapped(commands.Cog):
         if isinstance(person, Reply):
             return person
         # shortcut: refetches the whole year on every run; cache per year if busy servers find it slow.
-        plays = await self.bot.get_cog("Visualizations").plays_between(*year_window(year, zone))
+        plays = await plays_between(self.tautulli, *year_window(year, zone))
         if plays is None:
             return service_down("Tautulli")
         await self.media_cache.ensure_cache_valid()

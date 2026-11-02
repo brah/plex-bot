@@ -95,6 +95,23 @@ def test_a_failed_update_says_so(tmp_path):
     assert _titles(cache.media_items.values()) == ["Kept"]
 
 
+def test_a_failed_update_isnt_retried_on_every_read(tmp_path):
+    tautulli = LibraryTautulli({"1": "Only title"})
+    tautulli.reachable = False
+    cache = _stale_cache(tautulli, tmp_path, [])
+
+    async def reads():
+        assert await cache.get_items() == []  # tries once and fails
+        tautulli.reachable = True
+        cache.suggest("only")  # an autocomplete keystroke
+        assert await cache.get_items() == []  # still inside the retry window: no new update
+        assert cache._refresh is None
+        assert await cache.refresh()  # Refresh now ignores the window
+
+    asyncio.run(reads())
+    assert _titles(cache.media_items.values()) == ["Only title"]
+
+
 def test_empty_cache_waits_for_the_first_fetch(tmp_path):
     cache = _stale_cache(LibraryTautulli({"1": "Only title"}), tmp_path, [])
     assert _titles(asyncio.run(cache.get_items())) == ["Only title"]

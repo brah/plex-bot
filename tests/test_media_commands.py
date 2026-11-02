@@ -166,7 +166,7 @@ class TestRandom:
 
         async def run(bot, cog):
             with pytest.raises(TautulliUnavailable):
-                await cog.render_item("103")
+                await cog.details.render("103")
 
         _run(run, tautulli)
 

@@ -2,15 +2,14 @@
 
 One command opens on plays over time; dropdowns under the chart switch to another chart (or to the
 library's growth) or one viewer, and buttons change the window and whether plays or watch time are
-counted. /plex stats borrows the plays-over-time chart for its Activity page, and /plex hot its plays.
+counted. /plex stats borrows the plays-over-time chart for its Activity page.
 """
 
 import asyncio
-import logging
 import os
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 from functools import partial
 from itertools import accumulate
 from typing import Callable, Dict, List, Optional, Tuple
@@ -20,6 +19,8 @@ from nextcord.ext import commands
 from nextcord.utils import escape_markdown
 
 from plexbot.errors import LoggedView
+from plexbot import plays as play_history
+from plexbot.plays import Play
 from plexbot.plex_users import PlexUsers
 from plexbot.slash_commands import plex
 from plexbot.tautulli_wrapper import Tautulli
@@ -29,18 +30,9 @@ from plexbot.ui.format import hour_label, join, plural, to_int, truncate
 from plexbot.ui.images import Attachment, plex_image, poster_key
 from plexbot.ui.theme import Colour, Limits, brand_colour
 from plexbot.utilities import (
-    format_duration, ignored_usernames, play_seconds, plex_username, viewer_avatar, viewer_name,
+    format_duration, play_seconds, plex_username, viewer_avatar, viewer_name,
 )
 
-logger = logging.getLogger("plexbot.visualizations")
-
-Play = Tuple[datetime, dict]  # when it started (in the server's timezone), the history row
-# The history fields charts and /plex hot read; a play keeps only these, as a chart holds its plays for minutes.
-_PLAY_FIELDS = (
-    "user", "username", "friendly_name", "user_thumb",  # viewer names and avatars
-    "media_type", "play_duration", "duration", "rating_key", "grandparent_rating_key", "watched_status",
-    "title", "grandparent_title", "year", "thumb", "parent_thumb", "grandparent_thumb",  # titles and posters
-)
 Chart = Tuple[str, Callable]  # the one-line takeaway, and a no-argument renderer for a worker thread
 
 _WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -276,45 +268,6 @@ class Visualizations(commands.Cog):
         self.tautulli: Tautulli = bot.shared_resources.get("tautulli")
         self.users = PlexUsers(bot, self.tautulli)
 
-    async def window_start(self, days: int) -> datetime:
-        """When the last `days` days begin: midnight, `days - 1` days before today, in the server's timezone.
-
-        Whole days, as the per-day and per-month bars count them, so the header's play count is what the
-        bars add up to. /plex hot uses the same window.
-        """
-        zone = await self.tautulli.server_timezone()
-        return datetime.combine(datetime.now(zone).date() - timedelta(days=days - 1), time.min, tzinfo=zone)
-
-    async def plays(self, days: int) -> Optional[List[Play]]:
-        """Everyone's plays in the last `days` days, but ignored users'; None if Tautulli didn't answer."""
-        return await self.plays_between(await self.window_start(days))
-
-    async def plays_between(self, since: datetime, until: Optional[datetime] = None) -> Optional[List[Play]]:
-        """Everyone's plays starting from `since` until before `until`, but ignored users'; None if Tautulli
-        didn't answer."""
-        zone = since.tzinfo
-        params = {
-            # Tautulli's "after" and "before" are whole dates; the exact cutoffs are applied below.
-            "after": (since.date() - timedelta(days=1)).isoformat(),
-            "order_column": "date", "order_dir": "desc",
-        }
-        if until:
-            params["before"] = (until.date() + timedelta(days=1)).isoformat()
-        rows = await self.tautulli.get_history_rows(params, fields=(*_PLAY_FIELDS, "started", "date"))
-        if rows is None:
-            logger.error("Failed to retrieve watch history from Tautulli.")
-            return None
-        ignored = ignored_usernames()
-        plays = []
-        for row in rows:
-            started = to_int(row.get("started")) or to_int(row.get("date"))
-            if not started or plex_username(row) in ignored:
-                continue
-            moment = datetime.fromtimestamp(started, zone)
-            if moment >= since and (until is None or moment < until):
-                plays.append((moment, {key: row[key] for key in _PLAY_FIELDS if key in row}))
-        return plays
-
     async def posters(self, cache: Dict[str, Optional[bytes]], rows) -> List[Optional[bytes]]:
         """Each row's poster (None where Plex has none), fetching only those not already in `cache`."""
         keys = [poster_key(row) for row in rows]
@@ -407,7 +360,7 @@ class Visualizations(commands.Cog):
     async def activity_page(self, days: int) -> Optional[Tuple[nextcord.Embed, Optional[Attachment]]]:
         """/plex stats' Activity page: everyone's plays over time, with the busiest hour, day and viewer;
         None if Tautulli didn't answer."""
-        plays = await self.plays(days)
+        plays = await play_history.plays(self.tautulli, days)
         if plays is None:
             return None
         title, context = "📈 Activity", f"Last {plural(days, 'day')}"
@@ -438,7 +391,8 @@ class Visualizations(commands.Cog):
         user: str = nextcord.SlashOption(description="Start on this person's plays (default: everyone)",
                                          required=False, autocomplete=True, max_length=100),
         days: int = nextcord.SlashOption(description=f"How many days back (default {_DEFAULT_DAYS})",
-                                         required=False, min_value=1, max_value=3650),
+                                         # A year at most: a chart holds every play in its window for minutes.
+                                         required=False, min_value=1, max_value=365),
     ):
         await interaction.response.defer()
         person = None
@@ -553,7 +507,7 @@ class ChartView(LoggedView):
                 if self.library is None:
                     return None
         elif self.plays is None:
-            self.plays = await self.cog.plays(self.days)
+            self.plays = await play_history.plays(self.cog.tautulli, self.days)
             if self.plays is None:
                 return None
         self.clear_items()

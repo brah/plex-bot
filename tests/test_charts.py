@@ -11,7 +11,7 @@ from nextcord.ext import commands
 import pytest
 from PIL import Image
 
-from plexbot import utilities
+from plexbot import plays as play_history, utilities
 from plexbot.cogs.visualizations import (
     WATCH_TIME, Visualizations, days_chart, hour_label, hours_chart, library_chart, media_chart, months_chart,
     titles_chart, top_titles, users_chart, utc_offset,
@@ -221,7 +221,7 @@ def _defaults(select):
 def test_plays_keep_only_the_fields_charts_read():
     tautulli = FakeTautulli([])
     tautulli.history = [dict(row, title="Heat", ip_address="10.0.0.5") for row in _history(("alice", 2, "movie"))]
-    plays = _run(lambda bot, cog: cog.plays(30), tautulli)
+    plays = _run(lambda bot, cog: play_history.plays(cog.tautulli, 30), tautulli)
     assert plays[0][1] == {"user": "alice", "friendly_name": "Alice", "media_type": "movie", "title": "Heat"}
 
 
@@ -665,7 +665,7 @@ def test_a_window_is_whole_days_so_the_header_matches_the_bars():
 
     tautulli = FakeTautulli([])
     tautulli.history = [play(midnight + timedelta(minutes=30)), play(midnight - timedelta(seconds=1))]
-    plays = _run(lambda bot, cog: cog.plays(7), tautulli)
+    plays = _run(lambda bot, cog: play_history.plays(cog.tautulli, 7), tautulli)
     assert [moment.date() for moment, _row in plays] == [first_day]  # the day before isn't in the bars either
     takeaway, _render = media_chart(plays, today=first_day + timedelta(days=6), days=7)
     assert takeaway.startswith("1 movie")
@@ -701,7 +701,7 @@ def test_plays_between_keeps_only_that_window():
     since, until = datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2027, 1, 1, tzinfo=timezone.utc)
 
     async def run(bot, cog):
-        return await cog.plays_between(since, until)
+        return await play_history.plays_between(cog.tautulli, since, until)
 
     plays = _run(run, tautulli)
     assert sorted(p[0].isoformat() for p in plays) == ["2026-01-01T00:00:00+00:00", "2026-12-31T23:59:59+00:00"]

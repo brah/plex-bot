@@ -10,10 +10,9 @@ from typing import Callable, List, Optional, Sequence, Tuple
 
 from plexbot.ui.format import hour_label, plural
 from plexbot.ui.images import poster_key
-from plexbot.utilities import favourite_genres, play_seconds, plex_username
+from plexbot.utilities import FINISHED_MOVIE_SECONDS, favourite_genres, play_seconds, plex_username
 
 MIN_PLAYS, MIN_SECONDS = 5, 3600  # less than this is "not enough to wrap"
-_FINISHED = 45 * 60  # as /plex hot's awards: resuming a movie's last minutes isn't watching it again
 _NIGHT = (22, 23, 0, 1, 2, 3, 4)
 _MORNING = (5, 6, 7, 8, 9)
 _BINGE = 6  # episodes of one show in a day
@@ -152,7 +151,7 @@ def wrap_year(plays: Sequence[Tuple[datetime, dict]], username: str,
         if row["media_type"] == "episode":
             episodes[key].add(str(row.get("rating_key")))
             show_days[key, started.date()] += 1
-        elif row.get("watched_status") == 1 and length >= _FINISHED:
+        elif row.get("watched_status") == 1 and length >= FINISHED_MOVIE_SECONDS:
             finished[key] += 1
         hours[started.hour] += 1
         months[started.month] += length

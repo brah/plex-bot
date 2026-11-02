@@ -220,11 +220,7 @@ def main():
     # The bot's own loggers only: DEBUG on the root would also flood the log with nextcord's gateway chatter.
     logging.getLogger("plexbot").setLevel(log_level)
 
-    # Get core configuration
-    token = config.get("core", "token")
-    if not token:
-        logger.error("Discord bot token is missing. Check your configuration.")
-        return
+    token = config.get("core", "token")  # initialize() refused a blank one
 
     # Create the bot and configure intents
     intents = nextcord.Intents.default()

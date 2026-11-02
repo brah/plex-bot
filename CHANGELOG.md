@@ -5,6 +5,16 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### Bug fixes
+
+- A blank `tautulli.apikey`, `tautulli.ip` or `core.token` in config.json stops the bot at startup with a message naming the setting, instead of every command saying Tautulli is down.
+- While Tautulli is down, the library list waits 5 minutes between update attempts instead of trying (and logging an error) on every keystroke in a title search. `/plexadmin cache`'s Refresh now still tries at once.
+- `/plex hot` and `/plex wrapped` work even if `/plex chart` couldn't load.
+
+### Changes
+
+- `/plex chart` goes back at most a year (`days` up to 365), since a chart keeps every play in its window in memory for its 10 minutes.
+
 ## 1.6.0 - 2026-10-29
 
 ### New features

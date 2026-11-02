@@ -37,7 +37,7 @@ from plexbot.ui.embeds import (
 )
 from plexbot.ui.format import file_size, is_truthy, join, plural, timestamp, to_int, truncate
 from plexbot.ui.images import STRIP_POSTERS, current_frame, fetch_poster_strip, mascot, plex_image, poster_key
-from plexbot.ui.theme import Colour, Emoji
+from plexbot.ui.theme import Colour, Emoji, Limits
 
 # Configure logging for this module
 logger = logging.getLogger("plexbot.server_commands")
@@ -155,9 +155,6 @@ def _build_logs_reply(text: str, min_level: int | None, search: str | None):
 # --- /plex watchers helpers -----------------------------------------------------
 
 _NO_STREAM_PERMISSION = "Only stream managers can stop streams."
-# Discord caps autocomplete results and select options at 25, and their labels at 100 chars.
-_MAX_CHOICES = 25
-_MAX_LABEL = 100
 _LAST_VIEWERS = 3
 
 
@@ -178,7 +175,7 @@ def last_viewers(rows: list[dict], ignored: set, limit: int = _LAST_VIEWERS) -> 
 def _session_label(session: dict, suffix: str = "") -> str:
     """One-line "user — title" label for a stream, within Discord's label limit."""
     label = f"{session_user(session)} — {session_title(session)}"
-    return truncate(label, _MAX_LABEL - len(suffix)) + suffix
+    return truncate(label, Limits.SELECT_LABEL - len(suffix)) + suffix
 
 
 def _session_choices(sessions: list[dict], query: str) -> dict[str, str]:
@@ -197,7 +194,7 @@ def _session_choices(sessions: list[dict], query: str) -> dict[str, str]:
             label = _session_label(session, f" ({n})")
             n += 1
         choices[label] = str(session_id)
-        if len(choices) == _MAX_CHOICES:
+        if len(choices) == Limits.SELECT_OPTIONS:
             break
     return choices
 

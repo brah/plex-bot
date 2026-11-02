@@ -240,6 +240,12 @@ def play_seconds(row: Dict[str, Any]) -> int:
     return to_int(row.get("play_duration")) or to_int(row.get("duration"))
 
 
+# A movie play counts as watched again when Tautulli marks it watched and it ran this long (/plex hot,
+# /plex wrapped). Tautulli marks a play watched by where it ended, so resuming the last minutes doesn't count.
+# shortcut: history rows have no runtime, so movies under 45 minutes never count; use the media cache's.
+FINISHED_MOVIE_SECONDS = 45 * 60
+
+
 ITEM_KEYS = ("rating_key", "parent_rating_key", "grandparent_rating_key")  # the items a history row touches
 _TOP_GENRES = 3
 

@@ -278,13 +278,6 @@ class MediaCommands(commands.Cog):
     # Note: the Tautulli client is shared across all cogs and owned by the bot
     # (PlexBot.close()). A cog must not close it on unload.
 
-    # --- shared: one item's card -------------------------------------------------
-
-    async def render_item(self, rating_key: str, footer: Optional[str] = None,
-                          view: Optional[nextcord.ui.View] = None) -> Optional[Reply]:
-        """The card for one library item; None when Tautulli has no such item."""
-        return await self.details.render(rating_key, footer, view=view)
-
     # --- /plex movie and /plex tv ---------------------------------------------------
 
     async def _search_libraries(self, title: str, section_type: str) -> Optional[str]:
@@ -330,7 +323,7 @@ class MediaCommands(commands.Cog):
         _section_type, label = _KINDS[kind]
         try:
             rating_key = await self.find_rating_key(query.strip(), kind)
-            reply = await self.render_item(rating_key) if rating_key else None
+            reply = await self.details.render(rating_key) if rating_key else None
         except TautulliUnavailable:
             await service_down("Tautulli").send(interaction, ephemeral=True, replace_placeholder=True)
             return
@@ -384,7 +377,7 @@ class MediaCommands(commands.Cog):
         for _attempt in range(3):
             item = view.pick()
             footer = f"🎲 Random pick from {plural(len(view.pool), 'match', 'matches')}"
-            reply = await self.render_item(str(item["rating_key"]), footer=footer, view=view)
+            reply = await self.details.render(str(item["rating_key"]), footer=footer, view=view)
             if reply is not None:
                 return reply
         return error_state(ErrorKind.INPUT, "Couldn't find a pick that's still in the library.",

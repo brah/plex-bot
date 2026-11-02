@@ -19,6 +19,7 @@ from plexbot.ui.format import plural
 logger = logging.getLogger("plexbot.media_cache")
 
 _RETRY_UNREADABLE = 24 * 3600  # seconds before a title Tautulli couldn't describe is asked about again
+_RETRY_FAILED = 300  # seconds after a failed update before reads start another (Refresh now still can)
 
 
 class MediaCache:
@@ -52,6 +53,7 @@ class MediaCache:
         self._closed = False  # set by close(): no update starts once the bot is shutting down
         # rating key -> when Tautulli last refused to describe it (usually removed from Plex but still listed)
         self._unreadable: Dict[str, float] = {}
+        self._failed_at: Optional[float] = None  # time.monotonic() of the last failed update
 
     async def initialize(self) -> None:
         """Initialize the cache by loading from disk and updating if needed."""
@@ -90,16 +92,20 @@ class MediaCache:
         A full refresh asks Tautulli about every title, which takes minutes on a big library, so a
         stale cache keeps serving its items while the refresh runs in the background.
         """
-        if self.is_cache_valid():
+        if self.is_cache_valid() or self._recently_failed():
             return
         if not self.media_items:
             await self.update_cache()
         else:
             self._refresh_in_background()
 
+    def _recently_failed(self) -> bool:
+        """An update failed moments ago, so autocomplete keystrokes and commands don't each start another."""
+        return self._failed_at is not None and time.monotonic() - self._failed_at < _RETRY_FAILED
+
     def _refresh_in_background(self) -> None:
-        """Start update_cache without waiting for it, unless one is already running."""
-        if self._refresh is None or self._refresh.done():
+        """Start update_cache without waiting for it, unless one is already running or just failed."""
+        if (self._refresh is None or self._refresh.done()) and not self._recently_failed():
             self._refresh = asyncio.create_task(self.update_cache())
 
     async def wait_for_refresh(self) -> None:
@@ -139,6 +145,7 @@ class MediaCache:
                 test_response = await self.tautulli.get_server_info()
                 if not Tautulli.check_response(test_response):
                     logger.error("Tautulli connection test failed")
+                    self._failed_at = time.monotonic()
                     return False
 
                 # Fetch and process all media items
@@ -152,12 +159,14 @@ class MediaCache:
                     items_snapshot = list(self.media_items.values())
                     await self._write_items_to_disk(items_snapshot)
                     logger.info(f"Media cache updated with {len(self.media_items)} items")
+                    self._failed_at = None
                     return True
                 logger.warning("No media items found during update")
             except Exception as e:
                 logger.error(f"Failed to update media cache: {e}")
             finally:
                 self._updating = None
+            self._failed_at = time.monotonic()
             return False
 
     async def get_items(

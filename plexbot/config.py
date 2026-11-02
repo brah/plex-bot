@@ -65,7 +65,7 @@ class Config:
             f"{section_name}.{key} ({env_name(section_name, key)})"
             for section_name, section in self._sections.items()
             for key in section.get_required_keys()
-            if key not in self._user_config.get(section_name, {})
+            if not str(self._user_config.get(section_name, {}).get(key, "")).strip()  # blank counts as missing
         ]
         if missing_required:
             logger.error(f"Missing required configuration: {', '.join(missing_required)}")
