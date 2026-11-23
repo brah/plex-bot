@@ -125,12 +125,13 @@ class MediaCache:
                 except asyncio.CancelledError:
                     pass
 
-    async def update_cache(self, full: bool = False) -> bool:
+    async def update_cache(self, full: bool = False, rebuild: bool = False) -> bool:
         """Update the media cache from Tautulli: the title list, plus metadata for new titles.
         Returns whether the cache is now fresh.
 
         full also fetches metadata again for every title already cached (genres or summaries
         changed in Plex), even when the cache is fresh; that's one call per title, minutes on a big library.
+        rebuild has Tautulli re-read each library from Plex first.
         """
         async with self.cache_lock:
             if self._closed:
@@ -149,7 +150,7 @@ class MediaCache:
                     return False
 
                 # Fetch and process all media items
-                new_items = await self._fetch_all_media_items(full)
+                new_items = await self._fetch_all_media_items(full, rebuild)
 
                 # Update the cache with new items
                 if new_items:
@@ -265,7 +266,7 @@ class MediaCache:
         temp_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         os.replace(temp_file, self.cache_file_path)
 
-    async def _fetch_all_media_items(self, full: bool = False) -> List[Dict]:
+    async def _fetch_all_media_items(self, full: bool = False, rebuild: bool = False) -> List[Dict]:
         """
         Fetch all media items from Tautulli and gather their metadata.
 
@@ -276,7 +277,7 @@ class MediaCache:
         logger.info(f"Starting to fetch media items from {len(libraries)} libraries.")
 
         # Process all libraries concurrently with limits (each logs its own name as it starts)
-        results = await asyncio.gather(*(self._process_library(lib, full) for lib in libraries),
+        results = await asyncio.gather(*(self._process_library(lib, full, rebuild) for lib in libraries),
                                        return_exceptions=True)
 
         failed = set()
@@ -338,7 +339,8 @@ class MediaCache:
 
         return filtered_items
 
-    async def _process_library(self, library: Dict, full: bool = False) -> Optional[List[Dict]]:
+    async def _process_library(self, library: Dict, full: bool = False,
+                               rebuild: bool = False) -> Optional[List[Dict]]:
         """A library's items (metadata fetched for new titles, or all of them when full); None when
         its title list couldn't be read."""
         library_items = []
@@ -349,7 +351,7 @@ class MediaCache:
             )
 
             # Every title in the library, a page at a time (one call would cap big libraries).
-            media_items = await self.tautulli.get_library_media_rows(library["section_id"])
+            media_items = await self.tautulli.get_library_media_rows(library["section_id"], refresh=rebuild)
             if media_items is None:
                 logger.error(f"Failed to fetch media info for library {library['section_id']}")
                 return None
@@ -453,10 +455,11 @@ class MediaCache:
     async def refresh(self) -> bool:
         """Fetch the whole library again now, even if the cache is still fresh; returns whether it worked.
 
+        Tautulli re-reads each library from Plex first, so titles missing from its saved list turn up.
         The current items stay in use until the new ones arrive. A background refresh already
         under way finishes first (it holds the lock), then every title is read again.
         """
-        return await self.update_cache(full=True)
+        return await self.update_cache(full=True, rebuild=True)
 
     async def _fetch_item_metadata(self, rating_key: str) -> Optional[Dict]:
         """A title's cache entry; {} when Tautulli refused (Plex no longer has it), None on no answer."""

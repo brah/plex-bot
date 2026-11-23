@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from fakes import FakeTautulli
 from plexbot.media_cache import MediaCache
+from plexbot.tautulli_wrapper import Tautulli
 
 
 class LibraryTautulli(FakeTautulli):
@@ -145,6 +146,57 @@ def test_a_library_bigger_than_one_page_is_read_whole():
     tautulli = LibraryTautulli({str(key): f"Movie {key}" for key in range(1, 6)})
     rows = asyncio.run(tautulli.get_library_media_rows(1, page=2))
     assert [row["rating_key"] for row in rows] == ["1", "2", "3", "4", "5"]
+
+
+def _record_rebuilds(tautulli) -> list:
+    """(start, refresh) of every get_library_media_info call."""
+    calls = []
+
+    async def media_info(section_id=None, **kwargs):
+        calls.append((kwargs["start"], kwargs["refresh"]))
+        return await LibraryTautulli.get_library_media_info(tautulli, section_id=section_id, **kwargs)
+
+    tautulli.get_library_media_info = media_info
+    return calls
+
+
+def test_a_rebuild_is_asked_on_the_first_page_only():
+    tautulli = LibraryTautulli({str(key): f"Movie {key}" for key in range(1, 6)})
+    calls = _record_rebuilds(tautulli)
+    rows = asyncio.run(tautulli.get_library_media_rows(1, page=2, refresh=True))
+    assert len(rows) == 5
+    assert calls == [(0, True), (2, False), (4, False)]
+
+
+def test_only_refresh_now_has_tautulli_rebuild_its_list(tmp_path):
+    tautulli = LibraryTautulli({"1": "Movie"})
+    calls = _record_rebuilds(tautulli)
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Movie")])
+
+    async def run():
+        await cache.update_cache()  # the hourly update
+        await cache.refresh()
+
+    asyncio.run(run())
+    assert calls == [(0, False), (0, True)]
+
+
+def test_a_rebuild_sends_refresh_and_waits_longer():
+    client = Tautulli(api_key="k", tautulli_ip="host:8181")
+    calls = []
+
+    async def api_call(cmd, params=None, timeout=None):
+        calls.append((params, timeout))
+
+    client.api_call = api_call
+
+    async def run():
+        await client.get_library_media_info(1)
+        await client.get_library_media_info(1, refresh=True)
+
+    asyncio.run(run())
+    assert calls == [({"section_id": 1, "start": 0, "length": 50}, None),
+                     ({"section_id": 1, "start": 0, "length": 50, "refresh": "true"}, 120)]
 
 
 def test_an_empty_cache_fills_in_the_background_at_startup(tmp_path):

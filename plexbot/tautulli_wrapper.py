@@ -17,6 +17,7 @@ logger = logging.getLogger("plexbot.tautulli_wrapper")
 
 # A play stopped and resumed counts once, whatever Tautulli's "Group play history" setting.
 _GROUPED = {"grouping": 1}
+_REBUILD_TIMEOUT = 120  # seconds: Tautulli reads the whole library from Plex
 
 
 def on_the_internet(address: str) -> bool:
@@ -60,17 +61,19 @@ class Tautulli(_HTTPClient):
                            "is sent in plaintext. Set tautulli.use_https (PLEXBOT_TAUTULLI_USE_HTTPS) to true.")
         logger.info(f"Tautulli API URL set to {self.tautulli_api_url}")
 
-    async def api_call(self, cmd: str, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
+    async def api_call(self, cmd: str, params: Dict[str, Any] = None,
+                       timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
         if params is None:
             params = {}
+        seconds = timeout or self.request_timeout
 
         self._ensure_session()
 
         params["apikey"] = self.api_key
         params["cmd"] = cmd
         try:
-            timeout = aiohttp.ClientTimeout(total=self.request_timeout)
-            async with self.session.get(self.tautulli_api_url, params=params, timeout=timeout) as response:
+            async with self.session.get(self.tautulli_api_url, params=params,
+                                        timeout=aiohttp.ClientTimeout(total=seconds)) as response:
                 if self._unreachable:
                     self._unreachable = False
                     logger.info("Tautulli is answering again.")
@@ -84,7 +87,7 @@ class Tautulli(_HTTPClient):
                 response.raise_for_status()
                 return await response.json()
         except asyncio.TimeoutError:
-            self._connection_failed(cmd, f"timed out after {self.request_timeout}s")
+            self._connection_failed(cmd, f"timed out after {seconds}s")
         except aiohttp.ClientConnectionError as exc:
             self._connection_failed(cmd, exc)
         except aiohttp.ClientError as exc:
@@ -144,11 +147,13 @@ class Tautulli(_HTTPClient):
             fields=fields,
         )
 
-    async def get_library_media_rows(self, section_id, page: int = 1000) -> Optional[list]:
+    async def get_library_media_rows(self, section_id, page: int = 1000,
+                                     refresh: bool = False) -> Optional[list]:
         """Every title in a library, a page at a time; None when Tautulli didn't answer."""
         return await self._all_rows(
-            lambda start: self.get_library_media_info(section_id=section_id, start=start, length=page), page,
-            key="rating_key",
+            lambda start: self.get_library_media_info(section_id=section_id, start=start, length=page,
+                                                      refresh=refresh and start == 0),
+            page, key="rating_key",
         )
 
     async def _all_rows(self, fetch, page: int, key: str, fields: Optional[tuple] = None) -> Optional[list]:
@@ -279,12 +284,20 @@ class Tautulli(_HTTPClient):
 
     async def get_library_media_info(
         self, section_id, length: int = 50, search: Optional[str] = None, start: int = 0,
+        refresh: bool = False,
     ) -> Optional[Dict[str, Any]]:
-        """Get one page of a library's titles (total_file_size comes with it)."""
+        """Get one page of a library's titles (total_file_size comes with it).
+
+        Tautulli answers from its saved list, which misses titles added since it was built. refresh
+        rebuilds it from Plex first, dropping the TV sizes "Calculate Total File Sizes" saved.
+        """
         params = {"section_id": section_id, "start": start, "length": length}
         if search is not None:
             params["search"] = search
-        return await self.api_call("get_library_media_info", params)
+        if refresh:
+            params["refresh"] = "true"
+        return await self.api_call("get_library_media_info", params,
+                                   timeout=_REBUILD_TIMEOUT if refresh else None)
 
 # Plex media type -> TMDB's name for it in API paths.
 TMDB_KINDS = {"movie": "movie", "show": "tv"}

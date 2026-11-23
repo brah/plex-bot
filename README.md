@@ -273,6 +273,7 @@ Linking matters: names, avatars, roles and `/plex recommend` need it.
 - **No roles handed out**: set all three role IDs, link the winners to their Discord accounts with `/plexadmin link`, and check the bot's role sits above all three in **Server Settings → Roles**. When it doesn't, the log says `Bot role hierarchy too low to manage top user roles`.
 - **`PermissionError: [Errno 13] Permission denied: '/data/plexbot.log'`**: the folder mounted at `/data` isn't writable by user 1000, which the bot runs as. Run `sudo chown -R 1000:1000` on that folder.
 - **No TV sizes on `/plex status`**: run **Calculate Total File Sizes** on the library in Tautulli.
+- **A title is missing from suggestions or `/plex random`**: press **Refresh now** under `/plexadmin cache`, then run **Calculate Total File Sizes** in Tautulli to get TV sizes back.
 - **`can't open file '.../plexbot.py'`**, or the systemd service won't start: the bot runs with `python -m plexbot` from the repo folder. Match `ExecStart=` and `WorkingDirectory=` to [`deploy/plexbot.service`](deploy/plexbot.service), then `sudo systemctl daemon-reload && sudo systemctl restart plexbot`.
 - **`git pull` fails** on a copy cloned before 18 October 2026: run `git fetch origin && git reset --hard origin/main` once. Your settings and user links are kept.
 

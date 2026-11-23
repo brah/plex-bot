@@ -16,6 +16,7 @@ What changed in each release, newest first. Releases are also on
 ### Changes
 
 - `/plex chart` goes back at most a year (`days` up to 365), since a chart keeps every play in its window in memory for its 10 minutes.
+- Refresh now under `/plexadmin cache` has Tautulli re-read your movie and TV libraries from Plex, so titles Tautulli hadn't listed turn up. Run Calculate Total File Sizes in Tautulli afterwards to get TV sizes back.
 
 ## 1.6.0 - 2026-10-29
 

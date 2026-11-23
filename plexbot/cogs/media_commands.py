@@ -231,7 +231,9 @@ def cache_status(media_cache: MediaCache, note: Optional[str] = None) -> Reply:
             f"new titles every {format_duration(media_cache.update_interval)}",
         ]),
         "-# Used by /plex random and the title suggestions on /plex movie and /plex tv. "
-        "Refresh now also re-reads genres and summaries.",
+        "Refresh now also has Tautulli re-read each movie and TV library from Plex, for titles it hadn't "
+        "listed, and re-reads genres and summaries. Run Calculate Total File Sizes in Tautulli afterwards: "
+        "the re-read clears TV sizes.",
     ]
     if note:
         lines.append(note)

@@ -118,6 +118,9 @@ Found against a live server:
 - `get_library_media_info` can list titles Plex has removed, and `get_metadata` on those returns HTTP
   400 ("Unable to retrieve metadata"). The media cache skips them, so it holds fewer items than the
   library totals.
+- `get_library_media_info` reads Tautulli's saved list of the library, so it also misses titles added
+  since that list was built. `refresh=true` rebuilds it from Plex but drops the TV sizes **Calculate
+  Total File Sizes** saved, so only `/plexadmin cache`'s Refresh now sends it. (From Tautulli's source.)
 - `get_home_stats` (`top_movies` and friends) still includes deleted titles, so a top title may not
   be lookup-able.
 - Hours and weekdays use the Tautulli server's timezone (from `get_settings`).
