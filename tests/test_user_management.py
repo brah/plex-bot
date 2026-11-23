@@ -154,6 +154,33 @@ def test_autocomplete_labels_and_unlink_offers_only_linked_users():
     assert typed == {"Mallory (mallory) · ignored": "mallory"}
 
 
+def test_autocomplete_lists_plex_users_only_to_admins(monkeypatch):
+    from plexbot.config import config
+
+    sent = []
+
+    async def send_autocomplete(self, choices):
+        sent.append(choices)
+
+    monkeypatch.setattr(nextcord.InteractionResponse, "send_autocomplete", send_autocomplete)
+    real_get = config.get
+    admins = []
+    monkeypatch.setattr(config, "get", lambda section, key: (
+        admins if (section, key) == ("discord", "admin_ids") else real_get(section, key)))
+
+    async def run(bot, cog):
+        await cog._plex_user_autocomplete(interaction(bot), "")
+        await cog._linked_user_autocomplete(interaction(bot), "")
+        admins.append("42")  # the interaction's user
+        await cog._plex_user_autocomplete(interaction(bot), "")
+        await cog._linked_user_autocomplete(interaction(bot), "")
+
+    _run(run)
+    assert sent[:2] == [{}, {}]
+    assert "alice" in sent[2].values()
+    assert "alice" in sent[3].values()
+
+
 def test_admin_commands_registered_and_old_names_redirect():
     from plexbot.errors import slash_equivalent
     from plexbot.slash_commands import command_paths

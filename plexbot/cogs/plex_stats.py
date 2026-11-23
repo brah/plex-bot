@@ -22,7 +22,7 @@ from plexbot.ui.format import join, plural, timestamp, to_int, truncate
 from plexbot.ui.images import fetch_poster_strip, fetch_sectioned_strip, poster_key
 from plexbot.ui.theme import Colour, Limits, brand_colour
 from plexbot.utilities import (
-    FINISHED_MOVIE_SECONDS, library_totals,
+    FINISHED_MOVIE_SECONDS, ITEM_KEYS, library_totals,
     UserMappings, format_duration, ignored_usernames, play_seconds, plex_username, viewer_avatar, viewer_mention,
     viewer_name,
 )
@@ -136,6 +136,7 @@ _TEASER = 3  # of those, on the overview
 _WATCH_TIME = 5
 _PLATFORMS = 3
 _ALL_TIME = 36500  # days: home stats has no "all time" option
+_ACTIVITY_DAYS = 365  # the Activity page loads every play in its window
 # The home-stats cards /plex stats reads, with their extra get_home_stats params.
 _STATS = {
     "popular_movies": {"stats_count": _POPULAR},
@@ -381,7 +382,9 @@ def hot_summary(plays, recent_items, *, days: int, name: Callable[[dict], str]) 
     plays: (start in the server's timezone, history row) pairs, as /plex chart's plays give them.
     """
     history = [row for _started, row in plays]
-    plays_by_key = Counter(str(row.get("rating_key")) for row in history)
+    # A recent season or show counts its episodes' plays. Not songs: an album would count every track.
+    plays_by_key = Counter(str(row[key]) for row in history if row.get("media_type") in ("movie", "episode")
+                           for key in ITEM_KEYS if row.get(key))
     titles: dict = {}  # show (or movie) key -> {"title", "users", "plays", "row"}
     per_user: dict = defaultdict(lambda: {"plays": 0, "titles": set(), "row": None})
     episodes = defaultdict(Counter)  # user -> show -> episodes
@@ -433,7 +436,9 @@ def hot_summary(plays, recent_items, *, days: int, name: Callable[[dict], str]) 
             f"**{name(per_user[user]['row'])}** binged **{_escaped(show)}** ({count} episodes)"
             for user, show, count in binges
         ]))
-    recent_keys = {str(item.get("rating_key")) for item in recent_items}
+    # By show, for a recent season or episode.
+    recent_keys = {str(item.get("grandparent_rating_key") or item.get("parent_rating_key")
+                       or item.get("rating_key")) for item in recent_items}
     discoveries = [t for key, t in titles.items() if key in recent_keys and len(t["users"]) == 1 and t["plays"] <= 2][:3]
     if discoveries:
         sections.append(("🧭 First to check out", [
@@ -616,7 +621,7 @@ class PlexStats(commands.Cog):
             "TV": (media_card("show", stats, libraries, days=days, strip=strips[2]), strips[2]),
             "Users": (users_card(users, name=self._mention,
                                  avatar=viewer_avatar(self.bot, users[0]) if users else None), None),
-        }, lazy={"Activity": partial(charts.activity_page, days)} if charts else None)
+        }, lazy={"Activity": partial(charts.activity_page, min(days, _ACTIVITY_DAYS))} if charts else None)
         view.message = bot_token_handle(interaction, await view.show("Overview").send(interaction))
 
     # --- /plex history -----------------------------------------------------------

@@ -222,7 +222,8 @@ def test_plays_keep_only_the_fields_charts_read():
     tautulli = FakeTautulli([])
     tautulli.history = [dict(row, title="Heat", ip_address="10.0.0.5") for row in _history(("alice", 2, "movie"))]
     plays = _run(lambda bot, cog: play_history.plays(cog.tautulli, 30), tautulli)
-    assert plays[0][1] == {"user": "alice", "friendly_name": "Alice", "media_type": "movie", "title": "Heat"}
+    assert plays[0][1] == {"user": "alice", "friendly_name": "Alice", "media_type": "movie",
+                           "title": "Heat", "started": tautulli.history[0]["started"]}
 
 
 class TestCommands:
@@ -628,6 +629,28 @@ def test_stats_activity_page_is_drawn_on_first_click(monkeypatch):
     assert "Busiest hour" in embed.description
     assert "Mallory" not in embed.description
     assert recorder.last("edit_message")["embeds"][0].title == "📈 Activity"
+
+
+def test_stats_activity_page_reads_at_most_a_year(monkeypatch):
+    from datetime import date, timedelta
+
+    from plexbot.cogs.plex_stats import PlexStats
+    from fakes import build_stats_bot
+
+    recorder = Recorder(monkeypatch)
+    tautulli = FakeTautulli([])
+    tautulli.history = _history(("alice", 2, "movie"))
+
+    async def run():
+        bot, stats = build_stats_bot(tautulli)
+        bot.add_cog(Visualizations(bot))
+        await PlexStats.stats.callback(stats, interaction(bot), days=3650)
+        await recorder.last("followup")["view"].children[-1].callback(interaction(bot))  # Activity
+
+    asyncio.run(run())
+    after = date.fromisoformat(tautulli.history_calls[0]["after"])
+    assert after >= datetime.now(timezone.utc).date() - timedelta(days=366)
+    assert recorder.last("edit_original_message")["embeds"][0].description.startswith("-# Last 365 days")
 
 
 def test_stats_slow_page_doesnt_cover_a_later_click(monkeypatch):

@@ -478,6 +478,28 @@ class TestCommands:
         fields = {f.name: f.value for f in recorder.last("followup")["embeds"][0].fields}
         assert "watched **Heat** 2 times" in fields["🏅 Awards"]
 
+    def test_hot_counts_a_new_seasons_episodes_but_not_an_albums_songs(self, monkeypatch):
+        # Tautulli lists new TV as a season.
+        recorder = Recorder(monkeypatch)
+        tautulli = FakeTautulli([])
+        tautulli.history = [
+            *({**_play("alice", f"Ep {i}", show="Severance", key=f"e{i}", date=NOW - i * 3600),
+               "parent_rating_key": "season-1"} for i in (1, 2)),
+            *({**_play("bob", f"Song {i}", key=f"t{i}", media_type="track", date=NOW - i * 600),
+               "parent_rating_key": "album-1", "grandparent_rating_key": "artist-1"} for i in (1, 2, 3)),
+        ]
+        tautulli.recently_added = [{
+            "rating_key": "season-1", "parent_rating_key": "show-Severance", "media_type": "season",
+            "parent_title": "Severance", "title": "Season 1", "added_at": NOW - 86400,
+        }, {
+            "rating_key": "album-1", "parent_rating_key": "artist-1", "media_type": "album",
+            "parent_title": "Artist", "title": "Album", "added_at": NOW - 86400,
+        }]
+        _run_hot(tautulli)
+        fields = {f.name: f.value for f in recorder.last("followup")["embeds"][0].fields}
+        assert fields["🆕 New and watched"] == "📺 **Severance · Season 1** · 2 plays"
+        assert fields["🧭 First to check out"] == "**Alice** tried **Severance**"
+
 
 def test_stats_commands_registered_in_help():
     from plexbot.cogs.utility_commands import collect_help_entries

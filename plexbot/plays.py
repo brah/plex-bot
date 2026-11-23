@@ -6,15 +6,15 @@ from datetime import datetime, time, timedelta
 from typing import List, Optional, Tuple
 
 from plexbot.ui.format import to_int
-from plexbot.utilities import ignored_usernames, plex_username
+from plexbot.utilities import ITEM_KEYS, ignored_usernames, plex_username
 
 logger = logging.getLogger("plexbot.plays")
 
 Play = Tuple[datetime, dict]  # when it started (in the server's timezone), the history row
-# The history fields charts and /plex hot read; a play keeps only these, as a chart holds its plays for minutes.
+# The only history fields a play keeps, plus its start: charts hold plays for minutes.
 PLAY_FIELDS = (
     "user", "username", "friendly_name", "user_thumb",  # viewer names and avatars
-    "media_type", "play_duration", "duration", "rating_key", "grandparent_rating_key", "watched_status",
+    "media_type", "play_duration", "duration", "watched_status", *ITEM_KEYS,
     "title", "grandparent_title", "year", "thumb", "parent_thumb", "grandparent_thumb",  # titles and posters
 )
 
@@ -57,5 +57,5 @@ async def plays_between(tautulli, since: datetime, until: Optional[datetime] = N
             continue
         moment = datetime.fromtimestamp(started, zone)
         if moment >= since and (until is None or moment < until):
-            found.append((moment, {key: row[key] for key in PLAY_FIELDS if key in row}))
+            found.append((moment, row))
     return found

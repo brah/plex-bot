@@ -245,6 +245,33 @@ def test_stream_managers_get_stop_button(monkeypatch):
     assert any(getattr(c, "label", None) == "Stop this stream" for c in detail_view.children)
 
 
+def test_stop_suggestions_only_for_stream_managers(monkeypatch):
+    import plexbot.cogs.server_commands as server_commands
+    from fakes import interaction
+
+    sent = []
+
+    async def send_autocomplete(self, choices):
+        sent.append(choices)
+
+    monkeypatch.setattr(nextcord.InteractionResponse, "send_autocomplete", send_autocomplete)
+    real_get = server_commands.config.get
+    managers = []
+    monkeypatch.setattr(server_commands.config, "get",
+                        lambda section, key: managers if (section, key) == ("discord", "stream_manager_ids")
+                        else real_get(section, key))
+
+    async def run():
+        bot, cog = build_bot(FakeTautulli([MOVIE_PLAYING]))
+        await cog._watchers_stop_autocomplete(interaction(bot), "")
+        managers.append("42")
+        await cog._watchers_stop_autocomplete(interaction(bot), "")
+
+    asyncio.run(run())
+    assert sent[0] == {}
+    assert list(sent[1].values()) == ["abc"]
+
+
 def test_stream_that_ended_shows_private_notice_and_rerenders(monkeypatch):
     patch_images(monkeypatch)
     recorder = Recorder(monkeypatch)
