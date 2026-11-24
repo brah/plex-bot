@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# 3.14.9+ for GHSA-6q48-6c7w-9gw2; pinned so a stale cached base can't be reused.
+# 3.15.2+ for GHSA-6q48-6c7w-9gw2; pinned so a stale cached base can't be reused.
 FROM python:3.15.2-slim
 
 # Unbuffered stdout/stderr so `docker logs` is live; no .pyc clutter in layers.

@@ -5,6 +5,10 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+### Security
+
+- Patch [GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2) - Update the Docker image to Python 3.15.2 to stop its pip trusting compromised eMudhra CA certificates, as it has since 1.5.0.
+
 ## 1.6.1 - 2026-11-24
 
 ### Bug fixes
