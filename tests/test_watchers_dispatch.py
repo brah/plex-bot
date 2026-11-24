@@ -37,6 +37,21 @@ def test_overview_has_refresh_and_details_select(monkeypatch):
     assert not any(getattr(c, "label", None) == "Manage streams" for c in view.children)
 
 
+def test_overview_leaves_ignored_viewers_out_of_the_bandwidth(monkeypatch):
+    from plexbot import utilities
+
+    patch_images(monkeypatch)
+    monkeypatch.setattr(utilities.UserMappings, "load_user_mappings",
+                        staticmethod(lambda: [{"plex_username": "bob", "discord_id": "", "ignore": True}]))
+
+    async def run():
+        _bot, cog = build_bot(FakeTautulli([MOVIE_PLAYING, EPISODE_PAUSED]))
+        return await cog.render_watchers(await cog.fetch_activity(), WatchersView(cog, []))
+
+    reply = asyncio.run(run())
+    assert reply.embeds[0].description.startswith("**1 stream** · 12.0 Mbps")
+
+
 def test_nobody_watching_is_empty_state_without_select(monkeypatch):
     patch_images(monkeypatch)
 

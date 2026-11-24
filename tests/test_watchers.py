@@ -408,6 +408,7 @@ def test_a_refusal_comes_back_as_tautullis_answer(caplog):
     assert response is not None and not Tautulli.check_response(response)
     assert not client._unreachable
     assert "'get_metadata' refused (HTTP 400): Unable to retrieve metadata." in caplog.text
+    assert [r.levelname for r in caplog.records if "refused" in r.getMessage()] == ["WARNING"]
 
 
 @pytest.mark.parametrize("address, public", [

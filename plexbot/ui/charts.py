@@ -14,10 +14,9 @@ from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 from matplotlib.figure import Figure
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.ticker import MaxNLocator
-from PIL import Image, UnidentifiedImageError
 
 from plexbot.config import config
-from plexbot.ui.images import Attachment
+from plexbot.ui.images import Attachment, open_image
 from plexbot.ui.theme import brand_colour
 
 BACKGROUND = "#1B1B1B"
@@ -85,16 +84,6 @@ POSTER_WIDTH = 44  # points: the poster under each bar of a poster chart
 POSTER_SLOTS = 8  # bars a poster chart has room for; fewer keep the same width, from the left
 
 
-def _poster(data: Optional[bytes]) -> Optional[Image.Image]:
-    if not data:
-        return None
-    try:
-        with Image.open(io.BytesIO(data)) as image:
-            return image.convert("RGB")
-    except (UnidentifiedImageError, OSError, ValueError):
-        return None
-
-
 def poster_chart(values: Sequence[float], posters: Sequence[Optional[bytes]], names: Sequence[str],
                  bar_labels: Sequence[str], *, filename: str, unit: str = "Plays") -> Optional[Attachment]:
     """A bar per title with its poster beneath (its name where there's no poster) and its value on top."""
@@ -113,7 +102,7 @@ def poster_chart(values: Sequence[float], posters: Sequence[Optional[bytes]], na
     ax.set_ylabel(unit, color=MUTED, fontsize=12)
     under = {"xycoords": ("data", "axes fraction"), "boxcoords": "offset points"}
     for x, (data, name) in enumerate(zip(posters, names)):
-        poster = _poster(data)
+        poster = open_image(data)
         if poster:
             # OffsetImage draws one image pixel per point, so zoom sets the width in points.
             box = OffsetImage(poster, zoom=POSTER_WIDTH / poster.width)

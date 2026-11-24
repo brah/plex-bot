@@ -104,6 +104,17 @@ _ROW = 6
 _TILE = (32, 34, 37, 255)  # Discord's dark grey: the "+N" and section tiles
 
 
+def open_image(data: Optional[bytes]) -> Optional[Image.Image]:
+    """Image bytes as an RGB image; None when there are none or they aren't an image."""
+    if not data:
+        return None
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            return image.convert("RGB")
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+
+
 def _tiles(posters: Sequence[bytes], height: int) -> List[Image.Image]:
     """Each readable poster at a common height; unreadable ones are left out."""
     tiles = []

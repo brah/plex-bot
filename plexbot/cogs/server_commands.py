@@ -698,7 +698,7 @@ class ServerCommands(commands.Cog):
         strip = await fetch_poster_strip(self.tautulli, [poster_key(s) for s in sessions],
                                          extra=max(0, len(sessions) - STRIP_POSTERS))
         embed = stream_overview(
-            sessions, bandwidth_kbps=to_int(activity.get("total_bandwidth")), strip=strip,
+            sessions, bandwidth_kbps=sum(to_int(s.get("bandwidth")) for s in sessions), strip=strip,
             updated=nextcord.utils.utcnow(), name=self._mention,
         )
         return Reply([embed], [strip] if strip else [], view=view)

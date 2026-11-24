@@ -47,14 +47,18 @@ class Config:
 
         config_path = Path(config_file)
         if config_path.exists():
+            # Checked before it's kept: the log filter reads secrets from it on every line.
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
-                    self._user_config = json.load(f)
-                logger.info(f"Configuration loaded from {config_file}")
+                    loaded = json.load(f)
+                not_sections = [repr(name) for name, values in loaded.items() if not isinstance(values, dict)]
+                if not_sections:
+                    raise ValueError(f"each section must be {{...}}, but {', '.join(not_sections)} isn't")
             except Exception as e:
                 logger.error(f"Failed to load configuration from {config_file}: {e}")
-                self._user_config = {}
                 return False
+            self._user_config = loaded
+            logger.info(f"Configuration loaded from {config_file}")
         else:
             logger.info(f"No {config_file}; using environment variables and defaults")
 

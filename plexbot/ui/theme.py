@@ -15,8 +15,6 @@ class Colour:
     TV = 0x4A90D9
     MUSIC = 0xEB459E
     GOLD = 0xF1C40F
-    SILVER = 0xBFC5CC
-    BRONZE = 0xCD7F32
 
 
 _MEDIA_COLOURS = {
@@ -56,12 +54,8 @@ class Limits:
 
     TITLE = 256
     DESCRIPTION = 4096
-    FIELDS = 25
-    FIELD_NAME = 256
     FIELD_VALUE = 1024
-    FOOTER = 2048
     AUTHOR = 256
-    EMBEDS_PER_MESSAGE = 10
     SELECT_OPTIONS = 25
     SELECT_LABEL = 100
 

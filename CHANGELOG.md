@@ -12,6 +12,10 @@ What changed in each release, newest first. Releases are also on
 - `/plex hot` and `/plex wrapped` work even if `/plex chart` couldn't load.
 - `/plex hot` shows newly added TV under New and watched and First to check out, not just movies.
 - `/plex stats` with `days` over 365 no longer stalls the bot when you open its Activity page, which now shows the last year.
+- A movie or TV library Plex is slow to list no longer vanishes from `/plex random` and title suggestions until the next update.
+- Titles removed from Plex no longer fill `/plexadmin logs level:Error`.
+- `/plex watchers` no longer counts ignored users' streams in its bandwidth.
+- A config.json section that isn't `{...}`, such as `"sonarr": null`, stops the bot with a message naming it, instead of a crash loop.
 
 ### Changes
 

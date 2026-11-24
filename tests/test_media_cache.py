@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timedelta
 
 from fakes import FakeTautulli
@@ -78,7 +79,8 @@ def test_refresh_now_reads_every_title_again_and_drops_removed_ones(tmp_path):
     assert _titles(cache.media_items.values()) == ["Renamed in Plex"]
 
 
-def test_refresh_now_drops_a_title_tautulli_refuses_but_keeps_one_it_got_no_answer_for(tmp_path):
+def test_refresh_now_drops_a_title_tautulli_refuses_but_keeps_one_it_got_no_answer_for(tmp_path, caplog):
+    caplog.set_level(logging.INFO, logger="plexbot.media_cache")
     tautulli = LibraryTautulli({"1": "Kept"})
     tautulli.library_items = {"1": [{"rating_key": key} for key in ("1", "2", "3")]}  # 2 is gone from Plex
     tautulli.failing = {"3"}
@@ -86,6 +88,8 @@ def test_refresh_now_drops_a_title_tautulli_refuses_but_keeps_one_it_got_no_answ
     assert asyncio.run(cache.refresh())
     assert _titles(cache.media_items.values()) == ["Kept", "No answer"]
     assert "2" not in cache._unreadable  # so the next update asks again, in case Plex was only restarting
+    # One line per library, not an error per title.
+    assert [r.levelname for r in caplog.records if "couldn't describe" in r.getMessage()] == ["INFO"]
 
 
 def test_a_failed_update_says_so(tmp_path):
@@ -136,6 +140,17 @@ def test_an_unreadable_library_keeps_its_titles_and_the_others_refresh(tmp_path)
         return await LibraryTautulli.get_library_media_info(tautulli, section_id=section_id, **kwargs)
 
     tautulli.get_library_media_info = media_info
+    show = {**_item("9", "Cached show"), "media_type": "show", "section_id": "2"}
+    cache = _stale_cache(tautulli, tmp_path, [_item("1", "Old movie"), show])
+    asyncio.run(cache.refresh())
+    assert _titles(cache.media_items.values()) == ["Cached show", "Refreshed movie"]
+
+
+def test_a_library_that_comes_back_empty_keeps_its_titles(tmp_path):
+    """Tautulli answers a library Plex couldn't list as an empty one."""
+    tautulli = LibraryTautulli({"1": "Refreshed movie"})
+    tautulli.libraries.append({"section_id": 2, "section_name": "TV", "section_type": "show"})
+    tautulli.library_items["2"] = []
     show = {**_item("9", "Cached show"), "media_type": "show", "section_id": "2"}
     cache = _stale_cache(tautulli, tmp_path, [_item("1", "Old movie"), show])
     asyncio.run(cache.refresh())

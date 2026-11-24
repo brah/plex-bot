@@ -357,6 +357,10 @@ class MediaCache:
                 return None
 
             if not media_items:
+                # Tautulli answers "success" with no rows when Plex couldn't list the library.
+                # shortcut: a library emptied in Plex (not deleted) keeps its old titles; ask Plex if that comes up.
+                if any(str(item.get("section_id")) == section_id for item in self.media_items.values()):
+                    return None
                 logger.info(f"No media items found in library {library['section_name']}")
                 return library_items
 
@@ -380,6 +384,10 @@ class MediaCache:
 
             # self.semaphore keeps this to 10 calls at a time, across every library.
             results = await asyncio.gather(*(self._fetch_item_metadata(key) for key in rating_keys))
+            refused = sum(result == {} for result in results)
+            if refused:
+                logger.info(f"Tautulli couldn't describe {plural(refused, 'title')} in '{library['section_name']}', "
+                            "usually because Plex removed them")
             for key, result in zip(rating_keys, results):
                 # Refusals only: a title that got no answer is asked again next update.
                 if result == {} and key not in self.media_items:
@@ -493,7 +501,6 @@ class MediaCache:
                     }
                     return item_data
                 else:
-                    logger.error(f"Failed to fetch metadata for rating_key {rating_key}")
                     return {}
             except Exception as e:
                 logger.error(f"Exception while fetching metadata for {rating_key}: {e}")
@@ -510,6 +517,6 @@ class MediaCache:
         libraries = Tautulli.get_response_data(response, [])
         # Only include libraries with supported media types
         filtered_libraries = [
-            lib for lib in libraries if lib["section_type"] in ("movie", "show", "episode")
+            lib for lib in libraries if lib["section_type"] in ("movie", "show")
         ]
         return filtered_libraries

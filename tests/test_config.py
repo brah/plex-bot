@@ -84,6 +84,16 @@ def test_missing_required_names_the_variable(monkeypatch, tmp_path, caplog):
     assert "Unknown setting PLEXBOT_TAUTULI_IP" in caplog.text
 
 
+def test_a_section_that_isnt_an_object_is_named(monkeypatch, tmp_path, caplog):
+    cfg = fresh_config(monkeypatch)
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"core": {"token": "t"}, "tautulli": {"ip": "h:8181", "apikey": "k"},
+                                "sonarr": None}))
+    assert not cfg.initialize(str(path))
+    assert "'sonarr' isn't" in caplog.text
+    assert cfg.get("sonarr", "url") == ""  # what the log filter does on every line
+
+
 def test_blank_required_value_in_the_file_is_missing(monkeypatch, tmp_path, caplog):
     cfg = fresh_config(monkeypatch)
     path = tmp_path / "config.json"

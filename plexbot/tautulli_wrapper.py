@@ -82,7 +82,8 @@ class Tautulli(_HTTPClient):
                     # "no" from no answer; check_response reads it as a failure.
                     body = await response.json()
                     message = (body.get("response") or {}).get("message")
-                    logger.error(f"API call '{cmd}' refused (HTTP {response.status}): {message}")
+                    log = logger.warning if response.status == 400 else logger.error  # 400: e.g. a title Plex removed
+                    log(f"API call '{cmd}' refused (HTTP {response.status}): {message}")
                     return body
                 response.raise_for_status()
                 return await response.json()

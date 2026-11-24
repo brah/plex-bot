@@ -12,11 +12,11 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import matplotlib
 from matplotlib.ft2font import FT2Font
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from plexbot.ui.cards import genre_label
 from plexbot.ui.format import hour_label, plural
-from plexbot.ui.images import Attachment, dominant_colour, mascot
+from plexbot.ui.images import Attachment, dominant_colour, mascot, open_image
 from plexbot.wrapped_year import Moment, Pick, WrappedYear
 
 SIZE = W, H = 1200, 750
@@ -176,16 +176,6 @@ def _lines(draw: ImageDraw.ImageDraw, rows: Sequence[Tuple[str, tuple]], y: int,
     return y
 
 
-def _open(data: Optional[bytes]) -> Optional[Image.Image]:
-    if not data:
-        return None
-    try:
-        with Image.open(io.BytesIO(data)) as image:
-            return image.convert("RGB")
-    except (UnidentifiedImageError, OSError, ValueError):
-        return None
-
-
 def _rounded(size: Tuple[int, int], radius: int) -> Image.Image:
     mask = Image.new("L", size, 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, size[0] - 1, size[1] - 1), radius=radius, fill=255)
@@ -200,7 +190,7 @@ def _poster_tile(data: Optional[bytes], size: Tuple[int, int], outline: int = 7)
     ImageDraw.Draw(shadow).rounded_rectangle((pad, pad + 12, pad + size[0], pad + size[1] + 12), radius=16,
                                              fill=200)
     tile.paste(Image.new("RGBA", tile.size, (0, 0, 0, 255)), mask=shadow.filter(ImageFilter.GaussianBlur(14)))
-    poster = _open(data)
+    poster = open_image(data)
     face = ImageOps.fit(poster, size) if poster else Image.new("RGB", size, PANEL)
     border = Image.new("RGB", (size[0] + outline * 2, size[1] + outline * 2), GOLD)
     border.paste(face, (outline, outline), mask=_rounded(size, 10))
@@ -384,7 +374,7 @@ def _personality(year: WrappedYear, **_) -> Image.Image:
 
 def _avatar(image: Image.Image, data: Optional[bytes], name: str, xy: Tuple[int, int], size: int) -> None:
     ring = Image.new("RGB", (size + 12, size + 12), GOLD)
-    face = _open(data)
+    face = open_image(data)
     if face:
         ring.paste(ImageOps.fit(face, (size, size)), (6, 6), mask=_rounded((size, size), size // 2))
     else:
