@@ -224,7 +224,8 @@ def test_lookups_stay_under_tmdbs_rate_limit(monkeypatch):
         await cog.refresh([_show(str(i), f"Show {i}", i) for i in range(32)])
         return time.monotonic() - started
 
-    assert asyncio.run(run()) >= 0.1  # 32 lookups, 16 at a time, each holding its slot 0.05 s
+    # 32 lookups, 16 at a time, each holding its slot 0.05 s, which a coarse clock can end a tick early.
+    assert asyncio.run(run()) >= 0.1 - 2 * time.get_clock_info("monotonic").resolution
 
 
 def _sonarr_episode(air_utc, title="Severance", tmdb_id=1, season=2, episode=5, name=None, has_file=False):
