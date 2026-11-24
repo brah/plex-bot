@@ -5,6 +5,8 @@ What changed in each release, newest first. Releases are also on
 
 ## Unreleased
 
+## 1.6.1 - 2026-11-24
+
 ### Bug fixes
 
 - A blank `tautulli.apikey`, `tautulli.ip` or `core.token` in config.json stops the bot at startup with a message naming the setting, instead of every command saying Tautulli is down.
